@@ -1,0 +1,22 @@
+{
+  "name": "body-recomp-os",
+  "private": true,
+  "version": "1.1.0",
+  "type": "module",
+  "description": "Personal body recomposition operating system. Mobile-first Vite React PWA for iPhone home screen, responsive to laptop.",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "vite preview --host"
+  },
+  "dependencies": {
+    "lucide-react": "^0.462.0",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1",
+    "recharts": "^3.2.1"
+  },
+  "devDependencies": {
+    "@vitejs/plugin-react": "^4.3.4",
+    "vite": "^6.3.5"
+  }
+}

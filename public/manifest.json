@@ -1,0 +1,19 @@
+{
+  "name": "Body Recomp OS",
+  "short_name": "Recomp OS",
+  "description": "Personal body recomposition coach, planner, workout logger and body scan tracker.",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#0A0E13",
+  "theme_color": "#0A0E13",
+  "icons": [
+    {
+      "src": "./icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ]
+}

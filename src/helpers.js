@@ -1,0 +1,722 @@
+// ============================================================
+// helpers.js - all logic for Body Recomp OS
+// Pure-ish functions. Block-aware: understands single/superset/circuit/finisher/dropset.
+// ============================================================
+import {
+  PROGRAM, NUTRITION, EXERCISES, SEED_SCANS, HABITS,
+  PROFILE_DEFAULT, SETTINGS_DEFAULT, STORAGE_KEY,
+} from './data.js';
+
+export const PROGRAM_START = '2026-07-08'; // start of the current fat-loss phase (latest scan)
+export const PHASE_NAME = 'Fat Loss Phase 1';
+
+// ---------- date utils ----------
+export const pad = (n) => String(n).padStart(2, '0');
+export const toKey = (d) => `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+export const todayKey = () => toKey(new Date());
+export const parseKey = (key) => { const [y, m, d] = key.split('-').map(Number); return new Date(y, m - 1, d); };
+export const dowOf = (key) => parseKey(key).getDay();
+export const addDays = (key, n) => { const d = parseKey(key); d.setDate(d.getDate() + n); return toKey(d); };
+export const daysBetween = (a, b) => Math.round((parseKey(b) - parseKey(a)) / 86400000);
+export const prettyDate = (key) => parseKey(key).toLocaleDateString(undefined, { weekday: 'long', month: 'short', day: 'numeric' });
+export const shortDate = (key) => parseKey(key).toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
+export const clone = (o) => JSON.parse(JSON.stringify(o));
+
+// ---------- storage ----------
+export function defaultState() {
+  return {
+    version: 1,
+    profile: { ...PROFILE_DEFAULT },
+    settings: { ...SETTINGS_DEFAULT },
+    workoutSessions: {}, // key -> session
+    mealLogs: {},        // key -> { eaten:{}, extras:[], water:0, flags:{} }
+    habitLogs: {},       // key -> { habitKey:true }
+    watchLogs: {},       // key -> { steps, ... }
+    supplementLogs: {},  // key -> { suppKey:true }
+    bodyScans: [...SEED_SCANS],
+    saturdayMode: {},    // key -> 'class' | 'fallback'
+    activity: {},        // key -> { badminton:bool, swim:bool }
+    restartWeights: {},  // exerciseName -> { old:'', pct:70 }
+    lastBackup: null,
+  };
+}
+
+export function loadState() {
+  try {
+    const raw = localStorage.getItem(STORAGE_KEY);
+    if (!raw) return defaultState();
+    const parsed = JSON.parse(raw);
+    if (!parsed || typeof parsed !== 'object') return defaultState();
+    return mergeState(defaultState(), parsed);
+  } catch (e) {
+    console.warn('Recomp OS: could not read saved data, starting fresh.', e);
+    return defaultState();
+  }
+}
+
+export function saveState(state) {
+  try { localStorage.setItem(STORAGE_KEY, JSON.stringify(state)); }
+  catch (e) { console.warn('Recomp OS: could not save data.', e); }
+}
+
+function mergeState(base, incoming) {
+  const out = { ...base };
+  for (const k of Object.keys(base)) {
+    const v = incoming[k];
+    if (v === undefined || v === null) continue;
+    if (Array.isArray(base[k])) out[k] = Array.isArray(v) ? v : base[k];
+    else if (typeof base[k] === 'object') out[k] = { ...base[k], ...v };
+    else out[k] = v;
+  }
+  if (!Array.isArray(out.bodyScans) || out.bodyScans.length === 0) out.bodyScans = [...SEED_SCANS];
+  return out;
+}
+
+export function validateImport(obj) {
+  if (!obj || typeof obj !== 'object') return false;
+  const keys = ['profile', 'settings', 'workoutSessions', 'mealLogs', 'bodyScans', 'watchLogs'];
+  return keys.some((k) => k in obj);
+}
+
+export function exportJSON(state) { return JSON.stringify(state, null, 2); }
+
+export function download(filename, text, type = 'application/json') {
+  try {
+    const blob = new Blob([text], { type });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url; a.download = filename; document.body.appendChild(a); a.click();
+    document.body.removeChild(a);
+    setTimeout(() => URL.revokeObjectURL(url), 1500);
+    return true;
+  } catch (e) { console.warn('download failed', e); return false; }
+}
+
+// ---------- day flags ----------
+export function dayFlags(key) {
+  const dow = dowOf(key);
+  return {
+    dow,
+    swimDay: dow === 2 || dow === 4,
+    fastDay: dow === 4,
+    vegDay: dow === 4 || dow === 6,
+    badmintonAvailable: dow >= 1 && dow <= 5,
+    classDay: dow === 6,
+  };
+}
+
+// ---------- workout plan resolution ----------
+export function resolveWorkout(key, state) {
+  const dow = dowOf(key);
+  const base = PROGRAM.days[dow];
+  let src = base, usingFallback = false;
+  if (base.isClassDay) {
+    const mode = (state.saturdayMode && state.saturdayMode[key]) || 'class';
+    if (mode === 'fallback' && base.fallback) { src = base.fallback; usingFallback = true; }
+  }
+  const blocks = (src.blocks || []).map((b, i) => ({ ...b, id: `${src.key}#${i}` }));
+  return {
+    dayKey: src.key, title: src.title, focus: src.focus, intensity: src.intensity, dayType: src.dayType,
+    isClassDay: !!base.isClassDay, usingFallback, hasFallback: !!base.fallback,
+    blocks,
+    conditioning: src.conditioning || [],
+    mobility: src.mobility || [],
+    sport: src.sport || [],
+    notes: src.notes || '',
+  };
+}
+
+// ---------- nutrition resolution ----------
+export function applyBadmintonAdjustment(targets) {
+  return {
+    ...targets,
+    carbs: targets.carbs + 40,
+    kcal: targets.kcal + 160,
+    waterL: Math.round((targets.waterL + 0.5) * 100) / 100,
+  };
+}
+
+export function resolveNutrition(key, state) {
+  const dow = dowOf(key);
+  const dayType = PROGRAM.days[dow].dayType;
+  let targets = { ...NUTRITION.targets[dayType] };
+  const meals = NUTRITION.plans[dayType] || [];
+  const adjustments = [];
+  const act = (state.activity && state.activity[key]) || {};
+  if (act.badminton) {
+    targets = applyBadmintonAdjustment(targets);
+    adjustments.push('Badminton played: +40g carbs, +0.5 L water, add electrolytes. Protein unchanged.');
+  }
+  if (act.swim) adjustments.push('Swim done: extra hydration, add protein if dinner is delayed.');
+  return { dayType, targets, meals, adjustments };
+}
+
+export function getDayPlan(key, state) {
+  return { key, flags: dayFlags(key), workout: resolveWorkout(key, state), nutrition: resolveNutrition(key, state) };
+}
+
+// ============================================================
+// SESSION MODEL  (block-aware)
+// entry (single/dropset): { blockType, name, exName, sets:[set], skipped, skipReason, replacedWith, completed }
+// entry (round-based):    { blockType, name, exNames:[], plannedRounds, restAfterRoundSec, durationSec, rounds:[{done, byExercise:{name:cell}}], completed }
+// ============================================================
+export const makeSet = () => ({ weight: '', reps: '', rpe: '', restSec: '', form: '', pain: 0, notes: '', isDrop: false, isWarmup: false });
+export const makeCell = () => ({ weight: '', reps: '', rpe: '', restSec: '', form: '', pain: 0, notes: '', done: false, skipped: false, skipReason: '', replacedWith: '' });
+
+export function initSession(plan) {
+  const entries = {};
+  plan.blocks.forEach((b) => {
+    if (b.blockType === 'single' || b.blockType === 'dropset') {
+      const ex = b.exercises[0];
+      const n = ex.sets || 3;
+      const sets = [];
+      for (let i = 0; i < n; i++) sets.push(makeSet());
+      entries[b.id] = {
+        blockType: b.blockType, name: b.name, exName: ex.name,
+        sets, skipped: false, skipReason: '', replacedWith: '', completed: false,
+        drops: b.blockType === 'dropset' ? (ex.drops || []).length : 0,
+      };
+    } else {
+      const exNames = b.exercises.map((e) => e.name);
+      const roundsN = b.rounds || (b.durationSec ? 1 : 3);
+      const rounds = [];
+      for (let r = 0; r < roundsN; r++) {
+        const byExercise = {};
+        exNames.forEach((nm) => { byExercise[nm] = makeCell(); });
+        rounds.push({ done: false, byExercise });
+      }
+      entries[b.id] = {
+        blockType: b.blockType, name: b.name, exNames,
+        plannedRounds: roundsN, restAfterRoundSec: b.restAfterRoundSec || 60,
+        durationSec: b.durationSec || null, rounds, completed: false,
+      };
+    }
+  });
+  return { date: null, dayKey: plan.dayKey, title: plan.title, completed: false, notes: '', entries };
+}
+
+export function getWorkingSession(key, state) {
+  if (state.workoutSessions && state.workoutSessions[key]) return state.workoutSessions[key];
+  return { ...initSession(resolveWorkout(key, state)), date: key };
+}
+
+// ---------- completion logic ----------
+export const cellDone = (c) => !!(c.done || c.skipped || (c.weight !== '' && c.reps !== ''));
+export const roundDone = (rd) => rd.done || Object.values(rd.byExercise).every(cellDone);
+
+export function blockDone(entry) {
+  if (entry.skipped) return true;
+  if (entry.completed) return true;
+  if (entry.sets) {
+    const planned = entry.sets.filter((s) => !s.isDrop);
+    return planned.length > 0 && planned.every((s) => s.weight !== '' && s.reps !== '');
+  }
+  if (entry.rounds) return entry.rounds.length > 0 && entry.rounds.every(roundDone);
+  return false;
+}
+
+export function workoutProgress(session) {
+  const ids = Object.keys(session.entries || {});
+  if (ids.length === 0) return { done: 0, total: 0, pct: 0 };
+  const done = ids.filter((id) => blockDone(session.entries[id])).length;
+  return { done, total: ids.length, pct: Math.round((done / ids.length) * 100) };
+}
+
+// ============================================================
+// EXERCISE HISTORY  (works across single sets AND supersets/circuits/finishers/dropsets)
+// ============================================================
+export function allSetRecords(state) {
+  const recs = [];
+  const sessions = state.workoutSessions || {};
+  Object.keys(sessions).forEach((date) => {
+    const s = sessions[date];
+    if (!s || !s.entries) return;
+    Object.values(s.entries).forEach((entry) => {
+      if (entry.skipped) return;
+      if (entry.sets) {
+        const nm = entry.replacedWith || entry.exName;
+        entry.sets.forEach((set) => {
+          if (set.isWarmup) return; // warm-ups never count toward history, volume or PRs
+          const w = parseFloat(set.weight), r = parseInt(set.reps, 10);
+          if (!isNaN(w) && !isNaN(r) && r > 0) {
+            const rpe = parseFloat(set.rpe) || null;
+            recs.push({ date, name: nm, weight: w, reps: r, rpe, rir: rpe != null ? Math.max(0, 10 - rpe) : null, source: entry.blockType });
+          }
+        });
+      }
+      if (entry.rounds) {
+        entry.rounds.forEach((rd) => {
+          Object.entries(rd.byExercise).forEach(([exName, c]) => {
+            if (c.skipped) return;
+            const nm = c.replacedWith || exName;
+            const w = parseFloat(c.weight), r = parseInt(c.reps, 10);
+            if (!isNaN(w) && !isNaN(r) && r > 0) {
+              const rpe = parseFloat(c.rpe) || null;
+              recs.push({ date, name: nm, weight: w, reps: r, rpe, rir: rpe != null ? Math.max(0, 10 - rpe) : null, source: entry.blockType });
+            }
+          });
+        });
+      }
+    });
+  });
+  return recs;
+}
+
+export function getExerciseHistory(name, state) {
+  const recs = allSetRecords(state).filter((r) => r.name === name);
+  const byDate = {};
+  recs.forEach((r) => { (byDate[r.date] = byDate[r.date] || []).push(r); });
+  return Object.keys(byDate).sort((a, b) => b.localeCompare(a)).map((date) => ({ date, sets: byDate[date] }));
+}
+
+export const getLastSession = (name, state) => getExerciseHistory(name, state)[0] || null;
+export const e1rm = (w, r) => w * (1 + r / 30);
+
+export function getBestPerformance(name, state) {
+  const recs = allSetRecords(state).filter((r) => r.name === name);
+  if (recs.length === 0) return null;
+  let best = recs[0];
+  recs.forEach((r) => { if (e1rm(r.weight, r.reps) > e1rm(best.weight, best.reps)) best = r; });
+  const vol = {};
+  recs.forEach((r) => { vol[r.date] = (vol[r.date] || 0) + r.weight * r.reps; });
+  return {
+    best,
+    e1rm: e1rm(best.weight, best.reps),
+    maxWeight: Math.max(...recs.map((r) => r.weight)),
+    maxReps: Math.max(...recs.map((r) => r.reps)),
+    bestVolume: Math.max(...Object.values(vol)),
+  };
+}
+
+export function increment(name) {
+  const p = EXERCISES[name]?.p || '';
+  const small = /Delt|Bicep|Tricep|Calf|Calves|Ab|Oblique|Core|Forearm|Brachialis/i.test(p);
+  return small ? 2.5 : 5;
+}
+
+// rx = { repLow, repHigh, rpe } prescription (optional)
+export function getNextTarget(name, state, rx) {
+  const last = getLastSession(name, state);
+  const repLow = (rx && rx.repLow) || 8;
+  const repHigh = (rx && rx.repHigh) || 12;
+  const targetRpe = (rx && rx.rpe) || 8;
+  if (!last) return { text: `Work up to RPE ${targetRpe} at ${repLow}-${repHigh} reps`, note: 'No history yet. Log today to calibrate the next target.' };
+  const top = [...last.sets].sort((a, b) => e1rm(b.weight, b.reps) - e1rm(a.weight, a.reps))[0];
+  const setsN = last.sets.length;
+  const hitTop = last.sets.every((s) => s.reps >= repHigh) && (top.rpe == null || top.rpe <= targetRpe + 0.5);
+  if (hitTop) {
+    const nw = top.weight + increment(name);
+    return { text: `${nw} lb x ${repLow} for ${setsN} sets`, note: `Hit top reps last time. Add ${increment(name)} lb and reset to the bottom of the range.` };
+  }
+  const targetReps = Math.min(repHigh, Math.max(...last.sets.map((s) => s.reps)) + 1);
+  return { text: `${top.weight} lb x ${targetReps} for ${setsN} sets`, note: 'Keep the weight and add a rep per set toward the top of the range.' };
+}
+
+// prescription lookup for an exercise name in a resolved plan (for next-target ranges)
+export function rxForExercise(name, plan) {
+  for (const b of plan.blocks) {
+    if (b.blockType === 'single' || b.blockType === 'dropset') {
+      if (b.exercises[0].name === name) {
+        const e = b.exercises[0];
+        return { repLow: e.repLow, repHigh: e.repHigh, rpe: e.rpe };
+      }
+    } else {
+      const e = b.exercises.find((x) => x.name === name);
+      if (e) {
+        const m = String(e.targetReps || '').match(/(\d+)\s*-\s*(\d+)/);
+        return { repLow: m ? +m[1] : 10, repHigh: m ? +m[2] : 15, rpe: e.targetRpe };
+      }
+    }
+  }
+  return null;
+}
+
+// ============================================================
+// NUTRITION actuals + adherence
+// ============================================================
+export function nutritionActuals(key, state) {
+  const log = (state.mealLogs && state.mealLogs[key]) || { eaten: {}, extras: [], water: 0, flags: {} };
+  const dow = dowOf(key);
+  const meals = NUTRITION.plans[PROGRAM.days[dow].dayType] || [];
+  let p = 0, c = 0, f = 0, kcal = 0;
+  meals.forEach((m, i) => { if (log.eaten && log.eaten[i]) { p += m.p; c += m.c; f += m.f; kcal += m.kcal; } });
+  (log.extras || []).forEach((e) => { p += e.p || 0; c += e.c || 0; f += e.f || 0; kcal += e.kcal || 0; });
+  return { protein: p, carbs: c, fat: f, kcal, water: log.water || 0, log };
+}
+
+export function nutritionAdherence(key, state) {
+  const { targets } = resolveNutrition(key, state);
+  const a = nutritionActuals(key, state);
+  const proteinPct = Math.min(a.protein / (targets.protein || 1), 1);
+  const waterPct = Math.min(a.water / (targets.waterL || 1), 1);
+  const calClose = a.kcal === 0 ? 0 : 1 - Math.min(Math.abs(a.kcal - targets.kcal) / (targets.kcal || 1), 1);
+  const pct = Math.round((proteinPct * 0.45 + waterPct * 0.2 + calClose * 0.35) * 100);
+  return { pct, actual: a, targets };
+}
+
+// ---------- watch / recovery ----------
+export const watchFor = (key, state) => (state.watchLogs && state.watchLogs[key]) || {};
+
+export function maxPainFor(key, state) {
+  const s = state.workoutSessions && state.workoutSessions[key];
+  let mx = 0;
+  if (s && s.entries) {
+    Object.values(s.entries).forEach((e) => {
+      if (e.sets) e.sets.forEach((x) => { mx = Math.max(mx, x.pain || 0); });
+      if (e.rounds) e.rounds.forEach((rd) => Object.values(rd.byExercise).forEach((c) => { mx = Math.max(mx, c.pain || 0); }));
+    });
+  }
+  return mx;
+}
+
+export function recoveryScore(key, state) {
+  const w = watchFor(key, state);
+  const sleep = parseFloat(w.sleepH);
+  const sleepScore = isNaN(sleep) ? 0.6 : Math.min(sleep / 7.5, 1);
+  const maxPain = maxPainFor(key, state);
+  const painScore = 1 - Math.min(maxPain / 5, 1) * 0.6;
+  const rhr = parseFloat(w.restingHR);
+  const rhrScore = isNaN(rhr) ? 0.7 : rhr <= 60 ? 1 : rhr <= 70 ? 0.8 : 0.6;
+  const pct = Math.round((sleepScore * 0.5 + painScore * 0.3 + rhrScore * 0.2) * 100);
+  return { pct, sleep: isNaN(sleep) ? null : sleep, maxPain, rhr: isNaN(rhr) ? null : rhr };
+}
+
+// ---------- habits ----------
+export function habitStatus(key, state) {
+  const manual = (state.habitLogs && state.habitLogs[key]) || {};
+  const a = nutritionActuals(key, state);
+  const t = resolveNutrition(key, state).targets;
+  const w = watchFor(key, state);
+  const s = state.workoutSessions && state.workoutSessions[key];
+  const prog = s ? workoutProgress(s) : { done: 0, total: 0 };
+  const act = (state.activity && state.activity[key]) || {};
+  const supp = (state.supplementLogs && state.supplementLogs[key]) || {};
+  const auto = {
+    workout_logged: !!(s && Object.keys(s.entries || {}).length && prog.done > 0),
+    workout_done: !!(s && (s.completed || (prog.total > 0 && prog.done === prog.total))),
+    protein_hit: a.protein >= t.protein * 0.95,
+    calories_ok: a.kcal > 0 && Math.abs(a.kcal - t.kcal) <= t.kcal * 0.1,
+    water_hit: a.water >= t.waterL * 0.9,
+    steps_10k: parseFloat(w.steps) >= 10000,
+    sleep_75: parseFloat(w.sleepH) >= 7.5,
+    swim: !!act.swim,
+    badminton: !!act.badminton,
+    creatine: !!supp.creatine,
+    fishoil: !!supp.fishoil,
+    vitd: !!supp.vitd,
+    magnesium: !!supp.magnesium,
+    biotin: !!supp.biotin,
+  };
+  const status = {};
+  HABITS.forEach((h) => { status[h.key] = (h.key in manual) ? !!manual[h.key] : (auto[h.key] || false); });
+  return { status, manual, auto };
+}
+
+export function habitPct(key, state) {
+  const { status } = habitStatus(key, state);
+  const keys = Object.keys(status);
+  const done = keys.filter((k) => status[k]).length;
+  return Math.round((done / keys.length) * 100);
+}
+
+// ---------- daily composite score ----------
+export function dailyScore(key, state) {
+  const hp = habitPct(key, state);
+  const na = nutritionAdherence(key, state).pct;
+  const s = state.workoutSessions && state.workoutSessions[key];
+  const hasLifts = PROGRAM.days[dowOf(key)].blocks.length > 0;
+  const wa = s ? workoutProgress(s).pct : (hasLifts ? 0 : 100);
+  const rec = recoveryScore(key, state).pct;
+  const score = Math.round(hp * 0.35 + na * 0.3 + wa * 0.2 + rec * 0.15);
+  return { score, hp, na, wa, rec };
+}
+
+// ============================================================
+// ANALYTICS  (volume + superset / finisher completion)
+// ============================================================
+export function muscleGroupOf(name) {
+  const p = EXERCISES[name]?.p || '';
+  if (/Chest/i.test(p)) return 'Chest';
+  if (/Lat|Back|Trap/i.test(p)) return 'Back';
+  if (/Delt|Shoulder/i.test(p)) return 'Shoulders';
+  if (/Bicep|Brachialis/i.test(p)) return 'Biceps';
+  if (/Tricep/i.test(p)) return 'Triceps';
+  if (/Quad/i.test(p)) return 'Quads';
+  if (/Hamstring/i.test(p)) return 'Hamstrings';
+  if (/Glute/i.test(p)) return 'Glutes';
+  if (/Calf|Calves/i.test(p)) return 'Calves';
+  if (/Ab|Oblique/i.test(p)) return 'Core';
+  if (/Cardio/i.test(p)) return 'Conditioning';
+  return 'Other';
+}
+
+export function volumeByExercise(state) {
+  const out = {};
+  allSetRecords(state).forEach((r) => { out[r.name] = (out[r.name] || 0) + r.weight * r.reps; });
+  return out;
+}
+
+export function volumeByMuscle(state) {
+  const out = {};
+  allSetRecords(state).forEach((r) => { const g = muscleGroupOf(r.name); out[g] = (out[g] || 0) + r.weight * r.reps; });
+  return out;
+}
+
+// superset + circuit completion across all sessions
+export function supersetStats(state) {
+  let plannedCells = 0, doneCells = 0, plannedRounds = 0, doneRounds = 0, missed = 0, blocks = 0;
+  const sessions = state.workoutSessions || {};
+  Object.values(sessions).forEach((s) => {
+    if (!s.entries) return;
+    Object.values(s.entries).forEach((e) => {
+      if (!e.rounds) return;
+      if (e.blockType !== 'superset' && e.blockType !== 'circuit') return;
+      blocks++;
+      plannedRounds += e.plannedRounds || e.rounds.length;
+      e.rounds.forEach((rd) => {
+        if (roundDone(rd)) doneRounds++;
+        Object.values(rd.byExercise).forEach((c) => {
+          plannedCells++;
+          if (c.skipped) missed++;
+          else if (cellDone(c)) doneCells++;
+        });
+      });
+    });
+  });
+  return { blocks, plannedCells, doneCells, pct: plannedCells ? Math.round((doneCells / plannedCells) * 100) : 0, plannedRounds, doneRounds, missed };
+}
+
+export function finisherStats(state) {
+  let planned = 0, done = 0;
+  const sessions = state.workoutSessions || {};
+  Object.values(sessions).forEach((s) => {
+    if (!s.entries) return;
+    Object.values(s.entries).forEach((e) => { if (e.blockType === 'finisher') { planned++; if (blockDone(e)) done++; } });
+  });
+  return { planned, done, pct: planned ? Math.round((done / planned) * 100) : 0 };
+}
+
+// weekly training volume series (last N weeks) for charting
+export function weeklyVolumeSeries(state, weeks = 8) {
+  const recs = allSetRecords(state);
+  const buckets = {};
+  recs.forEach((r) => {
+    const monday = mondayOf(r.date);
+    buckets[monday] = (buckets[monday] || 0) + r.weight * r.reps;
+  });
+  const out = [];
+  let cur = mondayOf(todayKey());
+  for (let i = 0; i < weeks; i++) {
+    out.unshift({ label: shortDate(cur), value: Math.round(buckets[cur] || 0) });
+    cur = addDays(cur, -7);
+  }
+  return out;
+}
+function mondayOf(key) {
+  const d = parseKey(key);
+  const diff = (d.getDay() + 6) % 7;
+  return addDays(key, -diff);
+}
+
+// ============================================================
+// COACH INSIGHTS
+// ============================================================
+export function coachInsights(key, state, now) {
+  const out = [];
+  const flags = dayFlags(key);
+  const w = watchFor(key, state);
+  const isToday = key === todayKey();
+  const hr = now ? now.getHours() : 12;
+  const a = nutritionActuals(key, state);
+  const t = resolveNutrition(key, state).targets;
+  const act = (state.activity && state.activity[key]) || {};
+  const s = state.workoutSessions && state.workoutSessions[key];
+  const sleep = parseFloat(w.sleepH);
+
+  if (!isNaN(sleep) && sleep < 6.5) out.push({ type: 'warn', text: `Sleep was ${sleep}h. Cap lifting at RPE 7 today and skip grinding reps.` });
+  if (act.badminton) out.push({ type: 'action', text: 'Badminton done. Add electrolytes and 30-50g carbs, push water +0.5 L. Keep protein the same.' });
+  if (flags.fastDay) {
+    if (isToday && hr < 18) out.push({ type: 'info', text: 'Fast active until 6 PM. Water, black coffee, green tea only. Emergency: one fruit OR one glass of milk.' });
+    else out.push({ type: 'action', text: 'Fast window over. Break it gently, then prioritise protein and hydration at dinner.' });
+  }
+  if (flags.classDay) {
+    const mode = (state.saturdayMode && state.saturdayMode[key]) || 'class';
+    if (mode === 'fallback') out.push({ type: 'info', text: 'BodyBalance swapped for the Full Body fallback. Vegetarian protein: whey, paneer, dal, Greek yogurt.' });
+    else out.push({ type: 'info', text: 'Vegetarian day. Anchor protein with whey, Greek yogurt, paneer, tofu and dal.' });
+  }
+  if (isToday && hr >= 13 && a.protein < t.protein * 0.5) out.push({ type: 'action', text: `Protein is at ${Math.round(a.protein)}g of ${t.protein}g. Add a whey shake or Greek yogurt.` });
+  const steps = parseFloat(w.steps);
+  if (isToday && hr >= 16 && !isNaN(steps) && steps < 6000) out.push({ type: 'action', text: `Steps at ${steps}. A 20 minute incline walk gets you toward 10k.` });
+  const maxPain = maxPainFor(key, state);
+  if (maxPain >= 3) out.push({ type: 'warn', text: `Logged pain ${maxPain}/5. Swap to the substitute exercise and drop the load 5-10%.` });
+
+  if (s) {
+    const prog = workoutProgress(s);
+    if (s.completed || (prog.total > 0 && prog.done === prog.total)) out.push({ type: 'good', text: 'Workout complete and logged. Next targets update from today.' });
+  }
+  if (a.protein >= t.protein * 0.95 && a.water >= t.waterL * 0.9) out.push({ type: 'good', text: 'Protein and water on target. That is the recomp engine running.' });
+  if (out.length === 0) out.push({ type: 'info', text: 'On plan. Log your work as you go and the coach adapts.' });
+  return out;
+}
+
+// ---------- phase / scans ----------
+// programCalendar is the SINGLE source of truth. Header, panel, Home, Plan and the
+// scan countdown all read from this so they can never disagree. Everything is derived
+// from the editable dates in settings and today's real date - nothing is hardcoded.
+export function programCalendar(state) {
+  const st = (state && state.settings) || {};
+  const progStart = st.programStartDate || PROGRAM_START;
+  const restartStart = st.restartPhaseStartDate || st.restartStartDate || progStart;
+  const freq = parseInt(st.scanFrequencyDays, 10) > 0 ? parseInt(st.scanFrequencyDays, 10) : 30;
+  const today = todayKey();
+  const pDays = Math.max(0, daysBetween(progStart, today));
+  const rDays = Math.max(0, daysBetween(restartStart, today));
+  const manual = st.nextBodyScanDate || st.nextScanDate || '';
+  const last = latestScan(state);
+  const autoNext = last ? addDays(last.date, freq) : addDays(progStart, freq);
+  const nextScan = manual || autoNext;
+  return {
+    today,
+    programStart: progStart,
+    restartStart,
+    currentProgramDay: pDays + 1,
+    currentProgramWeek: Math.floor(pDays / 7) + 1,
+    currentRestartDay: rDays + 1,
+    currentRestartWeek: Math.floor(rDays / 7) + 1,
+    currentPhase: PHASE_NAME,
+    scanFrequencyDays: freq,
+    autoNextScanDate: autoNext,
+    nextBodyScanDate: nextScan,
+    nextScanManual: !!manual,
+    daysUntilNextScan: daysBetween(today, nextScan),
+  };
+}
+
+// phaseInfo maps the calendar to the shape the UI already uses.
+export function phaseInfo(state) {
+  const c = programCalendar(state);
+  return {
+    name: c.currentPhase,
+    programStart: c.programStart,
+    restartStart: c.restartStart,
+    week: c.currentProgramWeek,      // header/badge = PROGRAM week/day
+    day: c.currentProgramDay,
+    programWeek: c.currentProgramWeek,
+    programDay: c.currentProgramDay,
+    restartWeek: c.currentRestartWeek,
+    restartDay: c.currentRestartDay,
+  };
+}
+
+export function sortedScans(state) { return [...(state.bodyScans || [])].sort((a, b) => a.date.localeCompare(b.date)); }
+export function latestScan(state) { const a = sortedScans(state); return a[a.length - 1] || null; }
+export function baselineScan(state) { const a = sortedScans(state); return a[0] || null; }
+export function nextScanCountdown(state) {
+  const c = programCalendar(state);
+  return { next: c.nextBodyScanDate, days: c.daysUntilNextScan, explicit: c.nextScanManual };
+}
+
+// ---------- restart load ----------
+export function restartSuggestion(name, state) {
+  const r = (state.restartWeights && state.restartWeights[name]) || null;
+  const pctDefault = (state.settings && (state.settings.defaultRestartLoadPercent ?? state.settings.restartPctDefault)) || 70;
+  const pct = r && r.pct != null && r.pct !== '' ? parseFloat(r.pct) : pctDefault;
+  const old = r && r.old !== '' && r.old != null ? parseFloat(r.old) : null;
+  if (old == null || isNaN(old)) return { hasOld: false, pct, suggested: null };
+  return { hasOld: true, old, pct, suggested: Math.round((old * pct) / 100 * 10) / 10 };
+}
+
+// ---------- dev-only console validation ----------
+export function calendarSelfTest() {
+  const base = defaultState();
+  const mk = (start) => ({ ...base, settings: { ...base.settings, programStartDate: start, restartPhaseStartDate: start } });
+  const t = todayKey();
+  const cases = [
+    ['start today -> Day 1 Week 1', mk(t), 1, 1],
+    ['start yesterday -> Day 2 Week 1', mk(addDays(t, -1)), 2, 1],
+    ['start 8 days ago -> Day 9 Week 2', mk(addDays(t, -8)), 9, 2],
+  ];
+  let pass = 0;
+  cases.forEach(([label, st, d, w]) => {
+    const c = programCalendar(st);
+    const ok = c.currentProgramDay === d && c.currentProgramWeek === w;
+    if (ok) pass++;
+    console.log(`[calendar] ${ok ? 'PASS' : 'FAIL'} ${label} -> got Day ${c.currentProgramDay} Week ${c.currentProgramWeek}`);
+  });
+  // logs/history/scans are independent of the calendar dates
+  const withLogs = { ...mk(t), workoutSessions: { '2026-01-01': { entries: {} }, '2026-02-01': { entries: {} } } };
+  const before = Object.keys(withLogs.workoutSessions).length;
+  const afterDateChange = { ...withLogs, settings: { ...withLogs.settings, programStartDate: addDays(t, -30) } };
+  const okLogs = Object.keys(afterDateChange.workoutSessions).length === before;
+  console.log(`[calendar] ${okLogs ? 'PASS' : 'FAIL'} changing start date keeps workout logs (${before})`);
+  console.log(`[calendar] ${pass}/3 calendar cases passed`);
+  return pass === 3 && okLogs;
+}
+export function monthlyTargetProgress(state) {
+  const last = latestScan(state);
+  const startFat = state.profile.startFatMassLb;
+  const goalLoss = state.profile.goalFatLossLb;
+  if (!last) return { lost: 0, goal: goalLoss, pct: 0 };
+  const lost = Math.max(0, startFat - last.fatMass);
+  return { lost: Math.round(lost * 10) / 10, goal: goalLoss, pct: Math.min(100, Math.round((lost / goalLoss) * 100)) };
+}
+
+// ---------- workout CSV ----------
+export function workoutCSV(state) {
+  const rows = [['date', 'exercise', 'block_source', 'set', 'weight', 'reps', 'rpe', 'volume']];
+  const recs = allSetRecords(state).sort((a, b) => a.date.localeCompare(b.date) || a.name.localeCompare(b.name));
+  const counter = {};
+  recs.forEach((r) => {
+    const k = r.date + '|' + r.name;
+    counter[k] = (counter[k] || 0) + 1;
+    rows.push([r.date, r.name, r.source, counter[k], r.weight, r.reps, r.rpe == null ? '' : r.rpe, r.weight * r.reps]);
+  });
+  return rows.map((r) => r.join(',')).join('\n');
+}
+
+// ============================================================
+// SUPPLEMENTS, LABS, HAIR HEALTH
+// ============================================================
+export function supplementAdherence(suppKey, state, key = todayKey(), days = 7) {
+  let taken = 0;
+  for (let i = 0; i < days; i++) {
+    const d = addDays(key, -i);
+    const log = (state.supplementLogs && state.supplementLogs[d]) || {};
+    if (log[suppKey]) taken += 1;
+  }
+  return { taken, of: days, pct: Math.round((taken / days) * 100) };
+}
+
+export function daysToLab(state) {
+  const d = state.settings && state.settings.upcomingLabDate;
+  if (!d) return null;
+  return daysBetween(todayKey(), d);
+}
+
+// non-diagnostic hair-protection signals derived from the day's data
+export function hairHealthChecks(key, state) {
+  const out = [];
+  const a = nutritionActuals(key, state);
+  const t = resolveNutrition(key, state).targets;
+  const w = watchFor(key, state);
+  const sleep = parseFloat(w.sleepH);
+
+  if (a.protein > 0 && a.protein < t.protein * 0.8) out.push({ tone: 'warn', text: `Protein at ${Math.round(a.protein)}g of ${t.protein}g. Hair and muscle both need protein, top up with whey or Greek yogurt.` });
+  else out.push({ tone: 'ok', text: `Protein target ${t.protein}g is set to protect hair and muscle in a deficit.` });
+
+  if (a.kcal > 0 && a.kcal < t.kcal * 0.75) out.push({ tone: 'warn', text: 'Calories are well under target today. Repeated very low days raise shedding risk, keep the deficit moderate.' });
+
+  if (!isNaN(sleep) && sleep < 6.5) out.push({ tone: 'warn', text: `Sleep ${sleep}h. Low sleep raises stress hormones that can affect hair, aim for 7.5h.` });
+
+  // rate of loss from the two most recent scans (>1%/week bodyweight is aggressive)
+  const scans = sortedScans(state);
+  if (scans.length >= 2) {
+    const last = scans[scans.length - 1], prev = scans[scans.length - 2];
+    const wk = Math.max(1, daysBetween(prev.date, last.date) / 7);
+    const lostPct = prev.weight ? ((prev.weight - last.weight) / prev.weight) * 100 / wk : 0;
+    if (lostPct > 1) out.push({ tone: 'warn', text: `Recent loss is about ${lostPct.toFixed(1)}%/week. Over 1%/week for multiple weeks is aggressive, consider easing the deficit or a short diet break.` });
+  }
+
+  out.push({ tone: 'info', text: 'Keep omega-3 and healthy fats in, avoid crash dieting, and hold protein steady day to day.' });
+  return out;
+}

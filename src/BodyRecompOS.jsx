@@ -1,0 +1,1286 @@
+// ============================================================
+// BodyRecompOS.jsx - the whole app: state + eight tabs
+// Mobile: bottom nav, single column. Desktop: sidebar + multi-column splits.
+// ============================================================
+import React, { useState, useEffect, useMemo } from 'react';
+import {
+  ChevronLeft, ChevronRight, ChevronDown, Plus, Check, Download, Upload, RotateCcw,
+  Droplets, Footprints, Moon, Flame, Activity, Waves, TrendingUp, Trophy, Target,
+  AlertTriangle, Watch, Pencil, Trash2, Info, Save, Beef, Leaf, Timer, Zap, Dumbbell,
+} from 'lucide-react';
+
+import {
+  PROGRAM, NUTRITION, SUPPLEMENTS, HABITS, SCAN_FIELDS, WATCH_FIELDS, DAY_SHORT,
+  EXERCISES, PROGRAM_RATIONALE, BADMINTON_FUEL, SWIMMING_FUEL, DAY_VARIANTS,
+  LABS, HAIR_HEALTH,
+} from './data.js';
+import {
+  todayKey, addDays, prettyDate, shortDate, dowOf, clone,
+  dayFlags, resolveWorkout, resolveNutrition, initSession,
+  blockDone, workoutProgress, nutritionActuals, nutritionAdherence,
+  watchFor, recoveryScore, habitStatus, habitPct, dailyScore, coachInsights,
+  phaseInfo, programCalendar, sortedScans, latestScan, baselineScan, nextScanCountdown, monthlyTargetProgress,
+  volumeByMuscle, volumeByExercise, supersetStats, finisherStats, weeklyVolumeSeries,
+  allSetRecords, getBestPerformance, exportJSON, workoutCSV, download, validateImport,
+  defaultState, loadState, saveState,
+  supplementAdherence, hairHealthChecks, daysToLab,
+} from './helpers.js';
+import {
+  Sidebar, BottomNav, Card, Chip, SectionTitle, MetricRing, ScoreRing, ProgressBar,
+  StatCell, CoachInsights, Sheet, Banner, EmptyState, LineTrend, BarMini,
+  MacroChips, FuelPlan, SupplementTiming, HairHealthCard, LabsCard,
+} from './components.jsx';
+import { BlockLogger, AddExercisePicker, makeUnplannedEntry } from './loggers.jsx';
+
+// ---------- small shared pieces ----------
+function DateNav({ date, setDate }) {
+  const isToday = date === todayKey();
+  return (
+    <div className="date-nav">
+      <button className="nav-btn" onClick={() => setDate(addDays(date, -1))} aria-label="Previous day"><ChevronLeft size={18} /></button>
+      <div className="dn-mid">
+        <b>{prettyDate(date)}</b>
+        <span>{isToday ? 'Today' : dayFlags(date).dow === 0 ? 'Sunday' : ''}</span>
+        {!isToday ? <button className="btn xs ghost" style={{ marginTop: 4 }} onClick={() => setDate(todayKey())}>Jump to today</button> : null}
+      </div>
+      <button className="nav-btn" onClick={() => setDate(addDays(date, 1))} aria-label="Next day"><ChevronRight size={18} /></button>
+    </div>
+  );
+}
+
+function ActivityToggles({ date, ctx }) {
+  const flags = dayFlags(date);
+  const act = ctx.state.activity[date] || {};
+  if (!flags.badmintonAvailable && !flags.swimDay) return null;
+  return (
+    <div className="toggle-chips">
+      {flags.badmintonAvailable ? (
+        <button className={`toggle-chip ${act.badminton ? 'on' : ''}`} onClick={() => ctx.toggleActivity(date, 'badminton')}>
+          <Activity size={15} /> Badminton
+        </button>
+      ) : null}
+      {flags.swimDay ? (
+        <button className={`toggle-chip ${act.swim ? 'on' : ''}`} onClick={() => ctx.toggleActivity(date, 'swim')}>
+          <Waves size={15} /> Swim
+        </button>
+      ) : null}
+    </div>
+  );
+}
+
+function ActivityRows({ items, icon }) {
+  const I = icon;
+  if (!items || items.length === 0) return null;
+  return (
+    <div>
+      {items.map((a, i) => (
+        <div className="row" key={i}>
+          <I size={17} color="var(--muted)" style={{ flex: '0 0 17px' }} />
+          <div className="row-main">
+            <div className="row-title">{a.name}</div>
+            <div className="row-sub">{a.detail}</div>
+          </div>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+// =====================================================================
+// HOME
+// =====================================================================
+function HomeTab({ ctx }) {
+  const date = todayKey();
+  const s = ctx.state;
+  const plan = resolveWorkout(date, s);
+  const nut = resolveNutrition(date, s);
+  const flags = dayFlags(date);
+  const act = s.activity[date] || {};
+  const a = nutritionActuals(date, s);
+  const w = watchFor(date, s);
+  const score = dailyScore(date, s);
+  const phase = phaseInfo(s);
+  const scan = nextScanCountdown(s);
+  const target = monthlyTargetProgress(s);
+  const insights = coachInsights(date, s, new Date());
+  const session = s.workoutSessions[date];
+  const prog = session ? workoutProgress(session) : { done: 0, total: plan.blocks.length };
+
+  const steps = parseFloat(w.steps) || 0;
+  const sleep = parseFloat(w.sleepH) || 0;
+
+  const goalRings = [
+    { label: 'Protein', value: Math.round(a.protein), sub: `/${nut.targets.protein}`, pct: (a.protein / nut.targets.protein) * 100, color: 'var(--cyan)' },
+    { label: 'Water L', value: a.water, sub: `/${nut.targets.waterL}`, pct: (a.water / nut.targets.waterL) * 100, color: 'var(--violet)' },
+    { label: 'Steps', value: steps >= 1000 ? (steps / 1000).toFixed(1) + 'k' : steps, sub: '/10k', pct: (steps / 10000) * 100, color: 'var(--amber)' },
+    { label: 'Sleep', value: sleep || '-', sub: '/7.5', pct: (sleep / 7.5) * 100, color: 'var(--green)' },
+  ];
+
+  return (
+    <div>
+      <div className="console">
+        <div className="greet">
+          <h2>Hi {s.profile.name.split(' ')[0]}</h2>
+          <span className="date">{prettyDate(date)}</span>
+        </div>
+        <div className="phase-row">
+          <Chip tone="cyan">{phase.name}</Chip>
+          <Chip>Week {phase.week}</Chip>
+          <Chip>{plan.title} · {plan.focus}</Chip>
+        </div>
+        <p className="summary">{insights[0].text}</p>
+      </div>
+
+      <div className="split">
+        <div className="split-main">
+          <Card>
+            <div className="score-hero">
+              <ScoreRing score={score.score} />
+              <div className="sh-meta">
+                <h4>Today adherence</h4>
+                <p>Habits {score.hp}% · Nutrition {score.na}% · Training {score.wa}% · Recovery {score.rec}%</p>
+              </div>
+            </div>
+          </Card>
+
+          <SectionTitle>Today goals</SectionTitle>
+          <Card>
+            <div className="ring-grid">
+              {goalRings.map((g) => (
+                <MetricRing key={g.label} pct={g.pct} value={g.value} sub={g.sub} label={g.label} color={g.color} size={68} />
+              ))}
+            </div>
+          </Card>
+
+          <SectionTitle>Today plan</SectionTitle>
+          <Card>
+            <div className="card-head"><div className="lead"><Dumbbell size={17} color="var(--cyan)" /><h3>{plan.title}</h3></div>
+              <Chip tone={prog.total && prog.done === prog.total ? 'green' : 'cyan'}>{prog.done}/{prog.total || plan.blocks.length} blocks</Chip></div>
+            {plan.blocks.length ? plan.blocks.map((b) => (
+              <div className="row" key={b.id}>
+                <span className={`block-kind ${b.blockType}`}>{b.blockType[0].toUpperCase()}</span>
+                <div className="row-main"><div className="row-title">{b.name}</div></div>
+              </div>
+            )) : <div className="row"><div className="row-main"><div className="row-title muted">Recovery day, no lifting</div></div></div>}
+            <ActivityRows items={plan.sport} icon={Activity} />
+            <ActivityRows items={plan.conditioning} icon={Waves} />
+            <div className="btn-row" style={{ marginTop: 12 }}>
+              <button className="btn primary sm" onClick={() => ctx.goto('train')}>Open Train</button>
+              <button className="btn ghost sm" onClick={() => ctx.goto('plan')}>See week</button>
+            </div>
+          </Card>
+
+          <SectionTitle>Today rules</SectionTitle>
+          <div className="grid-2">
+            <Card className="pad-sm">
+              <div className="stat-grid">
+                <StatCell k="Swim" v={flags.swimDay ? 'Yes (PM)' : 'No'} />
+                <StatCell k="Badminton" v={flags.badmintonAvailable ? (act.badminton ? 'Done' : 'Optional') : 'No'} />
+                <StatCell k="Fasting" v={flags.fastDay ? 'Until 6 PM' : 'No'} />
+                <StatCell k="Vegetarian" v={flags.vegDay ? 'Yes' : 'No'} />
+              </div>
+            </Card>
+            <Card className="pad-sm">
+              <div className="block-tag"><span className="bar" />Supplements</div>
+              {SUPPLEMENTS.map((sp) => (
+                <div className="row" key={sp.key}>
+                  <div className="row-main"><div className="row-title">{sp.name}</div><div className="row-sub">{sp.dose} · {sp.timing}</div></div>
+                </div>
+              ))}
+            </Card>
+          </div>
+
+          {(() => {
+            const tips = [];
+            if (flags.badmintonAvailable) tips.push({ tone: 'amber', text: act.badminton ? 'Badminton played: add electrolytes and 30-50g carbs, water +0.5 L, protein unchanged.' : 'Badminton optional today: if played, keep pre-court food light and refuel with whey plus a banana after.' });
+            if (flags.swimDay) tips.push({ tone: 'cyan', text: flags.fastDay ? 'Fast plus swim: zero calories until 6 PM, break gently, high-protein veg dinner after the pool.' : 'Swim tonight: keep the pre-swim snack light and prioritise protein after class.' });
+            if (flags.fastDay && !flags.swimDay) tips.push({ tone: 'amber', text: 'Fast until 6 PM: water, black coffee, green tea only. Emergency: one fruit or one glass of milk.' });
+            if (flags.vegDay) tips.push({ tone: 'green', text: 'Vegetarian day: hit protein with whey, tofu, Greek yogurt, dal and measured paneer.' });
+            if (a.protein < nut.targets.protein * 0.6) tips.push({ tone: 'cyan', text: `Protein at ${Math.round(a.protein)}g of ${nut.targets.protein}g. Add a whey shake or Greek yogurt.` });
+            if (a.water < nut.targets.waterL * 0.6) tips.push({ tone: 'violet', text: 'Water is behind. Drink 500 ml now and keep a bottle in sight.' });
+            const dtl = daysToLab(s);
+            if (s.settings.labWarningOn && dtl != null && dtl >= 0 && dtl <= 7) tips.push({ tone: 'amber', text: `Blood work in ${dtl} day${dtl === 1 ? '' : 's'}. High-dose biotin can skew results, pause it and tell the lab.` });
+            tips.push({ tone: 'green', text: 'LDL and HbA1c focus: keep paneer measured, avoid fried food and sugary drinks, pair carbs with protein.' });
+            tips.push({ tone: 'cyan', text: 'Vitamin D is 50 ng/mL, already optimal. D3 + K2 is maintenance, not aggressive dosing.' });
+            tips.push({ tone: 'violet', text: 'Hair protection: hold protein steady and avoid crash dieting through the fat-loss phase.' });
+            return (
+              <>
+                <SectionTitle>Food coach</SectionTitle>
+                <Card className="pad-sm">
+                  <div className="food-coach">
+                    {tips.slice(0, 6).map((tp, i) => (
+                      <div className={`fc-line ${tp.tone}`} key={i}><span className="fc-dot" />{tp.text}</div>
+                    ))}
+                  </div>
+                  <div className="btn-row" style={{ marginTop: 10 }}>
+                    <button className="btn ghost sm" onClick={() => { ctx.setSelDate(date); ctx.goto('fuel'); }}>Open Fuel</button>
+                  </div>
+                </Card>
+              </>
+            );
+          })()}
+        </div>
+
+        <div className="split-aside">
+          <SectionTitle>Coach insights</SectionTitle>
+          <Card><CoachInsights items={insights} /></Card>
+
+          <SectionTitle>Monthly target</SectionTitle>
+          <Card>
+            <div className="pbar-row"><span className="lab">Fat lost toward goal</span><span className="val num">{target.lost} / {target.goal} lb</span></div>
+            <ProgressBar pct={target.pct} color="var(--green)" />
+            <div className="divider" />
+            <div className="stat-grid">
+              <StatCell k="Next scan in" v={scan ? Math.max(0, scan.days) : '-'} unit="days" />
+              <StatCell k="Waist goal" v={s.profile.goalWaistIn} unit="in" />
+            </div>
+          </Card>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// =====================================================================
+// PLAN
+// =====================================================================
+function PlanTab({ ctx }) {
+  const [date, setDate] = useState(ctx.selDate);
+  const s = ctx.state;
+  // Monday of the week containing date
+  const monday = useMemo(() => { const d = dowOf(date); const back = (d + 6) % 7; return addDays(date, -back); }, [date]);
+  const week = Array.from({ length: 7 }, (_, i) => addDays(monday, i));
+  const plan = resolveWorkout(date, s);
+  const nut = resolveNutrition(date, s);
+  const flags = dayFlags(date);
+
+  return (
+    <div>
+      <div className="page-title">Planner</div>
+      <p className="page-sub">Weekly plan built from your Upper / Lower hybrid. Tap a day to see the workout and meals.</p>
+
+      <div className="date-nav">
+        <button className="nav-btn" onClick={() => setDate(addDays(monday, -7))}><ChevronLeft size={18} /></button>
+        <div className="dn-mid"><b>Week of {shortDate(monday)}</b><span>{prettyDate(date)}</span></div>
+        <button className="nav-btn" onClick={() => setDate(addDays(monday, 7))}><ChevronRight size={18} /></button>
+      </div>
+
+      <div className="week-grid">
+        {week.map((k) => {
+          const wp = resolveWorkout(k, s);
+          const f = dayFlags(k);
+          const cls = `week-day ${k === todayKey() ? 'today' : ''} ${k === date ? 'selected' : ''}`;
+          return (
+            <button className={cls} key={k} onClick={() => setDate(k)}>
+              <div className="wd-top"><span className="wd-dow">{DAY_SHORT[dowOf(k)]}</span><span className="wd-num">{shortDate(k)}</span></div>
+              <div className="wd-title">{wp.title}</div>
+              <div className="wd-focus">{wp.focus}</div>
+              <div className="wd-tags">
+                {f.swimDay ? <span className="wd-tag">swim</span> : null}
+                {f.fastDay ? <span className="wd-tag">fast</span> : null}
+                {f.vegDay ? <span className="wd-tag">veg</span> : null}
+                {f.badmintonAvailable ? <span className="wd-tag">badm</span> : null}
+              </div>
+            </button>
+          );
+        })}
+      </div>
+
+      <div className="split" style={{ marginTop: 8 }}>
+        <div className="split-main">
+          <SectionTitle right={<Chip tone="cyan">{plan.focus}</Chip>}>{plan.title}</SectionTitle>
+          {flags.classDay ? (
+            <Card>
+              <div className="card-head"><h3>Saturday choice</h3></div>
+              <div className="pill-toggle">
+                <button className={(s.saturdayMode[date] || 'class') === 'class' ? 'active' : ''} onClick={() => ctx.setSatMode(date, 'class')}>BodyBalance</button>
+                <button className={s.saturdayMode[date] === 'fallback' ? 'active' : ''} onClick={() => ctx.setSatMode(date, 'fallback')}>Full Body fallback</button>
+              </div>
+              <div className="hint" style={{ marginTop: 8 }}>{plan.usingFallback ? 'Showing the lifting fallback for a missed class.' : 'Showing the mobility class. Switch if you miss it.'}</div>
+            </Card>
+          ) : null}
+
+          {plan.notes ? <Banner tone={flags.fastDay ? 'amber' : flags.vegDay ? 'green' : 'cyan'} icon={flags.fastDay ? Timer : Info}>{plan.notes}</Banner> : null}
+
+          {plan.blocks.length ? (
+            <Card>
+              {plan.blocks.map((b) => (
+                <div key={b.id} style={{ marginBottom: 12 }}>
+                  <div className="block-tag"><span className="bar" />{b.name} <span className={`block-kind ${b.blockType}`} style={{ marginLeft: 6 }}>{b.blockType}</span></div>
+                  {b.blockType === 'single' || b.blockType === 'dropset' ? (
+                    <div className="target-line">
+                      <span className="tt">Sets <b>{b.exercises[0].sets}</b></span>
+                      <span className="tt">Reps <b>{b.exercises[0].repLow}-{b.exercises[0].repHigh}</b></span>
+                      <span className="tt">RPE <b>{b.exercises[0].rpe}</b></span>
+                      <span className="tt rest">Rest <b>{b.exercises[0].restSec}s</b></span>
+                      <span className="tt">Tempo <b>{b.exercises[0].tempo}</b></span>
+                    </div>
+                  ) : (
+                    <div>
+                      <div className="target-line">
+                        <span className="tt">Rounds <b>{b.rounds}</b></span>
+                        <span className="tt rest">Rest/round <b>{b.restAfterRoundSec}s</b></span>
+                      </div>
+                      <ul className="meal-items">
+                        {b.exercises.map((e) => <li key={e.name}>{e.name} — {e.targetReps} @ RPE {e.targetRpe}</li>)}
+                      </ul>
+                    </div>
+                  )}
+                </div>
+              ))}
+            </Card>
+          ) : null}
+
+          <ActivityRows items={plan.mobility} icon={Activity} />
+          {plan.mobility.length ? null : null}
+          {(plan.conditioning.length || plan.sport.length) ? (
+            <Card><ActivityRows items={plan.conditioning} icon={Waves} /><ActivityRows items={plan.sport} icon={Activity} /></Card>
+          ) : null}
+        </div>
+
+        <div className="split-aside">
+          <SectionTitle>Meal plan</SectionTitle>
+          <Card>
+            {(() => { const dv = DAY_VARIANTS[nut.dayType] || DAY_VARIANTS.training; return (
+              <div className="day-variant">
+                <div className={`block-tag ${dv.tone}`}><span className="bar" />{dv.label}</div>
+                <p className="dv-why">{dv.why}</p>
+              </div>
+            ); })()}
+            <MacroChips kcal={nut.targets.kcal} p={nut.targets.protein} c={nut.targets.carbs} f={nut.targets.fat} fiber={nut.targets.fiber} waterL={nut.targets.waterL} />
+            <div style={{ height: 8 }} />
+            {nut.meals.map((m, i) => (
+              <div className="meal" key={i}>
+                <div className="meal-head"><span className="mh-title">{m.name}</span><span className="mh-time">{m.time}</span></div>
+                <ul className="meal-items">{m.items.map((it, j) => <li key={j}>{it}</li>)}</ul>
+                <MacroChips kcal={m.kcal} p={m.p} c={m.c} f={m.f} />
+              </div>
+            ))}
+            <div className="btn-row" style={{ marginTop: 6 }}><button className="btn ghost sm" onClick={() => { ctx.setSelDate(date); ctx.goto('fuel'); }}>Log meals</button></div>
+          </Card>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// =====================================================================
+// TRAIN
+// =====================================================================
+function TrainTab({ ctx }) {
+  const [date, setDate] = useState(ctx.selDate);
+  const [collapsed, setCollapsed] = useState({});
+  const [adding, setAdding] = useState(false);
+  const s = ctx.state;
+  const plan = resolveWorkout(date, s);
+  const session = ctx.getSession(date);
+  const flags = dayFlags(date);
+  const prog = workoutProgress(session);
+  const insights = coachInsights(date, s, new Date());
+  const rec = recoveryScore(date, s);
+
+  const planIds = new Set(plan.blocks.map((b) => b.id));
+  const extras = Object.keys(session.entries).filter((id) => !planIds.has(id));
+
+  const blockFromEntry = (id, entry) => ({
+    id, blockType: 'single', name: entry.name || entry.exName,
+    exercises: [{ name: entry.replacedWith || entry.exName, sets: (entry.sets || []).length || 3, repLow: 8, repHigh: 12, rpe: 8, restSec: 90, tempo: '2-1-1' }],
+  });
+
+  const renderBlock = (block) => {
+    const entry = session.entries[block.id];
+    if (!entry) return null;
+    const done = blockDone(entry);
+    const open = collapsed[block.id] !== true;
+    return (
+      <div className={`block-card ${done ? 'done' : ''}`} key={block.id}>
+        <div className="block-head" onClick={() => setCollapsed((c) => ({ ...c, [block.id]: !open ? false : true }))}>
+          <div className="bh-lead">
+            <span className={`block-status ${done ? 'on' : ''}`} />
+            <div>
+              <div className="block-title">{block.name}</div>
+              <div style={{ marginTop: 4 }}><span className={`block-kind ${block.blockType}`}>{block.blockType}</span></div>
+            </div>
+          </div>
+          <ChevronDown size={18} color="var(--muted)" style={{ transform: open ? 'none' : 'rotate(-90deg)', transition: '0.15s' }} />
+        </div>
+        {open ? (
+          <div className="block-body">
+            <BlockLogger block={block} entry={entry} plan={plan} state={s} onMutate={(fn) => ctx.mutateEntry(date, block.id, fn)} setRestart={ctx.setRestart} />
+          </div>
+        ) : null}
+      </div>
+    );
+  };
+
+  return (
+    <div>
+      <div className="page-title">Train</div>
+      <DateNav date={date} setDate={setDate} />
+
+      {flags.classDay ? (
+        <Card className="pad-sm">
+          <div className="pill-toggle">
+            <button className={(s.saturdayMode[date] || 'class') === 'class' ? 'active' : ''} onClick={() => ctx.setSatMode(date, 'class')}>BodyBalance class</button>
+            <button className={s.saturdayMode[date] === 'fallback' ? 'active' : ''} onClick={() => ctx.setSatMode(date, 'fallback')}>Full Body fallback</button>
+          </div>
+        </Card>
+      ) : null}
+
+      <div className="split wide-aside">
+        <div className="split-main">
+          <div className="card-head" style={{ marginBottom: 10 }}>
+            <div className="lead"><h3 style={{ margin: 0 }}>{plan.title}</h3><Chip tone="cyan">{plan.focus}</Chip></div>
+            <Chip tone={prog.total && prog.done === prog.total ? 'green' : 'amber'}>{prog.done}/{prog.total} done</Chip>
+          </div>
+
+          {plan.blocks.length === 0 ? (
+            <Card><EmptyState icon={Waves} title="No lifting scheduled" sub={flags.fastDay ? 'Thursday recovery: fast until 6 PM, swim in the evening, mobility only.' : 'Recovery day. Use the mobility and conditioning below.'} /></Card>
+          ) : plan.blocks.map(renderBlock)}
+
+          {extras.map((id) => renderBlock(blockFromEntry(id, session.entries[id])))}
+
+          <div className="btn-row" style={{ marginTop: 6 }}>
+            <button className="btn sm" onClick={() => setAdding(true)}><Plus size={15} /> Add exercise</button>
+            <button className={`btn sm ${session.completed ? 'primary' : ''}`} onClick={() => ctx.patchSession(date, (x) => { x.completed = !x.completed; })}>
+              <Check size={15} /> {session.completed ? 'Completed' : 'Mark complete'}
+            </button>
+          </div>
+
+          {(plan.conditioning.length || plan.mobility.length || plan.sport.length) ? (
+            <>
+              <SectionTitle>Conditioning · mobility · sport</SectionTitle>
+              <Card>
+                <ActivityRows items={plan.conditioning} icon={Waves} />
+                <ActivityRows items={plan.mobility} icon={Activity} />
+                <ActivityRows items={plan.sport} icon={Activity} />
+                <div style={{ marginTop: 10 }}><ActivityToggles date={date} ctx={ctx} /></div>
+              </Card>
+            </>
+          ) : null}
+
+          <div className="btn-row" style={{ marginTop: 10 }}>
+            <button className="btn ghost sm" onClick={() => download(`workout-${date}.csv`, workoutCSV(s), 'text/csv')}><Download size={14} /> Export CSV</button>
+            <button className="btn ghost sm" onClick={() => download('recomp-os-backup.json', exportJSON(s))}><Download size={14} /> Export JSON</button>
+          </div>
+        </div>
+
+        <div className="split-aside">
+          <SectionTitle>Coach insights</SectionTitle>
+          <Card><CoachInsights items={insights} /></Card>
+          <SectionTitle>Recovery</SectionTitle>
+          <Card>
+            <div className="stat-grid">
+              <StatCell k="Recovery" v={rec.pct} unit="%" />
+              <StatCell k="Sleep" v={rec.sleep ?? '-'} unit="h" />
+              <StatCell k="Resting HR" v={rec.rhr ?? '-'} unit="bpm" />
+              <StatCell k="Max pain" v={rec.maxPain} unit="/5" />
+            </div>
+            <div className="hint" style={{ marginTop: 8 }}>Enter sleep and resting HR in the Body tab Apple Watch panel to sharpen this.</div>
+          </Card>
+          <SectionTitle>Log activity</SectionTitle>
+          <Card><ActivityToggles date={date} ctx={ctx} /></Card>
+        </div>
+      </div>
+
+      {adding ? (
+        <Sheet title="Add an exercise" onClose={() => setAdding(false)}>
+          <AddExercisePicker onPick={(name) => {
+            const { id, entry } = makeUnplannedEntry(name);
+            ctx.patchSession(date, (x) => { x.entries[id] = entry; });
+            setAdding(false);
+          }} />
+        </Sheet>
+      ) : null}
+    </div>
+  );
+}
+
+// =====================================================================
+// FUEL
+// =====================================================================
+function FuelTab({ ctx }) {
+  const [date, setDate] = useState(ctx.selDate);
+  const s = ctx.state;
+  const nut = resolveNutrition(date, s);
+  const flags = dayFlags(date);
+  const a = nutritionActuals(date, s);
+  const log = a.log;
+  const adher = nutritionAdherence(date, s);
+  const t = nut.targets;
+
+  const bars = [
+    { k: 'Calories', act: a.kcal, tgt: t.kcal, color: 'var(--amber)' },
+    { k: 'Protein', act: a.protein, tgt: t.protein, color: 'var(--cyan)' },
+    { k: 'Carbs', act: a.carbs, tgt: t.carbs, color: 'var(--green)' },
+    { k: 'Fat', act: a.fat, tgt: t.fat, color: 'var(--violet)' },
+  ];
+
+  return (
+    <div>
+      <div className="page-title">Fuel</div>
+      <DateNav date={date} setDate={setDate} />
+
+      {flags.fastDay ? <Banner tone="amber" icon={Timer}>Thursday fast until 6 PM. Water, black coffee, green tea only. Emergency: one fruit OR one glass of milk.</Banner> : null}
+      {flags.vegDay ? <Banner tone="green" icon={Leaf}>Vegetarian day. Chicken and fish are hidden from quick add. Lean on whey, paneer, tofu, dal and Greek yogurt.</Banner> : null}
+      {nut.adjustments.map((adj, i) => <Banner key={i} tone="cyan" icon={Zap}>{adj}</Banner>)}
+
+      <div className="split wide-aside">
+        <div className="split-main">
+          {(() => { const dv = DAY_VARIANTS[nut.dayType] || DAY_VARIANTS.training; return (
+            <SectionTitle right={<Chip tone={dv.tone}>{dv.label}</Chip>}>Meal plan</SectionTitle>
+          ); })()}
+          {(() => { const dv = DAY_VARIANTS[nut.dayType] || DAY_VARIANTS.training; return (
+            <p className="dv-why standalone">{dv.why}</p>
+          ); })()}
+          {nut.meals.map((m, i) => {
+            const eaten = !!(log.eaten && log.eaten[i]);
+            return (
+              <div className={`meal ${eaten ? 'eaten' : ''}`} key={i}>
+                <div className="meal-head">
+                  <div><span className="mh-title">{m.name}</span> <span className="mh-time">{m.time}</span></div>
+                  <button className={`check ${eaten ? 'on' : ''}`} onClick={() => ctx.setMeal(date, (x) => { x.eaten[i] = !x.eaten[i]; })}><Check size={15} /></button>
+                </div>
+                <ul className="meal-items">{m.items.map((it, j) => <li key={j}>{it}</li>)}</ul>
+                <MacroChips kcal={m.kcal} p={m.p} c={m.c} f={m.f} />
+              </div>
+            );
+          })}
+
+          <SectionTitle>Quick add</SectionTitle>
+          <Card>
+            <div className="quick-grid">
+              {NUTRITION.quickAdds.map((q, i) => {
+                const dim = q.meat && flags.vegDay;
+                return (
+                  <button key={i} className={dim ? 'dim' : ''} disabled={dim}
+                    onClick={() => ctx.setMeal(date, (x) => {
+                      if (q.water) x.water = Math.round((x.water + q.water) * 100) / 100;
+                      else x.extras.push({ label: q.label, p: q.p, c: q.c, f: q.f, kcal: q.kcal });
+                    })}>
+                    {q.label}
+                  </button>
+                );
+              })}
+            </div>
+          </Card>
+
+          {log.extras && log.extras.length ? (
+            <Card>
+              <div className="block-tag"><span className="bar" />Added foods</div>
+              {log.extras.map((e, i) => (
+                <div className="row" key={i}>
+                  <div className="row-main"><div className="row-title">{e.label}</div><div className="row-sub">{e.kcal} kcal · P {e.p}g · C {e.c}g · F {e.f}g</div></div>
+                  <button className="btn xs danger" onClick={() => ctx.setMeal(date, (x) => { x.extras.splice(i, 1); })}><Trash2 size={13} /></button>
+                </div>
+              ))}
+            </Card>
+          ) : null}
+
+          {flags.badmintonAvailable ? (
+            <>
+              <SectionTitle right={<Chip tone="amber">{(s.activity[date] || {}).badminton ? 'Played' : 'Optional'}</Chip>}>Badminton</SectionTitle>
+              <Card><FuelPlan plan={BADMINTON_FUEL} accent="var(--amber)" icon={Activity} /></Card>
+            </>
+          ) : null}
+
+          {flags.swimDay ? (
+            <>
+              <SectionTitle right={<Chip tone="cyan">{flags.fastDay ? 'Fast + swim' : 'PM class'}</Chip>}>Swimming</SectionTitle>
+              <Card><FuelPlan plan={SWIMMING_FUEL} accent="var(--cyan)" icon={Waves} /></Card>
+            </>
+          ) : null}
+
+          {(() => {
+            const supMap = (s.supplementLogs && s.supplementLogs[date]) || {};
+            const dtl = daysToLab(s);
+            const showBiotinWarn = s.settings.labWarningOn && (dtl == null || dtl >= 0);
+            const biotinWarn = showBiotinWarn
+              ? (dtl != null && dtl <= 3 && s.settings.pauseBiotinBeforeLabs
+                  ? `Blood work in ${dtl} day${dtl === 1 ? '' : 's'}. High-dose biotin can skew results, pause it now and tell the lab.`
+                  : 'High-dose biotin can skew some lab tests. Tell your doctor and lab before blood work.')
+              : null;
+            return (
+              <>
+                <SectionTitle right={<Chip tone="green">{Object.values(supMap).filter(Boolean).length} today</Chip>}>Supplement timing</SectionTitle>
+                <Card>
+                  <SupplementTiming
+                    items={SUPPLEMENTS}
+                    takenMap={supMap}
+                    onToggle={(k) => ctx.toggleSupplement(date, k)}
+                    adherence={(k) => supplementAdherence(k, s, date)}
+                    showConditional={flags.badmintonAvailable || flags.swimDay}
+                  />
+                </Card>
+
+                <SectionTitle right={<Chip tone="violet">Fat-loss safe</Chip>}>Hair health</SectionTitle>
+                <Card><HairHealthCard checks={hairHealthChecks(date, s)} config={HAIR_HEALTH} labWarning={biotinWarn} /></Card>
+              </>
+            );
+          })()}
+
+          <SectionTitle>Compliance</SectionTitle>
+          <Card className="pad-sm">
+            <div className="toggle-chips">
+              <button className={`toggle-chip ${log.flags?.fast ? 'on' : ''}`} onClick={() => ctx.setMeal(date, (x) => { x.flags.fast = !x.flags.fast; })}>Fast done</button>
+              <button className={`toggle-chip ${log.flags?.veg ? 'on' : ''}`} onClick={() => ctx.setMeal(date, (x) => { x.flags.veg = !x.flags.veg; })}>Vegetarian kept</button>
+              <button className={`toggle-chip ${log.flags?.cheat ? 'on' : ''}`} onClick={() => ctx.setMeal(date, (x) => { x.flags.cheat = !x.flags.cheat; })}>Cheat meal</button>
+              <button className={`toggle-chip ${log.flags?.restaurant ? 'on' : ''}`} onClick={() => ctx.setMeal(date, (x) => { x.flags.restaurant = !x.flags.restaurant; })}>Restaurant</button>
+            </div>
+          </Card>
+        </div>
+
+        <div className="split-aside">
+          <SectionTitle>Today totals</SectionTitle>
+          <Card>
+            <div className="score-hero" style={{ marginBottom: 12 }}>
+              <MetricRing pct={adher.pct} value={adher.pct} sub="%" label="Nutrition" color="var(--cyan)" size={82} stroke={8} />
+              <div className="sh-meta"><h4>Adherence</h4><p>Weighted on protein, calories and water.</p></div>
+            </div>
+            {bars.map((b) => (
+              <div key={b.k} style={{ marginBottom: 10 }}>
+                <div className="pbar-row"><span className="lab">{b.k}</span><span className="val num">{Math.round(b.act)} / {b.tgt}</span></div>
+                <ProgressBar pct={(b.act / b.tgt) * 100} color={b.color} />
+              </div>
+            ))}
+          </Card>
+
+          <SectionTitle>Water</SectionTitle>
+          <Card>
+            <div className="stepper">
+              <button onClick={() => ctx.setMeal(date, (x) => { x.water = Math.max(0, Math.round((x.water - 0.25) * 100) / 100); })}>-</button>
+              <input className="input mono" value={`${a.water} L`} readOnly style={{ textAlign: 'center' }} />
+              <button onClick={() => ctx.setMeal(date, (x) => { x.water = Math.round((x.water + 0.25) * 100) / 100; })}>+</button>
+            </div>
+            <div className="hint" style={{ marginTop: 8 }}>Target {t.waterL} L{flags.swimDay ? ' plus extra around the swim.' : '.'}</div>
+          </Card>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// =====================================================================
+// BODY
+// =====================================================================
+const BLANK_SCAN = () => { const o = { date: todayKey() }; SCAN_FIELDS.forEach((f) => { o[f.key] = ''; }); return o; };
+
+function BodyTab({ ctx }) {
+  const s = ctx.state;
+  const scans = sortedScans(s);
+  const latest = latestScan(s);
+  const base = baselineScan(s);
+  const prev = scans.length >= 2 ? scans[scans.length - 2] : null;
+  const target = monthlyTargetProgress(s);
+  const [editing, setEditing] = useState(null); // scan object or null
+  const [draft, setDraft] = useState(BLANK_SCAN());
+
+  const series = scans.map((sc) => ({
+    label: shortDate(sc.date), weight: sc.weight, bf: sc.bodyFatPct, waist: sc.waist,
+    visceral: sc.visceralFatArea, lean: sc.leanMass,
+  }));
+
+  const openAdd = () => { setDraft(BLANK_SCAN()); setEditing('new'); };
+  const openEdit = (sc) => { setDraft({ ...sc }); setEditing(sc.id); };
+  const save = () => {
+    const clean = { ...draft };
+    SCAN_FIELDS.forEach((f) => { clean[f.key] = clean[f.key] === '' ? 0 : parseFloat(clean[f.key]); });
+    if (editing === 'new') ctx.addScan(clean); else ctx.updateScan(editing, clean);
+    setEditing(null);
+  };
+
+  const cmpRow = (f) => {
+    if (!latest || !base) return null;
+    const cur = latest[f.key], b0 = base[f.key];
+    const d = Math.round((cur - b0) * 100) / 100;
+    const improved = (f.good === 'down' && d < 0) || (f.good === 'up' && d > 0);
+    const worse = (f.good === 'down' && d > 0) || (f.good === 'up' && d < 0);
+    return (
+      <div className="cmp" key={f.key}>
+        <div className="cmp-lab">{f.label}</div>
+        <div className="cmp-v">{b0}{f.unit ? ` ${f.unit}` : ''}</div>
+        <div className="cmp-v">{cur}{f.unit ? ` ${f.unit}` : ''}</div>
+        <div className={`cmp-d ${improved ? 'delta up' : worse ? 'delta down' : 'faint'}`}>{d > 0 ? '+' : ''}{d}</div>
+      </div>
+    );
+  };
+
+  return (
+    <div>
+      <div className="page-title">Body</div>
+      <p className="page-sub">Your Evolt 360 scans. Three seeded from your result sheets. Add a new scan each month.</p>
+
+      {latest ? (
+        <Card>
+          <div className="ring-grid">
+            <MetricRing pct={100 - (latest.bodyFatPct / 30) * 100} value={latest.bodyFatPct} sub="%" label="Body Fat" color="var(--amber)" size={72} />
+            <MetricRing pct={(1 - (latest.waist - 32) / 8) * 100} value={latest.waist} sub="in" label="Waist" color="var(--cyan)" size={72} />
+            <MetricRing pct={100 - (latest.visceralFatArea / 120) * 100} value={latest.visceralFatArea} sub="cm2" label="Visceral" color="var(--red)" size={72} />
+            <MetricRing pct={(latest.bwi / 10) * 100} value={latest.bwi} sub="/10" label="BWI" color="var(--green)" size={72} />
+          </div>
+        </Card>
+      ) : null}
+
+      <div className="grid-2">
+        <div>
+          <SectionTitle>Trends</SectionTitle>
+          <Card>
+            <div className="legend"><span><i style={{ background: '#34d0de' }} />Weight lb</span></div>
+            <LineTrend data={series} lines={[{ key: 'weight', color: '#34d0de', name: 'Weight' }]} />
+          </Card>
+          <Card>
+            <div className="legend"><span><i style={{ background: '#f6a623' }} />Body fat %</span><span><i style={{ background: '#34d0de' }} />Waist in</span></div>
+            <LineTrend data={series} lines={[{ key: 'bf', color: '#f6a623', name: 'Body fat %' }, { key: 'waist', color: '#34d0de', name: 'Waist' }]} />
+          </Card>
+          <Card>
+            <div className="legend"><span><i style={{ background: '#f0553d' }} />Visceral area</span><span><i style={{ background: '#37c871' }} />Lean mass</span></div>
+            <LineTrend data={series} lines={[{ key: 'visceral', color: '#f0553d', name: 'Visceral cm2' }, { key: 'lean', color: '#37c871', name: 'Lean lb' }]} />
+          </Card>
+        </div>
+
+        <div>
+          <SectionTitle right={<button className="btn xs primary" onClick={openAdd}><Plus size={13} /> Scan</button>}>Baseline vs latest</SectionTitle>
+          <Card>
+            <div className="cmp" style={{ color: 'var(--faint)' }}>
+              <div className="cmp-lab" style={{ fontFamily: 'var(--mono)', fontSize: 10, textTransform: 'uppercase' }}>Metric</div>
+              <div className="cmp-v" style={{ fontSize: 10 }}>{base ? shortDate(base.date) : '-'}</div>
+              <div className="cmp-v" style={{ fontSize: 10 }}>{latest ? shortDate(latest.date) : '-'}</div>
+              <div className="cmp-d" style={{ fontSize: 10 }}>Δ</div>
+            </div>
+            {SCAN_FIELDS.map(cmpRow)}
+          </Card>
+
+          <SectionTitle>Goal progress</SectionTitle>
+          <Card>
+            <div className="pbar-row"><span className="lab">Fat lost of {target.goal} lb goal</span><span className="val num">{target.lost} lb</span></div>
+            <ProgressBar pct={target.pct} color="var(--green)" />
+            <div className="hint" style={{ marginTop: 8 }}>{prev && latest ? `Since last scan: ${Math.round((latest.weight - prev.weight) * 10) / 10} lb weight, ${Math.round((latest.bodyFatPct - prev.bodyFatPct) * 10) / 10}% body fat.` : 'Add another scan to see month-over-month change.'}</div>
+          </Card>
+
+          <SectionTitle>Labs</SectionTitle>
+          <Card><LabsCard labs={LABS} /></Card>
+
+          <SectionTitle>All scans</SectionTitle>
+          <Card>
+            {scans.slice().reverse().map((sc) => (
+              <div className="row" key={sc.id}>
+                <div className="row-main"><div className="row-title">{prettyDate(sc.date)}</div><div className="row-sub">{sc.weight} lb · {sc.bodyFatPct}% · waist {sc.waist} · VFA {sc.visceralFatArea}</div></div>
+                <button className="btn xs ghost" onClick={() => openEdit(sc)}><Pencil size={13} /></button>
+                <button className="btn xs danger" onClick={() => ctx.deleteScan(sc.id)}><Trash2 size={13} /></button>
+              </div>
+            ))}
+          </Card>
+        </div>
+      </div>
+
+      <SectionTitle>Apple Watch (manual)</SectionTitle>
+      <WatchPanel ctx={ctx} />
+
+      {editing ? (
+        <Sheet title={editing === 'new' ? 'Add body scan' : 'Edit scan'} onClose={() => setEditing(null)}>
+          <div className="field">
+            <label>Date</label>
+            <input className="input" type="date" value={draft.date} onChange={(e) => setDraft({ ...draft, date: e.target.value })} />
+          </div>
+          <div className="field-row cols-3">
+            {SCAN_FIELDS.map((f) => (
+              <div className="field" key={f.key}>
+                <label>{f.label}{f.unit ? ` (${f.unit})` : ''}</label>
+                <input className="input mono" inputMode="decimal" value={draft[f.key]} onChange={(e) => setDraft({ ...draft, [f.key]: e.target.value })} />
+              </div>
+            ))}
+          </div>
+          <button className="btn primary block" onClick={save} style={{ marginTop: 6 }}><Save size={15} /> Save scan</button>
+        </Sheet>
+      ) : null}
+    </div>
+  );
+}
+
+function WatchPanel({ ctx }) {
+  const [date, setDate] = useState(todayKey());
+  const w = watchFor(date, ctx.state);
+  return (
+    <Card>
+      <DateNav date={date} setDate={setDate} />
+      <Banner tone="violet" icon={Watch}>Web browsers cannot read Apple Health directly. Enter watch numbers here for now. Automatic sync would need a native iOS app with HealthKit permissions.</Banner>
+      <div className="field-row cols-3">
+        {WATCH_FIELDS.map((f) => (
+          <div className="field" key={f.key}>
+            <label>{f.label}{f.unit ? ` (${f.unit})` : ''}</label>
+            <input className="input mono" inputMode="decimal" value={w[f.key] ?? ''} onChange={(e) => ctx.setWatch(date, f.key, e.target.value)} />
+          </div>
+        ))}
+      </div>
+      <div className="divider" />
+      <div className="block-tag"><span className="bar" />CSV import (preview)</div>
+      <div className="hint">Import parser ready. Upload a CSV and map columns. Column mapping ships in a later version.</div>
+      <label className="btn sm" style={{ marginTop: 8, display: 'inline-flex' }}>
+        <Upload size={14} /> Choose CSV
+        <input type="file" accept=".csv" style={{ display: 'none' }} onChange={(e) => { const f = e.target.files?.[0]; if (f) alert(`Loaded ${f.name}. Import parser ready. Column mapping is coming in a later version.`); }} />
+      </label>
+    </Card>
+  );
+}
+
+// =====================================================================
+// HABITS
+// =====================================================================
+function HabitsTab({ ctx }) {
+  const [date, setDate] = useState(ctx.selDate);
+  const s = ctx.state;
+  const { status } = habitStatus(date, s);
+  const pct = habitPct(date, s);
+  const groups = useMemo(() => {
+    const g = {};
+    HABITS.forEach((h) => { (g[h.group] = g[h.group] || []).push(h); });
+    return g;
+  }, []);
+
+  // streak: consecutive days back from today with habit pct >= 60
+  const streak = useMemo(() => {
+    let n = 0, d = todayKey();
+    for (let i = 0; i < 120; i++) { if (habitPct(d, s) >= 60) { n++; d = addDays(d, -1); } else break; }
+    return n;
+  }, [s]);
+
+  const missed = HABITS.filter((h) => !status[h.key]);
+
+  return (
+    <div>
+      <div className="page-title">Habits</div>
+      <DateNav date={date} setDate={setDate} />
+
+      <div className="grid-2">
+        <Card>
+          <div className="score-hero">
+            <MetricRing pct={pct} value={pct} sub="%" label="Today" color={pct >= 80 ? 'var(--green)' : 'var(--cyan)'} size={88} stroke={9} />
+            <div className="sh-meta">
+              <h4>Checklist complete</h4>
+              <p>Streak: {streak} day{streak === 1 ? '' : 's'} at 60%+. {missed.length} habit{missed.length === 1 ? '' : 's'} left today.</p>
+            </div>
+          </div>
+        </Card>
+        <Card className="pad-sm">
+          <div className="block-tag"><span className="bar" />Coach note</div>
+          <p style={{ margin: 0, fontSize: 13, lineHeight: 1.5, color: 'var(--muted)' }}>
+            {pct >= 80 ? 'Strong day. Consistency at this level is what moves the scan numbers.'
+              : missed.length ? `Close the gaps: ${missed.slice(0, 3).map((m) => m.label.toLowerCase()).join(', ')}.`
+                : 'All clear.'}
+          </p>
+        </Card>
+      </div>
+
+      {Object.keys(groups).map((g) => (
+        <div key={g}>
+          <SectionTitle>{g}</SectionTitle>
+          <Card>
+            {groups[g].map((h) => {
+              const on = status[h.key];
+              return (
+                <div className="row" key={h.key} onClick={() => ctx.toggleHabit(date, h.key, !on)} style={{ cursor: 'pointer' }}>
+                  <button className={`check ${on ? 'on' : ''}`}><Check size={15} /></button>
+                  <div className="row-main"><div className="row-title">{h.label}</div></div>
+                </div>
+              );
+            })}
+          </Card>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+// =====================================================================
+// STATS
+// =====================================================================
+function StatsTab({ ctx }) {
+  const s = ctx.state;
+  const today = todayKey();
+  const avg = (n) => {
+    let sum = 0, c = 0;
+    for (let i = 0; i < n; i++) { const d = addDays(today, -i); sum += dailyScore(d, s).score; c++; }
+    return Math.round(sum / c);
+  };
+  const daily = dailyScore(today, s).score;
+  const weekly = avg(7);
+  const monthly = avg(30);
+
+  const muscleVol = volumeByMuscle(s);
+  const muscleData = Object.keys(muscleVol).filter((k) => k !== 'Other' && k !== 'Conditioning').map((k) => ({ label: k, value: Math.round(muscleVol[k]) })).sort((a, b) => b.value - a.value).slice(0, 8);
+  const weekVol = weeklyVolumeSeries(s, 8);
+
+  const ss = supersetStats(s);
+  const fs = finisherStats(s);
+
+  const exVol = volumeByExercise(s);
+  const topLifts = Object.keys(exVol).map((n) => { const b = getBestPerformance(n, s); return { name: n, e1rm: b ? Math.round(b.e1rm) : 0, vol: Math.round(exVol[n]) }; }).sort((a, b) => b.e1rm - a.e1rm).slice(0, 6);
+
+  const recs = allSetRecords(s);
+  const hasData = recs.length > 0;
+
+  // simple plateau / deload flag
+  const nonZero = weekVol.filter((w) => w.value > 0);
+  const last2 = weekVol.slice(-2);
+  const maxVol = Math.max(...weekVol.map((w) => w.value), 1);
+  const deload = nonZero.length >= 3 && last2.every((w) => w.value > 0 && w.value < maxVol * 0.9);
+
+  return (
+    <div>
+      <div className="page-title">Stats</div>
+      <p className="page-sub">Plan vs reality across training, nutrition, recovery and body composition.</p>
+
+      <Card>
+        <div className="ring-grid cols-3">
+          <MetricRing pct={daily} value={daily} sub="/100" label="Today" color="var(--cyan)" size={80} />
+          <MetricRing pct={weekly} value={weekly} sub="/100" label="7-day" color="var(--amber)" size={80} />
+          <MetricRing pct={monthly} value={monthly} sub="/100" label="30-day" color="var(--green)" size={80} />
+        </div>
+      </Card>
+
+      {deload ? <Banner tone="amber" icon={AlertTriangle}>Weekly training volume has slipped two weeks running. Consider an easy deload week: same exercises, drop sets and load ~40%.</Banner> : null}
+
+      <div className="grid-2">
+        <div>
+          <SectionTitle>Training volume by week</SectionTitle>
+          <Card>{hasData ? <BarMini data={weekVol} color="#34d0de" /> : <EmptyState icon={TrendingUp} title="No sets logged yet" sub="Log a Train session and volume shows up here." />}</Card>
+
+          <SectionTitle>Volume by muscle group</SectionTitle>
+          <Card>{muscleData.length ? <BarMini data={muscleData} color="#8b7bf0" /> : <EmptyState icon={Dumbbell} title="Nothing logged yet" />}</Card>
+        </div>
+
+        <div>
+          <SectionTitle>Block completion</SectionTitle>
+          <Card>
+            <div className="stat-grid">
+              <StatCell k="Superset / circuit" v={ss.pct} unit="%" />
+              <StatCell k="Cells done" v={`${ss.doneCells}/${ss.plannedCells}`} />
+              <StatCell k="Rounds done" v={`${ss.doneRounds}/${ss.plannedRounds}`} />
+              <StatCell k="Skipped in sets" v={ss.missed} />
+              <StatCell k="Finishers" v={`${fs.done}/${fs.planned}`} />
+              <StatCell k="Finisher rate" v={fs.pct} unit="%" />
+            </div>
+            <div className="hint" style={{ marginTop: 8 }}>Supersets and circuits count every exercise in every round. A block only reads complete when all of them are done.</div>
+          </Card>
+
+          <SectionTitle>Top lifts (e1RM)</SectionTitle>
+          <Card>
+            {topLifts.length && topLifts[0].e1rm > 0 ? (
+              <div className="table-scroll">
+                <table className="data">
+                  <thead><tr><th>Exercise</th><th>e1RM</th><th>Total vol</th></tr></thead>
+                  <tbody>{topLifts.map((l) => <tr key={l.name}><td>{l.name}</td><td>{l.e1rm} lb</td><td>{l.vol}</td></tr>)}</tbody>
+                </table>
+              </div>
+            ) : <EmptyState icon={Trophy} title="No PRs yet" sub="Your best lifts appear here after a few sessions." />}
+          </Card>
+        </div>
+      </div>
+
+      <SectionTitle>Body composition</SectionTitle>
+      <BodyMiniStats ctx={ctx} />
+    </div>
+  );
+}
+
+function BodyMiniStats({ ctx }) {
+  const s = ctx.state;
+  const scans = sortedScans(s);
+  const latest = latestScan(s), base = baselineScan(s);
+  const target = monthlyTargetProgress(s);
+  if (!latest) return null;
+  return (
+    <Card>
+      <div className="stat-grid cols-3">
+        <StatCell k="Weight" v={latest.weight} unit="lb" delta={base ? `${(latest.weight - base.weight).toFixed(1)}` : null} deltaDir={latest.weight < base.weight ? 'up' : 'down'} />
+        <StatCell k="Body fat" v={latest.bodyFatPct} unit="%" delta={base ? `${(latest.bodyFatPct - base.bodyFatPct).toFixed(1)}` : null} deltaDir={latest.bodyFatPct < base.bodyFatPct ? 'up' : 'down'} />
+        <StatCell k="Lean mass" v={latest.leanMass} unit="lb" delta={base ? `${(latest.leanMass - base.leanMass).toFixed(1)}` : null} deltaDir={latest.leanMass > base.leanMass ? 'up' : 'down'} />
+        <StatCell k="Waist" v={latest.waist} unit="in" delta={base ? `${(latest.waist - base.waist).toFixed(1)}` : null} deltaDir={latest.waist < base.waist ? 'up' : 'down'} />
+        <StatCell k="Visceral" v={latest.visceralFatArea} unit="cm2" />
+        <StatCell k="Fat to goal" v={`${target.lost}/${target.goal}`} unit="lb" />
+      </div>
+    </Card>
+  );
+}
+
+// =====================================================================
+// MORE
+// =====================================================================
+function MoreTab({ ctx }) {
+  const s = ctx.state;
+  const [importErr, setImportErr] = useState('');
+
+  const doImport = (file) => {
+    const reader = new FileReader();
+    reader.onload = () => {
+      try {
+        const obj = JSON.parse(reader.result);
+        if (!validateImport(obj)) { setImportErr('That file does not look like a Recomp OS backup.'); return; }
+        ctx.replaceState(obj);
+        setImportErr('');
+        alert('Backup imported.');
+      } catch (e) { setImportErr('Could not read that file. Make sure it is a valid JSON export.'); }
+    };
+    reader.onerror = () => setImportErr('Could not read that file.');
+    reader.readAsText(file);
+  };
+
+  const num = (label, key, obj, setter) => (
+    <div className="field">
+      <label>{label}</label>
+      <input className="input mono" inputMode="decimal" value={obj[key]} onChange={(e) => setter(key, e.target.value)} />
+    </div>
+  );
+
+  return (
+    <div>
+      <div className="page-title">More</div>
+
+      <div className="grid-2">
+        <div>
+          <SectionTitle>Profile</SectionTitle>
+          <Card>
+            <div className="field"><label>Name</label><input className="input" value={s.profile.name} onChange={(e) => ctx.setProfile('name', e.target.value)} /></div>
+            <div className="field-row cols-3">
+              {num('Height (in)', 'heightIn', s.profile, (k, v) => ctx.setProfile(k, parseFloat(v) || 0))}
+              {num('Age', 'age', s.profile, (k, v) => ctx.setProfile(k, parseFloat(v) || 0))}
+              {num('Start wt (lb)', 'startWeightLb', s.profile, (k, v) => ctx.setProfile(k, parseFloat(v) || 0))}
+            </div>
+          </Card>
+
+          <SectionTitle>Goals</SectionTitle>
+          <Card>
+            <div className="field-row cols-3">
+              {num('Fat loss (lb)', 'goalFatLossLb', s.profile, (k, v) => ctx.setProfile(k, parseFloat(v) || 0))}
+              {num('Waist goal (in)', 'goalWaistIn', s.profile, (k, v) => ctx.setProfile(k, parseFloat(v) || 0))}
+              {num('Body fat goal %', 'goalBodyFatPct', s.profile, (k, v) => ctx.setProfile(k, parseFloat(v) || 0))}
+            </div>
+          </Card>
+
+          <SectionTitle>Nutrition and targets</SectionTitle>
+          <Card>
+            <div className="field-row cols-3">
+              {num('Protein (g)', 'proteinTarget', s.settings, (k, v) => ctx.setSetting(k, parseFloat(v) || 0))}
+              {num('Water (L)', 'waterTargetL', s.settings, (k, v) => ctx.setSetting(k, parseFloat(v) || 0))}
+              {num('Steps', 'stepsTarget', s.settings, (k, v) => ctx.setSetting(k, parseFloat(v) || 0))}
+            </div>
+            <div className="row" onClick={() => ctx.setSetting('eggAllowed', !s.settings.eggAllowed)} style={{ cursor: 'pointer' }}>
+              <button className={`check ${s.settings.eggAllowed ? 'on' : ''}`}><Check size={15} /></button>
+              <div className="row-main"><div className="row-title">Eggs allowed on vegetarian days</div></div>
+            </div>
+            <div className="field" style={{ marginTop: 10 }}>
+              <label>Units</label>
+              <div className="pill-toggle">
+                <button className={s.settings.units === 'imperial' ? 'active' : ''} onClick={() => ctx.setSetting('units', 'imperial')}>Imperial</button>
+                <button className={s.settings.units === 'metric' ? 'active' : ''} onClick={() => ctx.setSetting('units', 'metric')}>Metric</button>
+              </div>
+            </div>
+          </Card>
+
+          <SectionTitle>Supplements and labs</SectionTitle>
+          <Card>
+            <div className="field-row cols-3">
+              {num('Total daily D3 (IU)', 'd3Dose', s.settings, (k, v) => ctx.setSetting(k, v))}
+              {num('Magnesium elemental', 'magElementalMg', s.settings, (k, v) => ctx.setSetting(k, v))}
+              {num('Biotin dose', 'biotinDose', s.settings, (k, v) => ctx.setSetting(k, v))}
+            </div>
+            <div className="hint" style={{ marginBottom: 10 }}>Vitamin D is 50 ng/mL, so D3 + K2 is maintenance. Track total daily IU across all products. Log elemental magnesium, not capsule weight.</div>
+
+            <div className="field" style={{ marginBottom: 10 }}>
+              <label>Upcoming lab / blood work date</label>
+              <input className="input mono" type="date" value={s.settings.upcomingLabDate || ''} onChange={(e) => ctx.setSetting('upcomingLabDate', e.target.value)} />
+            </div>
+
+            <div className="row" onClick={() => ctx.setSetting('labWarningOn', !s.settings.labWarningOn)} style={{ cursor: 'pointer' }}>
+              <button className={`check ${s.settings.labWarningOn ? 'on' : ''}`}><Check size={15} /></button>
+              <div className="row-main"><div className="row-title">Show biotin lab-interference warnings</div><div className="row-sub">High-dose biotin can skew thyroid, troponin, vitamin D and hormone assays</div></div>
+            </div>
+            <div className="row" onClick={() => ctx.setSetting('pauseBiotinBeforeLabs', !s.settings.pauseBiotinBeforeLabs)} style={{ cursor: 'pointer' }}>
+              <button className={`check ${s.settings.pauseBiotinBeforeLabs ? 'on' : ''}`}><Check size={15} /></button>
+              <div className="row-main"><div className="row-title">Remind to pause biotin before labs</div><div className="row-sub">A stronger reminder appears in Fuel when a lab date is within 3 days</div></div>
+            </div>
+          </Card>
+        </div>
+
+        <div>
+          <SectionTitle>Data</SectionTitle>
+          <Card>
+            <div className="btn-row">
+              <button className="btn sm" onClick={() => download('recomp-os-backup.json', exportJSON(s))}><Download size={14} /> Export JSON</button>
+              <label className="btn sm"><Upload size={14} /> Import JSON<input type="file" accept=".json" style={{ display: 'none' }} onChange={(e) => { const f = e.target.files?.[0]; if (f) doImport(f); }} /></label>
+              <button className="btn sm ghost" onClick={() => download('workout-history.csv', workoutCSV(s), 'text/csv')}><Download size={14} /> Workout CSV</button>
+            </div>
+            {importErr ? <Banner tone="red" icon={AlertTriangle}>{importErr}</Banner> : null}
+            <div className="divider" />
+            <button className="btn danger block" onClick={() => { if (confirm('Reset all data? This clears every log and restores the three seed scans. Export a backup first if unsure.')) ctx.resetAll(); }}>
+              <RotateCcw size={15} /> Reset all data
+            </button>
+            <div className="hint" style={{ marginTop: 8 }}>Weekly backup reminder: export a JSON on Sundays so your history is safe if Safari clears site storage.</div>
+          </Card>
+
+          <SectionTitle>Apple Watch</SectionTitle>
+          <Card>
+            <Banner tone="violet" icon={Watch}>Automatic Apple Watch sync needs a native iOS app using HealthKit permissions. Web browsers cannot read Apple Health directly. This dashboard uses manual watch entry in the Body tab until a native app exists.</Banner>
+          </Card>
+
+          <SectionTitle>Program dates</SectionTitle>
+          <Card className="program-dates">
+            <div className="block-tag"><span className="bar" />Week and day recalculate from these. Changing them never deletes logs, scans, PRs or history.</div>
+            {(() => { const c = programCalendar(s); return (
+              <div className="stat-grid" style={{ marginBottom: 10 }}>
+                <StatCell k="Program" v={`W${c.currentProgramWeek} D${c.currentProgramDay}`} />
+                <StatCell k="Restart phase" v={`W${c.currentRestartWeek} D${c.currentRestartDay}`} />
+                <StatCell k="Next scan in" v={c.daysUntilNextScan} unit="days" />
+                <StatCell k="Scan every" v={c.scanFrequencyDays} unit="days" />
+              </div>
+            ); })()}
+            <div className="field"><label>Program start date</label><input className="input" type="date" value={s.settings.programStartDate || ''} onChange={(e) => ctx.setSetting('programStartDate', e.target.value)} /></div>
+            <div className="field"><label>Restart phase start date</label><input className="input" type="date" value={s.settings.restartPhaseStartDate || ''} onChange={(e) => ctx.setSetting('restartPhaseStartDate', e.target.value)} /></div>
+            <div className="field-row cols-3">
+              <div className="field"><label>Next body scan date</label><input className="input" type="date" value={s.settings.nextBodyScanDate || ''} onChange={(e) => ctx.setSetting('nextBodyScanDate', e.target.value)} /></div>
+              <div className="field"><label>Scan every (days)</label><input className="input mono" inputMode="numeric" value={s.settings.scanFrequencyDays} onChange={(e) => ctx.setSetting('scanFrequencyDays', parseInt(e.target.value, 10) || 30)} /></div>
+              <div className="field"><label>Restart load %</label><input className="input mono" inputMode="numeric" value={s.settings.defaultRestartLoadPercent} onChange={(e) => ctx.setSetting('defaultRestartLoadPercent', parseFloat(e.target.value) || 0)} /></div>
+            </div>
+            <div className="hint" style={{ marginBottom: 8 }}>Leave scan date blank to auto-use last scan + {s.settings.scanFrequencyDays} days. Manual dates are kept until you tap Auto.</div>
+            <div className="btn-row">
+              <button className="btn sm" onClick={() => ctx.restartCalendar(todayKey())}><RotateCcw size={14} /> Reset to Week 1 Day 1 (today)</button>
+              <button className="btn sm ghost" onClick={() => { const d = prompt('Restart the program calendar from which date? (YYYY-MM-DD). Logs are kept.', todayKey()); if (d) ctx.restartCalendar(d); }}>Keep logs, restart calendar</button>
+              <button className="btn sm ghost" onClick={ctx.autoScanDate}>Auto scan date</button>
+              <button className="btn sm ghost" onClick={ctx.recalcNow}>Recalculate</button>
+            </div>
+          </Card>
+
+          <SectionTitle>Calendar debug</SectionTitle>
+          <Card>
+            {(() => { const c = programCalendar(s); const rows = [
+              ['Today', c.today],
+              ['Program start', c.programStart],
+              ['Restart start', c.restartStart],
+              ['Program day / week', `Day ${c.currentProgramDay} · Week ${c.currentProgramWeek}`],
+              ['Restart day / week', `Day ${c.currentRestartDay} · Week ${c.currentRestartWeek}`],
+              ['Phase', c.currentPhase],
+              ['Next scan date', `${c.nextBodyScanDate}${c.nextScanManual ? ' (manual)' : ' (auto)'}`],
+              ['Days until scan', String(c.daysUntilNextScan)],
+              ['Workout log days', String(Object.keys(s.workoutSessions || {}).length)],
+              ['Body scans', String((s.bodyScans || []).length)],
+            ]; return rows.map(([k, v]) => (
+              <div className="row" key={k} style={{ padding: '7px 0' }}>
+                <div className="row-main"><div className="row-sub" style={{ margin: 0 }}>{k}</div></div>
+                <span className="num" style={{ fontSize: 12 }}>{v}</span>
+              </div>
+            )); })()}
+          </Card>
+
+          <SectionTitle>Program</SectionTitle>
+          <Card>
+            <div className="block-tag"><span className="bar" />Why this split</div>
+            <p style={{ margin: 0, fontSize: 12.5, lineHeight: 1.55, color: 'var(--muted)' }}>{PROGRAM_RATIONALE}</p>
+          </Card>
+
+          <SectionTitle>Deployment</SectionTitle>
+          <Card>
+            <p style={{ margin: '0 0 8px', fontSize: 12.5, lineHeight: 1.55, color: 'var(--muted)' }}>Run locally with <span className="num">npm install</span> then <span className="num">npm run dev</span>. Build with <span className="num">npm run build</span>. Deploy the <span className="num">dist</span> folder to Vercel, Netlify, GitHub Pages, StackBlitz or CodeSandbox, then open in iPhone Safari and Add to Home Screen.</p>
+            <div className="hint">Version 1 stores everything on this device with localStorage. No cloud, no login.</div>
+          </Card>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// =====================================================================
+// ROOT
+// =====================================================================
+export default function BodyRecompOS() {
+  const [state, setState] = useState(loadState);
+  const [tab, setTab] = useState('home');
+  const [selDate, setSelDate] = useState(todayKey());
+
+  useEffect(() => { saveState(state); }, [state]);
+  useEffect(() => { window.scrollTo(0, 0); }, [tab]);
+
+  const phase = phaseInfo(state);
+  const today = todayKey();
+  const score = dailyScore(today, state).score;
+
+  // ----- state helpers exposed to tabs -----
+  const mutate = (fn) => setState((prev) => { const d = clone(prev); fn(d); return d; });
+
+  const patchSession = (date, producer) => setState((prev) => {
+    const plan = resolveWorkout(date, prev);
+    const base = prev.workoutSessions[date] ? clone(prev.workoutSessions[date]) : { ...initSession(plan), date };
+    producer(base);
+    return { ...prev, workoutSessions: { ...prev.workoutSessions, [date]: base } };
+  });
+  const mutateEntry = (date, id, fn) => patchSession(date, (sess) => { if (sess.entries[id]) fn(sess.entries[id]); });
+  const getSession = (date) => (state.workoutSessions[date] ? state.workoutSessions[date] : { ...initSession(resolveWorkout(date, state)), date });
+
+  const setMeal = (date, producer) => setState((prev) => {
+    const base = prev.mealLogs[date] ? clone(prev.mealLogs[date]) : { eaten: {}, extras: [], water: 0, flags: {} };
+    if (!base.flags) base.flags = {};
+    producer(base);
+    return { ...prev, mealLogs: { ...prev.mealLogs, [date]: base } };
+  });
+
+  const setWatch = (date, key, val) => setState((prev) => ({ ...prev, watchLogs: { ...prev.watchLogs, [date]: { ...(prev.watchLogs[date] || {}), [key]: val } } }));
+  const toggleHabit = (date, key, val) => setState((prev) => ({ ...prev, habitLogs: { ...prev.habitLogs, [date]: { ...(prev.habitLogs[date] || {}), [key]: val } } }));
+  const toggleSupplement = (date, key) => setState((prev) => { const cur = (prev.supplementLogs && prev.supplementLogs[date]) || {}; return { ...prev, supplementLogs: { ...(prev.supplementLogs || {}), [date]: { ...cur, [key]: !cur[key] } } }; });
+  const toggleActivity = (date, key) => setState((prev) => { const cur = (prev.activity[date] || {}); return { ...prev, activity: { ...prev.activity, [date]: { ...cur, [key]: !cur[key] } } }; });
+  const setSatMode = (date, mode) => setState((prev) => ({ ...prev, saturdayMode: { ...prev.saturdayMode, [date]: mode } }));
+
+  const addScan = (scan) => mutate((d) => { d.bodyScans.push({ ...scan, id: 'scan-' + Date.now() }); });
+  const updateScan = (id, scan) => mutate((d) => { d.bodyScans = d.bodyScans.map((x) => (x.id === id ? { ...x, ...scan, id } : x)); });
+  const deleteScan = (id) => mutate((d) => { d.bodyScans = d.bodyScans.filter((x) => x.id !== id); });
+
+  const setProfile = (k, v) => mutate((d) => { d.profile[k] = v; });
+  const setSetting = (k, v) => mutate((d) => { d.settings[k] = v; });
+  const setRestart = (name, field, val) => mutate((d) => { if (!d.restartWeights) d.restartWeights = {}; const cur = d.restartWeights[name] || { old: '', pct: '' }; d.restartWeights[name] = { ...cur, [field]: val }; });
+  // change the program calendar without touching any logs, scans, PRs or history
+  const restartCalendar = (dateStr) => mutate((d) => { d.settings.programStartDate = dateStr; d.settings.restartPhaseStartDate = dateStr; });
+  const autoScanDate = () => mutate((d) => { const c = programCalendar(d); d.settings.nextBodyScanDate = c.autoNextScanDate; });
+  const recalcNow = () => mutate((d) => { d.settings.lastRecalc = Date.now(); }); // forces a fresh derive + re-render
+  const replaceState = (obj) => setState(() => { const base = defaultState(); const merged = { ...base }; Object.keys(obj).forEach((k) => { merged[k] = obj[k]; }); if (!merged.bodyScans || !merged.bodyScans.length) merged.bodyScans = base.bodyScans; return merged; });
+  const resetAll = () => setState(defaultState());
+
+  const ctx = {
+    state, setState, mutate, patchSession, mutateEntry, getSession,
+    setMeal, setWatch, toggleHabit, toggleSupplement, toggleActivity, setSatMode,
+    addScan, updateScan, deleteScan, setProfile, setSetting, setRestart, restartCalendar, autoScanDate, recalcNow, replaceState, resetAll,
+    selDate, setSelDate, goto: setTab,
+  };
+
+  const tabTitle = { home: 'Dashboard', plan: 'Planner', train: 'Train', fuel: 'Fuel', body: 'Body', habits: 'Habits', stats: 'Stats', more: 'More' }[tab];
+
+  return (
+    <div className="app">
+      <Sidebar tab={tab} setTab={setTab} phase={phase} />
+      <div className="app-body">
+        <header className="app-header">
+          <div className="brand">
+            <div className="brand-mark mobile-only">R</div>
+            <div className="hd-title">
+              <h1>{tabTitle}</h1>
+              <span>{phase.name} · Week {phase.programWeek} · Day {phase.programDay}</span>
+            </div>
+          </div>
+          <div className="score-chip">
+            <span className="day-badge" title="Program day (from your start date)">D{phase.programDay}</span>
+            <MetricRing pct={score} value={score} color={score >= 70 ? 'var(--green)' : score >= 45 ? 'var(--cyan)' : 'var(--amber)'} size={40} stroke={5} />
+          </div>
+        </header>
+
+        <main className="app-main">
+          {tab === 'home' && <HomeTab ctx={ctx} />}
+          {tab === 'plan' && <PlanTab ctx={ctx} />}
+          {tab === 'train' && <TrainTab ctx={ctx} />}
+          {tab === 'fuel' && <FuelTab ctx={ctx} />}
+          {tab === 'body' && <BodyTab ctx={ctx} />}
+          {tab === 'habits' && <HabitsTab ctx={ctx} />}
+          {tab === 'stats' && <StatsTab ctx={ctx} />}
+          {tab === 'more' && <MoreTab ctx={ctx} />}
+        </main>
+      </div>
+      <BottomNav tab={tab} setTab={setTab} />
+    </div>
+  );
+}
