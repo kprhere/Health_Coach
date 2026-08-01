@@ -29,6 +29,7 @@ export const SETTINGS_DEFAULT = {
   waterTargetL: 3.75,
   stepsTarget: 10000,
   sleepTargetH: 7.5,
+  deficitPercent: 20,                  // fat-loss deficit vs maintenance (drives all calorie + food targets)
   // ---- program calendar (all editable in More, week/day recalculate from these) ----
   programStartDate: '2026-07-14',      // program day 1
   restartPhaseStartDate: '2026-07-14', // restart phase day 1
@@ -42,6 +43,9 @@ export const SETTINGS_DEFAULT = {
   labWarningOn: true,                  // show biotin lab-interference warnings
   upcomingLabDate: '',                 // YYYY-MM-DD, blank = none scheduled
   pauseBiotinBeforeLabs: true,         // remind to pause biotin before blood work
+  // ---- encrypted cross-device sync (passphrase is stored separately, never here) ----
+  syncUrl: '',                         // your Cloudflare Worker URL, e.g. https://acp-sync.<you>.workers.dev
+  syncAuto: false,                     // pull on open + push on change
 };
 
 // shown on Home + README
@@ -525,10 +529,43 @@ export const WATCH_FIELDS = [
   { key: 'standHours', label: 'Stand Hours', unit: 'hr' },
   { key: 'restingHR', label: 'Resting HR', unit: 'bpm' },
   { key: 'sleepH', label: 'Sleep', unit: 'hr' },
+  { key: 'sleepScore', label: 'Sleep Score', unit: '/100' },
+  { key: 'hrv', label: 'HRV', unit: 'ms' },
   { key: 'vo2max', label: 'VO2 Max', unit: '' },
+  { key: 'walkingHR', label: 'Walking HR', unit: 'bpm' },
+  { key: 'spo2', label: 'Blood Oxygen', unit: '%' },
+  { key: 'respiratoryRate', label: 'Respiratory Rate', unit: 'br/min' },
+  { key: 'distance', label: 'Walk+Run Distance', unit: 'km' },
+  { key: 'flights', label: 'Flights Climbed', unit: '' },
+  { key: 'basalCal', label: 'Resting Energy', unit: 'kcal' },
   { key: 'workoutCal', label: 'Workout Calories', unit: 'kcal' },
+  { key: 'workoutMin', label: 'Workout Minutes', unit: 'min' },
   { key: 'avgHR', label: 'Average HR', unit: 'bpm' },
-];
+].filter((f) => f.label);
+
+// Apple Health Shortcut deep-link: query param -> watch field key.
+// A Shortcut reads these HealthKit values and opens the app with e.g.
+//   ?steps=9412&sleep=7.3&rhr=58&hrv=64&sleepScore=88&vo2max=44&active=540&spo2=98
+export const HEALTH_PARAM_MAP = {
+  steps: 'steps',
+  active: 'activeCal', activeCal: 'activeCal',
+  basal: 'basalCal', basalCal: 'basalCal',
+  exercise: 'exerciseMin', exerciseMin: 'exerciseMin',
+  stand: 'standHours', standHours: 'standHours',
+  rhr: 'restingHR', restingHR: 'restingHR',
+  walkingHR: 'walkingHR', walkHR: 'walkingHR',
+  sleep: 'sleepH', sleepH: 'sleepH',
+  sleepScore: 'sleepScore',
+  hrv: 'hrv',
+  vo2max: 'vo2max', vo2: 'vo2max',
+  spo2: 'spo2', oxygen: 'spo2', bloodOxygen: 'spo2',
+  respiratoryRate: 'respiratoryRate', respRate: 'respiratoryRate', resp: 'respiratoryRate',
+  distance: 'distance', distanceKm: 'distance',
+  flights: 'flights', flightsClimbed: 'flights',
+  workoutCal: 'workoutCal',
+  workoutMin: 'workoutMin', workout: 'workoutMin',
+  avgHR: 'avgHR',
+};
 
 export const DAY_NAMES = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
 export const DAY_SHORT = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];

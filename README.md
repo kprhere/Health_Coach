@@ -35,7 +35,11 @@ Workouts are built from first-class blocks, not flat lists: single, dropset, sup
 
 ## Data
 
-Seeded from three real Evolt 360 scans. Add, edit, delete and compare scans in Body. Apple Watch numbers are entered manually (browsers cannot read Apple Health; automatic sync would need a native iOS app with HealthKit). A CSV import stub is in place for later column mapping.
+Seeded from three real Evolt 360 scans. Add, edit, delete and compare scans in Body. Apple Watch numbers can be entered manually or imported through the privacy-safe Apple Shortcut link under More → Apple Health sync. The Shortcut sends one numeric value per metric in a URL fragment, which the app consumes once and removes. A CSV import stub is in place for later column mapping.
+
+## Apple Health Shortcut
+
+The in-app guide uses today’s summed steps, total asleep duration from the previous 18 hours, the latest resting heart rate from the previous 24 hours and average HRV from the previous 18 hours. Sleep Score is optional because Shortcuts availability varies. Run the automation after waking, when overnight Health data is complete. Recovery uses sleep, resting heart rate and logged pain; HRV and Sleep Score remain tracking fields until a personal baseline is available.
 
 ## Dependencies, warnings and security
 
@@ -59,5 +63,6 @@ src/
   App.jsx           app wrapper
   main.jsx          entry
   styles.css        dark theme + responsive layout (mobile bottom nav, desktop sidebar)
+tests/              Apple Health, scoring, weekly-plan and encrypted-sync regression tests
 index.html, vite.config.js, vercel.json, public/manifest.json
 ```

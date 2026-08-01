@@ -24,13 +24,25 @@ import {
   allSetRecords, getBestPerformance, exportJSON, workoutCSV, download, validateImport,
   defaultState, loadState, saveState,
   supplementAdherence, hairHealthChecks, daysToLab,
+  nutritionProfile, volumeTrend, muscleBalance, fmtVol, parseHealthParams, muscleWeekTrend,
+  recompSignal, consistencyStreak, energyBalance, proteinPerLbLean, trainingLoadSummary,
 } from './helpers.js';
 import {
   Sidebar, BottomNav, Card, Chip, SectionTitle, MetricRing, ScoreRing, ProgressBar,
   StatCell, CoachInsights, Sheet, Banner, EmptyState, LineTrend, BarMini,
   MacroChips, FuelPlan, SupplementTiming, HairHealthCard, LabsCard,
+  TargetsFromScan, MealCard, HeroGauge, RecompSignalCard,
 } from './components.jsx';
 import { BlockLogger, AddExercisePicker, makeUnplannedEntry } from './loggers.jsx';
+import { generateDemoData } from './demo.js';
+import { deriveSync, pullRemote, pushRemote } from './sync.js';
+
+// the sync passphrase lives on-device only, in its own key, so it never
+// ends up inside an exported JSON backup.
+const SYNC_SECRET_KEY = 'recomp-sync-secret';
+const SYNC_UPDATED_KEY = 'recomp-sync-updated';
+const getSyncSecret = () => { try { return localStorage.getItem(SYNC_SECRET_KEY) || ''; } catch { return ''; } };
+const setSyncSecret = (v) => { try { if (v) localStorage.setItem(SYNC_SECRET_KEY, v); else localStorage.removeItem(SYNC_SECRET_KEY); } catch { /* ignore */ } };
 
 // ---------- small shared pieces ----------
 function DateNav({ date, setDate }) {
@@ -109,6 +121,18 @@ function HomeTab({ ctx }) {
   const steps = parseFloat(w.steps) || 0;
   const sleep = parseFloat(w.sleepH) || 0;
 
+  // new premium "meaningful numbers" (all derived from existing data)
+  const recomp = recompSignal(s);
+  const eb = energyBalance(date, s);
+  const ppl = proteinPerLbLean(s);
+  const rec = recoveryScore(date, s);
+  const streak = consistencyStreak(s);
+  const tl = trainingLoadSummary(s);
+  const firstName = s.profile.name.split(' ')[0];
+  const hr = new Date().getHours();
+  const greetWord = hr < 12 ? 'Morning' : hr < 18 ? 'Afternoon' : 'Evening';
+  const heroSummary = `${plan.blocks.length ? `${plan.focus} session — ${prog.total || plan.blocks.length} blocks.` : `${plan.title} today.`} Fuel ${nut.targets.kcal} kcal · ${nut.targets.protein}g protein.`;
+
   const goalRings = [
     { label: 'Protein', value: Math.round(a.protein), sub: `/${nut.targets.protein}`, pct: (a.protein / nut.targets.protein) * 100, color: 'var(--cyan)' },
     { label: 'Water L', value: a.water, sub: `/${nut.targets.waterL}`, pct: (a.water / nut.targets.waterL) * 100, color: 'var(--violet)' },
@@ -118,30 +142,17 @@ function HomeTab({ ctx }) {
 
   return (
     <div>
-      <div className="console">
-        <div className="greet">
-          <h2>Hi {s.profile.name.split(' ')[0]}</h2>
-          <span className="date">{prettyDate(date)}</span>
-        </div>
-        <div className="phase-row">
-          <Chip tone="cyan">{phase.name}</Chip>
-          <Chip>Week {phase.week}</Chip>
-          <Chip>{plan.title} · {plan.focus}</Chip>
-        </div>
-        <p className="summary">{insights[0].text}</p>
-      </div>
+      <HeroGauge
+        greeting={`${greetWord}, ${firstName}`}
+        score={score.score}
+        chips={[{ label: `${plan.title} · ${plan.focus}`, tone: 'cyan' }, { label: phase.name, tone: 'violet' }]}
+        summary={heroSummary}
+      />
+      <div className="hero-adherence">Habits {score.hp}% · Nutrition {score.na}% · Training {score.wa}% · Recovery {score.rec}%</div>
 
       <div className="split">
         <div className="split-main">
-          <Card>
-            <div className="score-hero">
-              <ScoreRing score={score.score} />
-              <div className="sh-meta">
-                <h4>Today adherence</h4>
-                <p>Habits {score.hp}% · Nutrition {score.na}% · Training {score.wa}% · Recovery {score.rec}%</p>
-              </div>
-            </div>
-          </Card>
+          <RecompSignalCard signal={recomp} />
 
           <SectionTitle>Today goals</SectionTitle>
           <Card>
@@ -150,6 +161,24 @@ function HomeTab({ ctx }) {
                 <MetricRing key={g.label} pct={g.pct} value={g.value} sub={g.sub} label={g.label} color={g.color} size={68} />
               ))}
             </div>
+          </Card>
+
+          <div className="mnum-grid">
+            <div className="mnum"><div className="mnum-k">Energy balance</div><div className="mnum-v amber">{eb.hasData ? `${eb.net > 0 ? '+' : ''}${eb.net}` : '—'} <small>kcal</small></div></div>
+            <div className="mnum"><div className="mnum-k">Protein / lean lb</div><div className="mnum-v cyan">{ppl ? ppl.value : '—'} <small>g/lb</small></div></div>
+            <div className="mnum"><div className="mnum-k">Recovery</div><div className="mnum-v green">{rec.pct} <small>%</small></div></div>
+            <div className="mnum"><div className="mnum-k">Streak</div><div className="mnum-v violet">{streak} <small>day{streak === 1 ? '' : 's'}</small></div></div>
+          </div>
+
+          <SectionTitle right={tl.trend.pct != null ? <Chip tone={tl.trend.up ? 'green' : 'amber'}>{tl.trend.up ? '+' : ''}{tl.trend.pct}% vol</Chip> : null}>Training load</SectionTitle>
+          <Card className="pad-sm">
+            <div className="train-load">
+              <div className="tl-cell"><div className="tl-k">This week volume</div><div className="tl-v">{fmtVol(tl.trend.current)}</div><div className="tl-sub">last full {fmtVol(tl.trend.lastFull)}</div></div>
+              <div className="tl-cell"><div className="tl-k">Hard sets</div><div className="tl-v">{tl.hardSets}</div><div className="tl-sub">logged this week</div></div>
+              <div className="tl-cell"><div className="tl-k">Top e1RM</div><div className="tl-v">{tl.top ? tl.top.e1rm : '-'}<small> lb</small></div><div className="tl-sub">{tl.top ? tl.top.name : 'log a lift'}</div></div>
+              <div className="tl-cell"><div className="tl-k">Muscle focus</div><div className="tl-v" style={{ fontSize: 14 }}>{tl.lagging ? tl.lagging.muscle : 'Balanced'}</div><div className="tl-sub">{tl.lagging ? 'add sets' : 'all covered'}</div></div>
+            </div>
+            <div className="btn-row" style={{ marginTop: 10 }}><button className="btn ghost sm" onClick={() => ctx.goto('stats')}>Open Stats</button></div>
           </Card>
 
           <SectionTitle>Today plan</SectionTitle>
@@ -191,7 +220,9 @@ function HomeTab({ ctx }) {
           </div>
 
           {(() => {
+            const prof = nut.profile;
             const tips = [];
+            if (prof) tips.push({ tone: 'cyan', text: `Today: ${nut.targets.kcal} kcal · ${nut.targets.protein}g protein · ${nut.targets.carbs}g carbs. A ${prof.deficitPct}% cut from your ${prof.tdee} maintenance, with protein set from your ${prof.leanMass} lb lean mass to hold muscle and hair.` });
             if (flags.badmintonAvailable) tips.push({ tone: 'amber', text: act.badminton ? 'Badminton played: add electrolytes and 30-50g carbs, water +0.5 L, protein unchanged.' : 'Badminton optional today: if played, keep pre-court food light and refuel with whey plus a banana after.' });
             if (flags.swimDay) tips.push({ tone: 'cyan', text: flags.fastDay ? 'Fast plus swim: zero calories until 6 PM, break gently, high-protein veg dinner after the pool.' : 'Swim tonight: keep the pre-swim snack light and prioritise protein after class.' });
             if (flags.fastDay && !flags.swimDay) tips.push({ tone: 'amber', text: 'Fast until 6 PM: water, black coffee, green tea only. Emergency: one fruit or one glass of milk.' });
@@ -200,9 +231,12 @@ function HomeTab({ ctx }) {
             if (a.water < nut.targets.waterL * 0.6) tips.push({ tone: 'violet', text: 'Water is behind. Drink 500 ml now and keep a bottle in sight.' });
             const dtl = daysToLab(s);
             if (s.settings.labWarningOn && dtl != null && dtl >= 0 && dtl <= 7) tips.push({ tone: 'amber', text: `Blood work in ${dtl} day${dtl === 1 ? '' : 's'}. High-dose biotin can skew results, pause it and tell the lab.` });
-            tips.push({ tone: 'green', text: 'LDL and HbA1c focus: keep paneer measured, avoid fried food and sugary drinks, pair carbs with protein.' });
-            tips.push({ tone: 'cyan', text: 'Vitamin D is 50 ng/mL, already optimal. D3 + K2 is maintenance, not aggressive dosing.' });
-            tips.push({ tone: 'violet', text: 'Hair protection: hold protein steady and avoid crash dieting through the fat-loss phase.' });
+            // evergreen guidance only fills the leftover slots, so live/actionable tips win the top
+            const evergreen = [
+              { tone: 'green', text: 'LDL 123 and HbA1c 5.6 are the watch items: keep paneer measured, skip fried food and sugary drinks, pair carbs with protein.' },
+              { tone: 'violet', text: 'Protect hair: hold protein steady and avoid crash dieting through the fat-loss phase.' },
+            ];
+            for (const e of evergreen) { if (tips.length >= 5) break; tips.push(e); }
             return (
               <>
                 <SectionTitle>Food coach</SectionTitle>
@@ -225,10 +259,15 @@ function HomeTab({ ctx }) {
           <SectionTitle>Coach insights</SectionTitle>
           <Card><CoachInsights items={insights} /></Card>
 
-          <SectionTitle>Monthly target</SectionTitle>
+          <SectionTitle>Goal & pace</SectionTitle>
           <Card>
             <div className="pbar-row"><span className="lab">Fat lost toward goal</span><span className="val num">{target.lost} / {target.goal} lb</span></div>
             <ProgressBar pct={target.pct} color="var(--green)" />
+            {nut.profile ? (
+              <div className="hint" style={{ marginTop: 8 }}>
+                At your {nut.profile.deficitPct}% cut (~{nut.profile.lbPerWeek} lb/week){nut.profile.weeksToGoal ? `, you'd reach the ${target.goal} lb goal in about ${nut.profile.weeksToGoal} weeks` : ''}. Body fat {latestScan(s)?.bodyFatPct}% → goal {nut.profile.goalBodyFatPct}%.
+              </div>
+            ) : null}
             <div className="divider" />
             <div className="stat-grid">
               <StatCell k="Next scan in" v={scan ? Math.max(0, scan.days) : '-'} unit="days" />
@@ -348,14 +387,9 @@ function PlanTab({ ctx }) {
               </div>
             ); })()}
             <MacroChips kcal={nut.targets.kcal} p={nut.targets.protein} c={nut.targets.carbs} f={nut.targets.fat} fiber={nut.targets.fiber} waterL={nut.targets.waterL} />
-            <div style={{ height: 8 }} />
-            {nut.meals.map((m, i) => (
-              <div className="meal" key={i}>
-                <div className="meal-head"><span className="mh-title">{m.name}</span><span className="mh-time">{m.time}</span></div>
-                <ul className="meal-items">{m.items.map((it, j) => <li key={j}>{it}</li>)}</ul>
-                <MacroChips kcal={m.kcal} p={m.p} c={m.c} f={m.f} />
-              </div>
-            ))}
+            <div className="hint" style={{ margin: '6px 0 4px' }}>Targets derived from your {nut.profile?.scanDate || 'latest'} scan. First option shown — open Fuel to swap.</div>
+            <div style={{ height: 4 }} />
+            {nut.meals.map((m, i) => <MealCard key={i} meal={m} index={i} />)}
             <div className="btn-row" style={{ marginTop: 6 }}><button className="btn ghost sm" onClick={() => { ctx.setSelDate(date); ctx.goto('fuel'); }}>Log meals</button></div>
           </Card>
         </div>
@@ -378,6 +412,8 @@ function TrainTab({ ctx }) {
   const prog = workoutProgress(session);
   const insights = coachInsights(date, s, new Date());
   const rec = recoveryScore(date, s);
+  const balance = muscleBalance(s);
+  const balanceTip = balance.hints[0];
 
   const planIds = new Set(plan.blocks.map((b) => b.id));
   const extras = Object.keys(session.entries).filter((id) => !planIds.has(id));
@@ -417,6 +453,8 @@ function TrainTab({ ctx }) {
     <div>
       <div className="page-title">Train</div>
       <DateNav date={date} setDate={setDate} />
+
+      {balanceTip ? <Banner tone="amber" icon={AlertTriangle}>Balance check: {balanceTip.text}</Banner> : null}
 
       {flags.classDay ? (
         <Card className="pad-sm">
@@ -527,25 +565,25 @@ function FuelTab({ ctx }) {
 
       <div className="split wide-aside">
         <div className="split-main">
+          <TargetsFromScan profile={nut.profile} targets={t} dayLabel={(DAY_VARIANTS[nut.dayType] || DAY_VARIANTS.training).label} />
+
           {(() => { const dv = DAY_VARIANTS[nut.dayType] || DAY_VARIANTS.training; return (
-            <SectionTitle right={<Chip tone={dv.tone}>{dv.label}</Chip>}>Meal plan</SectionTitle>
+            <SectionTitle right={<Chip tone={dv.tone}>{dv.label}</Chip>}>Food options for your goal</SectionTitle>
           ); })()}
           {(() => { const dv = DAY_VARIANTS[nut.dayType] || DAY_VARIANTS.training; return (
-            <p className="dv-why standalone">{dv.why}</p>
+            <p className="dv-why standalone">{dv.why} Each meal has a few options — tap to swap. Chips show why each fits: high protein for fat loss, LDL-smart, low-GI for HbA1c.</p>
           ); })()}
-          {nut.meals.map((m, i) => {
-            const eaten = !!(log.eaten && log.eaten[i]);
-            return (
-              <div className={`meal ${eaten ? 'eaten' : ''}`} key={i}>
-                <div className="meal-head">
-                  <div><span className="mh-title">{m.name}</span> <span className="mh-time">{m.time}</span></div>
-                  <button className={`check ${eaten ? 'on' : ''}`} onClick={() => ctx.setMeal(date, (x) => { x.eaten[i] = !x.eaten[i]; })}><Check size={15} /></button>
-                </div>
-                <ul className="meal-items">{m.items.map((it, j) => <li key={j}>{it}</li>)}</ul>
-                <MacroChips kcal={m.kcal} p={m.p} c={m.c} f={m.f} />
-              </div>
-            );
-          })}
+          {nut.meals.map((m, i) => (
+            <MealCard
+              key={i}
+              meal={m}
+              index={i}
+              eaten={!!(log.eaten && log.eaten[i])}
+              choiceIndex={(log.choices && log.choices[i]) ?? 0}
+              onToggleEaten={() => ctx.setMeal(date, (x) => { x.eaten[i] = !x.eaten[i]; })}
+              onChoose={(ci) => ctx.setMeal(date, (x) => { if (!x.choices) x.choices = {}; x.choices[i] = ci; })}
+            />
+          ))}
 
           <SectionTitle>Quick add</SectionTitle>
           <Card>
@@ -803,7 +841,7 @@ function WatchPanel({ ctx }) {
   return (
     <Card>
       <DateNav date={date} setDate={setDate} />
-      <Banner tone="violet" icon={Watch}>Web browsers cannot read Apple Health directly. Enter watch numbers here for now. Automatic sync would need a native iOS app with HealthKit permissions.</Banner>
+      <Banner tone="cyan" icon={Watch}>Apple Health sync is on. Run your "Health to Recomp" Shortcut (set it up in More) to auto-fill steps, sleep, resting HR and HRV. You can still type or correct any value here.</Banner>
       <div className="field-row cols-3">
         {WATCH_FIELDS.map((f) => (
           <div className="field" key={f.key}>
@@ -919,11 +957,11 @@ function StatsTab({ ctx }) {
   const recs = allSetRecords(s);
   const hasData = recs.length > 0;
 
-  // simple plateau / deload flag
-  const nonZero = weekVol.filter((w) => w.value > 0);
-  const last2 = weekVol.slice(-2);
-  const maxVol = Math.max(...weekVol.map((w) => w.value), 1);
-  const deload = nonZero.length >= 3 && last2.every((w) => w.value > 0 && w.value < maxVol * 0.9);
+  // week-over-week improvement + lagging-muscle intelligence
+  const trend = volumeTrend(s);
+  const balance = muscleBalance(s);
+  // real deload signal: the last COMPLETED week actually dropped vs the one before
+  const deload = trend.pct != null && trend.pct <= -12;
 
   return (
     <div>
@@ -938,15 +976,65 @@ function StatsTab({ ctx }) {
         </div>
       </Card>
 
-      {deload ? <Banner tone="amber" icon={AlertTriangle}>Weekly training volume has slipped two weeks running. Consider an easy deload week: same exercises, drop sets and load ~40%.</Banner> : null}
+      {deload ? <Banner tone="amber" icon={AlertTriangle}>Last week's volume dropped {Math.abs(trend.pct)}% vs the week before. If that's unplanned, tighten consistency; if you're tired, take a real deload: same lifts, drop sets and load ~40%.</Banner> : null}
 
       <div className="grid-2">
         <div>
-          <SectionTitle>Training volume by week</SectionTitle>
-          <Card>{hasData ? <BarMini data={weekVol} color="#34d0de" /> : <EmptyState icon={TrendingUp} title="No sets logged yet" sub="Log a Train session and volume shows up here." />}</Card>
+          <SectionTitle right={trend.pct != null ? <Chip tone={trend.up ? 'green' : 'amber'}>{trend.up ? '+' : ''}{trend.pct}% vs last wk</Chip> : null}>Training volume by week</SectionTitle>
+          <Card>
+            {hasData ? <BarMini data={weekVol} color="#34d0de" /> : <EmptyState icon={TrendingUp} title="No sets logged yet" sub="Log a Train session and volume shows up here." />}
+            {hasData && trend.hasData ? (
+              <div className="stat-grid cols-3" style={{ marginTop: 10 }}>
+                <StatCell k="Last full week" v={fmtVol(trend.lastFull)} delta={trend.pct != null ? `${trend.up ? '+' : ''}${trend.pct}% vs prior` : null} deltaDir={trend.up ? 'up' : 'down'} />
+                <StatCell k="This week so far" v={fmtVol(trend.current)} />
+                <StatCell k="Best group" v={balance.ranked[0]?.muscle || '-'} />
+              </div>
+            ) : null}
+          </Card>
+
+          {balance.enough ? (
+            <>
+              <SectionTitle right={<Chip tone={balance.hints.length ? 'amber' : 'green'}>{balance.hints.length ? `${balance.hints.length} to fix` : 'balanced'}</Chip>}>Muscle balance</SectionTitle>
+              <Card className="pad-sm">
+                {balance.hints.length ? (
+                  <div className="food-coach">
+                    {balance.hints.map((h, i) => (
+                      <div className={`fc-line ${h.tone === 'warn' ? 'amber' : 'cyan'}`} key={i}><span className="fc-dot" />{h.text}</div>
+                    ))}
+                  </div>
+                ) : (
+                  <p style={{ margin: 0, fontSize: 13, lineHeight: 1.5, color: 'var(--muted)' }}>Every muscle group is getting worked in proportion over the last 3 weeks. Keep progressing load and reps.</p>
+                )}
+              </Card>
+            </>
+          ) : null}
 
           <SectionTitle>Volume by muscle group</SectionTitle>
           <Card>{muscleData.length ? <BarMini data={muscleData} color="#8b7bf0" /> : <EmptyState icon={Dumbbell} title="Nothing logged yet" />}</Card>
+
+          <SectionTitle>Muscle volume · week on week</SectionTitle>
+          <Card className="pad-sm">
+            {(() => {
+              const mwt = muscleWeekTrend(s).filter((x) => x.last > 0 || x.prev > 0);
+              if (!mwt.length) return <EmptyState icon={TrendingUp} title="Not enough history" sub="Log a couple of weeks and each muscle's change shows here." />;
+              return (
+                <>
+                  {mwt.slice(0, 8).map((x) => (
+                    <div className="row" key={x.muscle}>
+                      <div className="row-main">
+                        <div className="row-title">{x.muscle}</div>
+                        <div className="row-sub">last wk {fmtVol(x.last)} · before {fmtVol(x.prev)}</div>
+                      </div>
+                      {x.pct != null
+                        ? <span className={`chip ${x.up ? 'green' : 'red'}`}>{x.up ? '▲ +' : '▼ '}{x.pct}%</span>
+                        : <span className="chip cyan">new</span>}
+                    </div>
+                  ))}
+                  <div className="hint" style={{ marginTop: 8 }}>Compares your last full week with the week before, per muscle. Green = more volume, red = less.</div>
+                </>
+              );
+            })()}
+          </Card>
         </div>
 
         <div>
@@ -1006,6 +1094,78 @@ function BodyMiniStats({ ctx }) {
 // =====================================================================
 // MORE
 // =====================================================================
+function HealthSyncCard() {
+  const [copied, setCopied] = useState(false);
+  const origin = typeof window !== 'undefined' ? window.location.origin : 'https://your-app';
+  const template = `${origin}/#health?date=[Date]&steps=[Steps]&sleep=[Sleep Hours]&rhr=[Resting HR]&hrv=[HRV]&sleepScore=[Sleep Score]`;
+  const copy = () => {
+    try { navigator.clipboard.writeText(template); } catch (e) { /* clipboard blocked */ }
+    setCopied(true);
+    setTimeout(() => setCopied(false), 2000);
+  };
+  return (
+    <Card>
+      <div className="block-tag"><span className="bar" />Auto-fill steps and sleep from your Watch</div>
+      <p style={{ margin: '0 0 10px', fontSize: 12.5, lineHeight: 1.55, color: 'var(--muted)' }}>
+        Safari cannot read Apple Health directly. A one-time Apple Shortcut reduces each Health result to one number, then opens this private fragment link. Values after <span className="num">#health</span> stay on your phone and are not sent to Vercel.
+      </p>
+      <div className="field">
+        <label>Sync link (used inside the Shortcut)</label>
+        <input className="input mono" readOnly value={template} onFocus={(e) => e.target.select()} style={{ fontSize: 11 }} />
+      </div>
+      <div className="btn-row">
+        <button className="btn sm" onClick={copy}><Save size={14} /> {copied ? 'Copied' : 'Copy sync link'}</button>
+      </div>
+      <div className="health-guide">
+        <div className="health-step"><b>1</b><span><strong>Date:</strong> Format Current Date as <span className="num">yyyy-MM-dd</span>.</span></div>
+        <div className="health-step"><b>2</b><span><strong>Steps:</strong> Find Step Count samples whose Start Date is today, then Calculate Statistics → Sum.</span></div>
+        <div className="health-step"><b>3</b><span><strong>Sleep:</strong> search the previous 18 hours—not “Start Date is Today.” Keep only Asleep/Core/Deep/REM periods, total their duration, and convert it to hours.</span></div>
+        <div className="health-step"><b>4</b><span><strong>Resting HR:</strong> use the latest numeric sample from the previous 24 hours. <strong>HRV:</strong> average numeric samples from the previous 18 hours.</span></div>
+        <div className="health-step"><b>5</b><span>Add Show Result while testing. Each variable must be one plain number such as <span className="num">9412</span>, <span className="num">7.3</span>, or <span className="num">58</span>—no list or unit text.</span></div>
+        <div className="health-step"><b>6</b><span>Put those variables into the copied Text link, delete <span className="num">&amp;sleepScore=[Sleep Score]</span> if Shortcuts does not offer Sleep Score, then Open URLs.</span></div>
+      </div>
+      <div className="hint health-note">
+        Automate with the Waking Up trigger or 15–30 minutes after your usual wake time, then choose Run Immediately. Recovery currently uses sleep, resting HR and logged pain. HRV and Sleep Score are stored for tracking but are not scored without a personal baseline.
+      </div>
+    </Card>
+  );
+}
+
+function SyncCard({ ctx }) {
+  const s = ctx.state;
+  const [pass, setPass] = useState(ctx.getSyncSecret());
+  const [show, setShow] = useState(false);
+  const savePass = (v) => { setPass(v); ctx.setSyncSecret(v); };
+  const st = ctx.syncStatus;
+  return (
+    <Card>
+      <div className="block-tag"><span className="bar" />Encrypted sync across your devices</div>
+      <p style={{ margin: '0 0 10px', fontSize: 12.5, lineHeight: 1.55, color: 'var(--muted)' }}>
+        Set the same passphrase on each device. Your data is encrypted on this device before it leaves, so Cloudflare only ever stores an unreadable blob.
+      </p>
+      <div className="field">
+        <label>Sync URL (your Cloudflare Worker)</label>
+        <input className="input mono" style={{ fontSize: 12 }} placeholder="https://acp-sync.you.workers.dev" value={s.settings.syncUrl} onChange={(e) => ctx.setSetting('syncUrl', e.target.value.trim())} />
+      </div>
+      <div className="field">
+        <label>Passphrase (stays on this device)</label>
+        <input className="input mono" type={show ? 'text' : 'password'} placeholder="a long secret only you know" value={pass} onChange={(e) => savePass(e.target.value)} />
+        <button className="btn xs ghost" style={{ marginTop: 6 }} onClick={() => setShow((v) => !v)}>{show ? 'Hide' : 'Show'} passphrase</button>
+      </div>
+      <div className="row" onClick={() => ctx.setSetting('syncAuto', !s.settings.syncAuto)} style={{ cursor: 'pointer' }}>
+        <button className={`check ${s.settings.syncAuto ? 'on' : ''}`}><Check size={15} /></button>
+        <div className="row-main"><div className="row-title">Auto-sync</div><div className="row-sub">Pull on open, push a few seconds after any change</div></div>
+      </div>
+      <div className="btn-row" style={{ marginTop: 10 }}>
+        <button className="btn sm primary" disabled={ctx.syncBusy} onClick={ctx.doPush}><Upload size={14} /> Push to cloud</button>
+        <button className="btn sm" disabled={ctx.syncBusy} onClick={ctx.doPull}><Download size={14} /> Pull from cloud</button>
+      </div>
+      {st ? <Banner tone={st.type === 'err' ? 'red' : 'cyan'} icon={st.type === 'err' ? AlertTriangle : st.type === 'ok' ? Check : Info}>{st.msg}</Banner> : null}
+      <div className="hint" style={{ marginTop: 8 }}>If you lose the passphrase, the cloud copy can't be decrypted — there is no recovery. Keep exporting a JSON backup too.</div>
+    </Card>
+  );
+}
+
 function MoreTab({ ctx }) {
   const s = ctx.state;
   const [importErr, setImportErr] = useState('');
@@ -1059,8 +1219,19 @@ function MoreTab({ ctx }) {
 
           <SectionTitle>Nutrition and targets</SectionTitle>
           <Card>
+            {(() => { const p = nutritionProfile(s); return (
+              <>
+                <div className="block-tag"><span className="bar" />Auto-calculated from your latest scan</div>
+                <div className="stat-grid cols-3" style={{ marginBottom: 10 }}>
+                  <StatCell k="Maintenance" v={p.tdee} unit="kcal" />
+                  <StatCell k="Cut target" v={p.baseCals} unit="kcal" />
+                  <StatCell k="Protein" v={p.protein} unit="g" />
+                </div>
+                <div className="hint" style={{ marginBottom: 10 }}>Calories and macros are derived from your scan (lean mass {p.leanMass} lb, maintenance {p.tdee} kcal) and the deficit below. Lower the deficit to lose slower and protect hair; raise it to lose faster.</div>
+              </>
+            ); })()}
             <div className="field-row cols-3">
-              {num('Protein (g)', 'proteinTarget', s.settings, (k, v) => ctx.setSetting(k, parseFloat(v) || 0))}
+              {num('Deficit %', 'deficitPercent', s.settings, (k, v) => ctx.setSetting(k, parseFloat(v) || 0))}
               {num('Water (L)', 'waterTargetL', s.settings, (k, v) => ctx.setSetting(k, parseFloat(v) || 0))}
               {num('Steps', 'stepsTarget', s.settings, (k, v) => ctx.setSetting(k, parseFloat(v) || 0))}
             </div>
@@ -1112,16 +1283,21 @@ function MoreTab({ ctx }) {
             </div>
             {importErr ? <Banner tone="red" icon={AlertTriangle}>{importErr}</Banner> : null}
             <div className="divider" />
+            <button className="btn primary block" onClick={() => { if (confirm('Load 8 weeks of sample workouts, meals and watch data so the Stats and charts fill in? This overwrites current logs. Reset all data restores the seed scans.')) ctx.loadDemo(); }}>
+              <Zap size={15} /> Load sample data
+            </button>
+            <div className="hint" style={{ margin: '8px 0 12px' }}>Fills Stats, training-volume charts and scores with a realistic upward trend so you can see the app populated. Undo with Reset all data.</div>
             <button className="btn danger block" onClick={() => { if (confirm('Reset all data? This clears every log and restores the three seed scans. Export a backup first if unsure.')) ctx.resetAll(); }}>
               <RotateCcw size={15} /> Reset all data
             </button>
             <div className="hint" style={{ marginTop: 8 }}>Weekly backup reminder: export a JSON on Sundays so your history is safe if Safari clears site storage.</div>
           </Card>
 
-          <SectionTitle>Apple Watch</SectionTitle>
-          <Card>
-            <Banner tone="violet" icon={Watch}>Automatic Apple Watch sync needs a native iOS app using HealthKit permissions. Web browsers cannot read Apple Health directly. This dashboard uses manual watch entry in the Body tab until a native app exists.</Banner>
-          </Card>
+          <SectionTitle>Cloud sync (cross-device)</SectionTitle>
+          <SyncCard ctx={ctx} />
+
+          <SectionTitle>Apple Health sync</SectionTitle>
+          <HealthSyncCard />
 
           <SectionTitle>Program dates</SectionTitle>
           <Card className="program-dates">
@@ -1195,9 +1371,23 @@ export default function BodyRecompOS() {
   const [state, setState] = useState(loadState);
   const [tab, setTab] = useState('home');
   const [selDate, setSelDate] = useState(todayKey());
+  const [synced, setSynced] = useState(null);
 
   useEffect(() => { saveState(state); }, [state]);
   useEffect(() => { window.scrollTo(0, 0); }, [tab]);
+
+  // Apple Health sync: a Shortcut opens #health?steps=..&sleep=.. etc.
+  // Read them once, save to that day's watch log, then clean the URL.
+  useEffect(() => {
+    const healthInput = window.location.hash.startsWith('#health?') ? window.location.hash : window.location.search;
+    const res = parseHealthParams(healthInput);
+    if (!res) return;
+    setState((prev) => ({ ...prev, watchLogs: { ...prev.watchLogs, [res.date]: { ...(prev.watchLogs[res.date] || {}), ...res.patch } } }));
+    setSynced(res.count);
+    window.history.replaceState({}, '', window.location.pathname);
+    const t = setTimeout(() => setSynced(null), 4500);
+    return () => clearTimeout(t);
+  }, []);
 
   const phase = phaseInfo(state);
   const today = todayKey();
@@ -1216,8 +1406,9 @@ export default function BodyRecompOS() {
   const getSession = (date) => (state.workoutSessions[date] ? state.workoutSessions[date] : { ...initSession(resolveWorkout(date, state)), date });
 
   const setMeal = (date, producer) => setState((prev) => {
-    const base = prev.mealLogs[date] ? clone(prev.mealLogs[date]) : { eaten: {}, extras: [], water: 0, flags: {} };
+    const base = prev.mealLogs[date] ? clone(prev.mealLogs[date]) : { eaten: {}, extras: [], water: 0, flags: {}, choices: {} };
     if (!base.flags) base.flags = {};
+    if (!base.choices) base.choices = {};
     producer(base);
     return { ...prev, mealLogs: { ...prev.mealLogs, [date]: base } };
   });
@@ -1241,11 +1432,98 @@ export default function BodyRecompOS() {
   const recalcNow = () => mutate((d) => { d.settings.lastRecalc = Date.now(); }); // forces a fresh derive + re-render
   const replaceState = (obj) => setState(() => { const base = defaultState(); const merged = { ...base }; Object.keys(obj).forEach((k) => { merged[k] = obj[k]; }); if (!merged.bodyScans || !merged.bodyScans.length) merged.bodyScans = base.bodyScans; return merged; });
   const resetAll = () => setState(defaultState());
+  // Sample data fills only EMPTY days — any real log you already have
+  // (today's workout, meals, watch numbers) is kept untouched.
+  // ---------- encrypted cross-device sync ----------
+  const [syncStatus, setSyncStatus] = useState(null);
+  const [syncBusy, setSyncBusy] = useState(false);
+
+  const doPull = async () => {
+    const pass = getSyncSecret();
+    const url = state.settings.syncUrl;
+    if (!pass || !url) { setSyncStatus({ type: 'err', msg: 'Add your sync URL and passphrase first.' }); return; }
+    setSyncBusy(true); setSyncStatus({ type: 'info', msg: 'Pulling from cloud…' });
+    try {
+      const { syncId, key } = await deriveSync(pass);
+      const remote = await pullRemote(url, syncId, key);
+      if (!remote) { setSyncStatus({ type: 'info', msg: 'No cloud data yet. Push from your main device first.' }); return; }
+      setState(() => remote.state);
+      localStorage.setItem(SYNC_UPDATED_KEY, String(remote.updatedAt));
+      setSyncStatus({ type: 'ok', msg: 'Pulled the latest data from cloud.' });
+    } catch (e) {
+      setSyncStatus({ type: 'err', msg: `Pull failed (wrong passphrase or URL?): ${e.message}` });
+    } finally { setSyncBusy(false); }
+  };
+
+  const doPush = async () => {
+    const pass = getSyncSecret();
+    const url = state.settings.syncUrl;
+    if (!pass || !url) { setSyncStatus({ type: 'err', msg: 'Add your sync URL and passphrase first.' }); return; }
+    setSyncBusy(true); setSyncStatus({ type: 'info', msg: 'Pushing to cloud…' });
+    try {
+      const { syncId, key } = await deriveSync(pass);
+      const at = await pushRemote(url, syncId, key, state);
+      localStorage.setItem(SYNC_UPDATED_KEY, String(at));
+      setSyncStatus({ type: 'ok', msg: 'Backed up to cloud. Pull it on your other device.' });
+    } catch (e) {
+      setSyncStatus({ type: 'err', msg: `Push failed: ${e.message}` });
+    } finally { setSyncBusy(false); }
+  };
+
+  // auto-sync: pull once on open if the remote copy is newer
+  useEffect(() => {
+    if (!state.settings.syncAuto) return;
+    const pass = getSyncSecret();
+    const url = state.settings.syncUrl;
+    if (!pass || !url) return;
+    (async () => {
+      try {
+        const { syncId, key } = await deriveSync(pass);
+        const remote = await pullRemote(url, syncId, key);
+        const localAt = parseInt(localStorage.getItem(SYNC_UPDATED_KEY) || '0', 10);
+        if (remote && remote.updatedAt > localAt) {
+          setState(() => remote.state);
+          localStorage.setItem(SYNC_UPDATED_KEY, String(remote.updatedAt));
+        }
+      } catch { /* silent on open */ }
+    })();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // auto-sync: debounced push a couple seconds after any change
+  useEffect(() => {
+    if (!state.settings.syncAuto) return;
+    const pass = getSyncSecret();
+    const url = state.settings.syncUrl;
+    if (!pass || !url) return;
+    const t = setTimeout(async () => {
+      try {
+        const { syncId, key } = await deriveSync(pass);
+        const at = await pushRemote(url, syncId, key, state);
+        localStorage.setItem(SYNC_UPDATED_KEY, String(at));
+      } catch { /* silent; manual buttons surface errors */ }
+    }, 2500);
+    return () => clearTimeout(t);
+  }, [state]);
+
+  const loadDemo = () => setState((prev) => {
+    const gen = generateDemoData(prev);
+    const keep = (existing = {}, demo = {}) => ({ ...demo, ...existing }); // existing (real) wins
+    return {
+      ...prev,
+      workoutSessions: keep(prev.workoutSessions, gen.workoutSessions),
+      mealLogs: keep(prev.mealLogs, gen.mealLogs),
+      habitLogs: keep(prev.habitLogs, gen.habitLogs),
+      watchLogs: keep(prev.watchLogs, gen.watchLogs),
+      supplementLogs: keep(prev.supplementLogs, gen.supplementLogs),
+    };
+  });
 
   const ctx = {
     state, setState, mutate, patchSession, mutateEntry, getSession,
     setMeal, setWatch, toggleHabit, toggleSupplement, toggleActivity, setSatMode,
-    addScan, updateScan, deleteScan, setProfile, setSetting, setRestart, restartCalendar, autoScanDate, recalcNow, replaceState, resetAll,
+    addScan, updateScan, deleteScan, setProfile, setSetting, setRestart, restartCalendar, autoScanDate, recalcNow, replaceState, resetAll, loadDemo,
+    doPull, doPush, syncStatus, syncBusy, getSyncSecret, setSyncSecret,
     selDate, setSelDate, goto: setTab,
   };
 
@@ -1253,6 +1531,11 @@ export default function BodyRecompOS() {
 
   return (
     <div className="app">
+      {synced ? (
+        <div className="sync-toast" role="status">
+          <Watch size={15} /> Synced {synced} Apple Health value{synced === 1 ? '' : 's'} for today
+        </div>
+      ) : null}
       <Sidebar tab={tab} setTab={setTab} phase={phase} />
       <div className="app-body">
         <header className="app-header">
