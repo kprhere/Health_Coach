@@ -15,7 +15,7 @@ import {
   LABS, HAIR_HEALTH,
 } from './data.js';
 import {
-  todayKey, addDays, prettyDate, shortDate, dowOf, clone,
+  todayKey, addDays, prettyDate, shortDate, dowOf, clone, fastEndTime,
   dayFlags, resolveWorkout, resolveNutrition, initSession,
   blockDone, workoutProgress, nutritionActuals, nutritionAdherence,
   watchFor, recoveryScore, habitStatus, habitPct, dailyScore, coachInsights,
@@ -61,7 +61,7 @@ function DateNav({ date, setDate }) {
 }
 
 function ActivityToggles({ date, ctx }) {
-  const flags = dayFlags(date);
+  const flags = dayFlags(date, ctx.state);
   const act = ctx.state.activity[date] || {};
   if (!flags.badmintonAvailable && !flags.swimDay) return null;
   return (
@@ -77,6 +77,23 @@ function ActivityToggles({ date, ctx }) {
         </button>
       ) : null}
     </div>
+  );
+}
+
+function DayNutritionMode({ date, ctx }) {
+  const mode = (ctx.state.dayOverrides && ctx.state.dayOverrides[date]) || '';
+  const scheduled = DAY_VARIANTS[PROGRAM.days[dowOf(date)].dayType] || DAY_VARIANTS.training;
+  return (
+    <Card className="pad-sm">
+      <div className="block-tag"><span className="bar" />Food plan for {shortDate(date)}</div>
+      <div className="pill-toggle">
+        <button className={mode === '' ? 'active' : ''} onClick={() => ctx.setDayOverride(date, '')}>Scheduled</button>
+        <button className={mode === 'veg' ? 'active' : ''} onClick={() => ctx.setDayOverride(date, 'veg')}>Vegetarian</button>
+        <button className={mode === 'fast1' ? 'active' : ''} onClick={() => ctx.setDayOverride(date, 'fast1')}>Fast to 1 PM</button>
+        <button className={mode === 'fast2' || mode === 'fast' ? 'active' : ''} onClick={() => ctx.setDayOverride(date, 'fast2')}>Fast to 2 PM</button>
+      </div>
+      <div className="hint" style={{ marginTop: 8 }}>Scheduled is {scheduled.label}. An override changes meals, targets and nutrition totals for this date only. The workout and existing logs stay in place.</div>
+    </Card>
   );
 }
 
@@ -106,7 +123,8 @@ function HomeTab({ ctx }) {
   const s = ctx.state;
   const plan = resolveWorkout(date, s);
   const nut = resolveNutrition(date, s);
-  const flags = dayFlags(date);
+  const flags = dayFlags(date, s);
+  const fastEnd = fastEndTime(date, s);
   const act = s.activity[date] || {};
   const a = nutritionActuals(date, s);
   const w = watchFor(date, s);
@@ -205,7 +223,7 @@ function HomeTab({ ctx }) {
               <div className="stat-grid">
                 <StatCell k="Swim" v={flags.swimDay ? 'Yes (PM)' : 'No'} />
                 <StatCell k="Badminton" v={flags.badmintonAvailable ? (act.badminton ? 'Done' : 'Optional') : 'No'} />
-                <StatCell k="Fasting" v={flags.fastDay ? 'Until 6 PM' : 'No'} />
+                <StatCell k="Fasting" v={fastEnd ? `Until ${fastEnd.label}` : 'No'} />
                 <StatCell k="Vegetarian" v={flags.vegDay ? 'Yes' : 'No'} />
               </div>
             </Card>
@@ -224,8 +242,8 @@ function HomeTab({ ctx }) {
             const tips = [];
             if (prof) tips.push({ tone: 'cyan', text: `Today: ${nut.targets.kcal} kcal · ${nut.targets.protein}g protein · ${nut.targets.carbs}g carbs. A ${prof.deficitPct}% cut from your ${prof.tdee} maintenance, with protein set from your ${prof.leanMass} lb lean mass to hold muscle and hair.` });
             if (flags.badmintonAvailable) tips.push({ tone: 'amber', text: act.badminton ? 'Badminton played: add electrolytes and 30-50g carbs, water +0.5 L, protein unchanged.' : 'Badminton optional today: if played, keep pre-court food light and refuel with whey plus a banana after.' });
-            if (flags.swimDay) tips.push({ tone: 'cyan', text: flags.fastDay ? 'Fast plus swim: zero calories until 6 PM, break gently, high-protein veg dinner after the pool.' : 'Swim tonight: keep the pre-swim snack light and prioritise protein after class.' });
-            if (flags.fastDay && !flags.swimDay) tips.push({ tone: 'amber', text: 'Fast until 6 PM: water, black coffee, green tea only. Emergency: one fruit or one glass of milk.' });
+            if (flags.swimDay) tips.push({ tone: 'cyan', text: fastEnd ? `Fast until ${fastEnd.label}, break gently with vegetarian food, then keep the pre-swim meal light and protein-focused.` : 'Swim tonight: keep the pre-swim snack light and prioritise protein after class.' });
+            if (fastEnd && !flags.swimDay) tips.push({ tone: 'amber', text: `Fast until ${fastEnd.label}: water, black coffee and green tea only, followed by the vegetarian plan.` });
             if (flags.vegDay) tips.push({ tone: 'green', text: 'Vegetarian day: hit protein with whey, tofu, Greek yogurt, dal and measured paneer.' });
             if (a.protein < nut.targets.protein * 0.6) tips.push({ tone: 'cyan', text: `Protein at ${Math.round(a.protein)}g of ${nut.targets.protein}g. Add a whey shake or Greek yogurt.` });
             if (a.water < nut.targets.waterL * 0.6) tips.push({ tone: 'violet', text: 'Water is behind. Drink 500 ml now and keep a bottle in sight.' });
@@ -291,7 +309,7 @@ function PlanTab({ ctx }) {
   const week = Array.from({ length: 7 }, (_, i) => addDays(monday, i));
   const plan = resolveWorkout(date, s);
   const nut = resolveNutrition(date, s);
-  const flags = dayFlags(date);
+  const flags = dayFlags(date, s);
 
   return (
     <div>
@@ -307,7 +325,7 @@ function PlanTab({ ctx }) {
       <div className="week-grid">
         {week.map((k) => {
           const wp = resolveWorkout(k, s);
-          const f = dayFlags(k);
+          const f = dayFlags(k, s);
           const cls = `week-day ${k === todayKey() ? 'today' : ''} ${k === date ? 'selected' : ''}`;
           return (
             <button className={cls} key={k} onClick={() => setDate(k)}>
@@ -324,6 +342,8 @@ function PlanTab({ ctx }) {
           );
         })}
       </div>
+
+      <DayNutritionMode date={date} ctx={ctx} />
 
       <div className="split" style={{ marginTop: 8 }}>
         <div className="split-main">
@@ -408,7 +428,7 @@ function TrainTab({ ctx }) {
   const s = ctx.state;
   const plan = resolveWorkout(date, s);
   const session = ctx.getSession(date);
-  const flags = dayFlags(date);
+  const flags = dayFlags(date, s);
   const prog = workoutProgress(session);
   const insights = coachInsights(date, s, new Date());
   const rec = recoveryScore(date, s);
@@ -473,7 +493,7 @@ function TrainTab({ ctx }) {
           </div>
 
           {plan.blocks.length === 0 ? (
-            <Card><EmptyState icon={Waves} title="No lifting scheduled" sub={flags.fastDay ? 'Thursday recovery: fast until 6 PM, swim in the evening, mobility only.' : 'Recovery day. Use the mobility and conditioning below.'} /></Card>
+            <Card><EmptyState icon={Waves} title="No lifting scheduled" sub={fastEnd ? `Recovery day: fast until ${fastEnd.label}, then follow the vegetarian plan.` : 'Recovery day. Use the mobility and conditioning below.'} /></Card>
           ) : plan.blocks.map(renderBlock)}
 
           {extras.map((id) => renderBlock(blockFromEntry(id, session.entries[id])))}
@@ -523,8 +543,8 @@ function TrainTab({ ctx }) {
 
       {adding ? (
         <Sheet title="Add an exercise" onClose={() => setAdding(false)}>
-          <AddExercisePicker onPick={(name) => {
-            const { id, entry } = makeUnplannedEntry(name);
+          <AddExercisePicker state={s} onPick={(name) => {
+            const { id, entry } = makeUnplannedEntry(name, s);
             ctx.patchSession(date, (x) => { x.entries[id] = entry; });
             setAdding(false);
           }} />
@@ -541,7 +561,8 @@ function FuelTab({ ctx }) {
   const [date, setDate] = useState(ctx.selDate);
   const s = ctx.state;
   const nut = resolveNutrition(date, s);
-  const flags = dayFlags(date);
+  const flags = dayFlags(date, s);
+  const fastEnd = fastEndTime(date, s);
   const a = nutritionActuals(date, s);
   const log = a.log;
   const adher = nutritionAdherence(date, s);
@@ -558,9 +579,10 @@ function FuelTab({ ctx }) {
     <div>
       <div className="page-title">Fuel</div>
       <DateNav date={date} setDate={setDate} />
+      <DayNutritionMode date={date} ctx={ctx} />
 
-      {flags.fastDay ? <Banner tone="amber" icon={Timer}>Thursday fast until 6 PM. Water, black coffee, green tea only. Emergency: one fruit OR one glass of milk.</Banner> : null}
-      {flags.vegDay ? <Banner tone="green" icon={Leaf}>Vegetarian day. Chicken and fish are hidden from quick add. Lean on whey, paneer, tofu, dal and Greek yogurt.</Banner> : null}
+      {fastEnd ? <Banner tone="amber" icon={Timer}>{fastEnd.noMoon ? 'No-moon fast' : 'Scheduled fast'} until {fastEnd.label}. Water, black coffee and green tea only, then follow the vegetarian plan.</Banner> : null}
+      {flags.vegDay ? <Banner tone="green" icon={Leaf}>Vegetarian day. Chicken, fish, whole eggs and egg whites are unavailable. Lean on whey, paneer, tofu, dal and Greek yogurt.</Banner> : null}
       {nut.adjustments.map((adj, i) => <Banner key={i} tone="cyan" icon={Zap}>{adj}</Banner>)}
 
       <div className="split wide-aside">
@@ -589,7 +611,7 @@ function FuelTab({ ctx }) {
           <Card>
             <div className="quick-grid">
               {NUTRITION.quickAdds.map((q, i) => {
-                const dim = q.meat && flags.vegDay;
+                const dim = flags.vegDay && (q.meat || q.egg);
                 return (
                   <button key={i} className={dim ? 'dim' : ''} disabled={dim}
                     onClick={() => ctx.setMeal(date, (x) => {
@@ -1166,6 +1188,79 @@ function SyncCard({ ctx }) {
   );
 }
 
+const EMPTY_MACHINE = {
+  name: '', p: '', s: '', eq: 'Machine', use: '', sub: '', cue: '', err: '',
+  defaultSets: 3, repLow: 8, repHigh: 12, rpe: 8, restSec: 90, tempo: '2-1-1',
+};
+
+function CustomMachineCard({ ctx }) {
+  const custom = ctx.state.customExercises || {};
+  const [draft, setDraft] = useState(EMPTY_MACHINE);
+  const [editing, setEditing] = useState('');
+  const [error, setError] = useState('');
+  const set = (key, value) => setDraft((d) => ({ ...d, [key]: value }));
+  const reset = () => { setDraft(EMPTY_MACHINE); setEditing(''); setError(''); };
+  const save = () => {
+    const name = draft.name.trim();
+    if (!name || !draft.p.trim()) { setError('Add a machine/exercise name and primary muscle.'); return; }
+    if (EXERCISES[name]) { setError('That name is already in the built-in exercise library. Choose a distinct name.'); return; }
+    if (!editing && custom[name]) { setError('That custom name already exists. Tap Edit to update it.'); return; }
+    ctx.saveCustomExercise(editing, name, {
+      p: draft.p.trim(), s: draft.s.trim(), eq: draft.eq.trim() || 'Machine',
+      use: draft.use.trim(), sub: draft.sub.trim(), cue: draft.cue.trim(), err: draft.err.trim(),
+      defaultSets: Math.max(1, Math.min(10, parseInt(draft.defaultSets, 10) || 3)),
+      repLow: Math.max(1, parseInt(draft.repLow, 10) || 8),
+      repHigh: Math.max(1, parseInt(draft.repHigh, 10) || 12),
+      rpe: Math.max(1, Math.min(10, parseFloat(draft.rpe) || 8)),
+      restSec: Math.max(0, parseInt(draft.restSec, 10) || 90),
+      tempo: draft.tempo.trim() || '2-1-1', custom: true,
+    });
+    reset();
+  };
+  const edit = (name) => {
+    setDraft({ ...EMPTY_MACHINE, ...custom[name], name });
+    setEditing(name);
+    setError('');
+  };
+
+  return (
+    <Card>
+      <div className="block-tag"><span className="bar" />Your cloud-synced machine library</div>
+      <div className="hint" style={{ marginBottom: 10 }}>Custom machines are saved with your app data. JSON backup and encrypted Cloud sync carry them into later app versions and onto your other devices.</div>
+      <div className="field"><label>Machine / exercise name</label><input className="input" value={draft.name} onChange={(e) => set('name', e.target.value)} placeholder="Example: Gym80 Glute Drive" /></div>
+      <div className="field-row cols-3">
+        <div className="field"><label>Primary muscle</label><input className="input" value={draft.p} onChange={(e) => set('p', e.target.value)} placeholder="Glutes" /></div>
+        <div className="field"><label>Secondary muscles</label><input className="input" value={draft.s} onChange={(e) => set('s', e.target.value)} placeholder="Hamstrings" /></div>
+        <div className="field"><label>Equipment</label><input className="input" value={draft.eq} onChange={(e) => set('eq', e.target.value)} placeholder="Plate loaded" /></div>
+      </div>
+      <div className="field-row cols-3">
+        <div className="field"><label>Default sets</label><input className="input mono" inputMode="numeric" value={draft.defaultSets} onChange={(e) => set('defaultSets', e.target.value)} /></div>
+        <div className="field"><label>Rep range</label><div style={{ display: 'flex', gap: 6 }}><input className="input mono" inputMode="numeric" value={draft.repLow} onChange={(e) => set('repLow', e.target.value)} /><input className="input mono" inputMode="numeric" value={draft.repHigh} onChange={(e) => set('repHigh', e.target.value)} /></div></div>
+        <div className="field"><label>RPE / rest seconds</label><div style={{ display: 'flex', gap: 6 }}><input className="input mono" inputMode="decimal" value={draft.rpe} onChange={(e) => set('rpe', e.target.value)} /><input className="input mono" inputMode="numeric" value={draft.restSec} onChange={(e) => set('restSec', e.target.value)} /></div></div>
+      </div>
+      <div className="field"><label>Best use</label><input className="input" value={draft.use} onChange={(e) => set('use', e.target.value)} placeholder="Glute strength with stable setup" /></div>
+      <div className="field"><label>Coaching cue</label><input className="input" value={draft.cue} onChange={(e) => set('cue', e.target.value)} placeholder="Brace, drive through heels" /></div>
+      <div className="field-row">
+        <div className="field"><label>Substitute</label><input className="input" value={draft.sub} onChange={(e) => set('sub', e.target.value)} placeholder="Barbell Hip Thrust" /></div>
+        <div className="field"><label>Avoid</label><input className="input" value={draft.err} onChange={(e) => set('err', e.target.value)} placeholder="Overextending the lower back" /></div>
+      </div>
+      <div className="field"><label>Tempo</label><input className="input mono" value={draft.tempo} onChange={(e) => set('tempo', e.target.value)} placeholder="2-1-1" /></div>
+      {error ? <Banner tone="red" icon={AlertTriangle}>{error}</Banner> : null}
+      <div className="btn-row">
+        <button className="btn sm primary" onClick={save}><Save size={14} /> {editing ? 'Save changes' : 'Add machine'}</button>
+        {editing ? <button className="btn sm ghost" onClick={reset}>Cancel</button> : null}
+      </div>
+      {Object.keys(custom).length ? <div className="divider" /> : null}
+      {Object.keys(custom).sort().map((name) => (
+        <div className="row" key={name}>
+          <div className="row-main"><div className="row-title">{name}</div><div className="row-sub">{custom[name].p || 'Other'} · {custom[name].eq || 'Machine'} · {custom[name].defaultSets || 3} sets</div></div>
+          <div className="btn-row"><button className="btn xs" onClick={() => edit(name)}>Edit</button><button className="btn xs danger" onClick={() => { if (confirm(`Delete ${name} from your custom library? Existing workout history is kept.`)) ctx.deleteCustomExercise(name); }}><Trash2 size={13} /></button></div>
+        </div>
+      ))}
+    </Card>
+  );
+}
+
 function MoreTab({ ctx }) {
   const s = ctx.state;
   const [importErr, setImportErr] = useState('');
@@ -1235,10 +1330,7 @@ function MoreTab({ ctx }) {
               {num('Water (L)', 'waterTargetL', s.settings, (k, v) => ctx.setSetting(k, parseFloat(v) || 0))}
               {num('Steps', 'stepsTarget', s.settings, (k, v) => ctx.setSetting(k, parseFloat(v) || 0))}
             </div>
-            <div className="row" onClick={() => ctx.setSetting('eggAllowed', !s.settings.eggAllowed)} style={{ cursor: 'pointer' }}>
-              <button className={`check ${s.settings.eggAllowed ? 'on' : ''}`}><Check size={15} /></button>
-              <div className="row-main"><div className="row-title">Eggs allowed on vegetarian days</div></div>
-            </div>
+            <div className="hint">Vegetarian days always exclude chicken, fish, whole eggs and egg whites.</div>
             <div className="field" style={{ marginTop: 10 }}>
               <label>Units</label>
               <div className="pill-toggle">
@@ -1274,6 +1366,9 @@ function MoreTab({ ctx }) {
         </div>
 
         <div>
+          <SectionTitle>Custom machines</SectionTitle>
+          <CustomMachineCard ctx={ctx} />
+
           <SectionTitle>Data</SectionTitle>
           <Card>
             <div className="btn-row">
@@ -1356,7 +1451,7 @@ function MoreTab({ ctx }) {
           <SectionTitle>Deployment</SectionTitle>
           <Card>
             <p style={{ margin: '0 0 8px', fontSize: 12.5, lineHeight: 1.55, color: 'var(--muted)' }}>Run locally with <span className="num">npm install</span> then <span className="num">npm run dev</span>. Build with <span className="num">npm run build</span>. Deploy the <span className="num">dist</span> folder to Vercel, Netlify, GitHub Pages, StackBlitz or CodeSandbox, then open in iPhone Safari and Add to Home Screen.</p>
-            <div className="hint">Version 1 stores everything on this device with localStorage. No cloud, no login.</div>
+            <div className="hint">The app is local-first and has no login. Optional encrypted Cloud sync stores an unreadable backup for your other devices, including custom machine definitions.</div>
           </Card>
         </div>
       </div>
@@ -1418,6 +1513,11 @@ export default function BodyRecompOS() {
   const toggleSupplement = (date, key) => setState((prev) => { const cur = (prev.supplementLogs && prev.supplementLogs[date]) || {}; return { ...prev, supplementLogs: { ...(prev.supplementLogs || {}), [date]: { ...cur, [key]: !cur[key] } } }; });
   const toggleActivity = (date, key) => setState((prev) => { const cur = (prev.activity[date] || {}); return { ...prev, activity: { ...prev.activity, [date]: { ...cur, [key]: !cur[key] } } }; });
   const setSatMode = (date, mode) => setState((prev) => ({ ...prev, saturdayMode: { ...prev.saturdayMode, [date]: mode } }));
+  const setDayOverride = (date, mode) => mutate((d) => {
+    if (!d.dayOverrides) d.dayOverrides = {};
+    if (mode === 'veg' || mode === 'fast1' || mode === 'fast2') d.dayOverrides[date] = mode;
+    else delete d.dayOverrides[date];
+  });
 
   const addScan = (scan) => mutate((d) => { d.bodyScans.push({ ...scan, id: 'scan-' + Date.now() }); });
   const updateScan = (id, scan) => mutate((d) => { d.bodyScans = d.bodyScans.map((x) => (x.id === id ? { ...x, ...scan, id } : x)); });
@@ -1426,6 +1526,12 @@ export default function BodyRecompOS() {
   const setProfile = (k, v) => mutate((d) => { d.profile[k] = v; });
   const setSetting = (k, v) => mutate((d) => { d.settings[k] = v; });
   const setRestart = (name, field, val) => mutate((d) => { if (!d.restartWeights) d.restartWeights = {}; const cur = d.restartWeights[name] || { old: '', pct: '' }; d.restartWeights[name] = { ...cur, [field]: val }; });
+  const saveCustomExercise = (oldName, name, meta) => mutate((d) => {
+    if (!d.customExercises) d.customExercises = {};
+    if (oldName && oldName !== name) delete d.customExercises[oldName];
+    d.customExercises[name] = meta;
+  });
+  const deleteCustomExercise = (name) => mutate((d) => { if (d.customExercises) delete d.customExercises[name]; });
   // change the program calendar without touching any logs, scans, PRs or history
   const restartCalendar = (dateStr) => mutate((d) => { d.settings.programStartDate = dateStr; d.settings.restartPhaseStartDate = dateStr; });
   const autoScanDate = () => mutate((d) => { const c = programCalendar(d); d.settings.nextBodyScanDate = c.autoNextScanDate; });
@@ -1521,8 +1627,8 @@ export default function BodyRecompOS() {
 
   const ctx = {
     state, setState, mutate, patchSession, mutateEntry, getSession,
-    setMeal, setWatch, toggleHabit, toggleSupplement, toggleActivity, setSatMode,
-    addScan, updateScan, deleteScan, setProfile, setSetting, setRestart, restartCalendar, autoScanDate, recalcNow, replaceState, resetAll, loadDemo,
+    setMeal, setWatch, toggleHabit, toggleSupplement, toggleActivity, setSatMode, setDayOverride,
+    addScan, updateScan, deleteScan, setProfile, setSetting, setRestart, saveCustomExercise, deleteCustomExercise, restartCalendar, autoScanDate, recalcNow, replaceState, resetAll, loadDemo,
     doPull, doPush, syncStatus, syncBusy, getSyncSecret, setSyncSecret,
     selDate, setSelDate, goto: setTab,
   };

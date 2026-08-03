@@ -8,10 +8,9 @@ import React, { useState } from 'react';
 import {
   Plus, Copy, Trash2, MoreHorizontal, Repeat, Check, RefreshCw, Search,
 } from 'lucide-react';
-import { EXERCISES, EXERCISE_NAMES } from './data.js';
 import {
   makeSet, makeCell, cellDone, roundDone, getLastSession, getBestPerformance,
-  getNextTarget, rxForExercise, e1rm, restartSuggestion,
+  getNextTarget, rxForExercise, e1rm, restartSuggestion, exerciseMeta, exerciseNames,
 } from './helpers.js';
 import { RestTimer } from './components.jsx';
 
@@ -27,17 +26,17 @@ function PainScale({ value, onChange }) {
   );
 }
 
-function ReplaceSelect({ value, onChange }) {
+function ReplaceSelect({ value, onChange, state }) {
   return (
     <select className="select" value={value || ''} onChange={(e) => onChange(e.target.value)} style={{ maxWidth: 200 }}>
       <option value="">Replace with...</option>
-      {EXERCISE_NAMES.map((n) => <option key={n} value={n}>{n}</option>)}
+      {exerciseNames(state).map((n) => <option key={n} value={n}>{n}</option>)}
     </select>
   );
 }
 
 // details panel shared by single-set and round-cell
-function Detail({ data, patch, onDelete, skipReplace, onSkipToggle, onReplace }) {
+function Detail({ data, patch, onDelete, skipReplace, onSkipToggle, onReplace, state }) {
   return (
     <div className="cell-detail">
       <div className="field-row cols-3">
@@ -67,7 +66,7 @@ function Detail({ data, patch, onDelete, skipReplace, onSkipToggle, onReplace })
       {skipReplace ? (
         <div className="btn-row">
           <button className="btn xs" onClick={onSkipToggle}>{data.skipped ? 'Un-skip' : 'Skip exercise'}</button>
-          <ReplaceSelect value={data.replacedWith} onChange={onReplace} />
+          <ReplaceSelect value={data.replacedWith} onChange={onReplace} state={state} />
         </div>
       ) : null}
       {data.skipped ? (
@@ -123,8 +122,8 @@ function HistoryGrid({ name, state, rx }) {
 export function SingleLogger({ block, entry, plan, state, onMutate, setRestart }) {
   const [openIdx, setOpenIdx] = useState(-1);
   const ex = block.exercises[0];
-  const meta = EXERCISES[ex.name] || {};
   const name = entry.replacedWith || entry.exName || ex.name;
+  const meta = exerciseMeta(name, state);
   const rx = { repLow: ex.repLow, repHigh: ex.repHigh, rpe: ex.rpe };
   const isDrop = block.blockType === 'dropset';
   const rs = restartSuggestion(name, state);
@@ -197,7 +196,8 @@ export function SingleLogger({ block, entry, plan, state, onMutate, setRestart }
         <button className="btn xs ghost" onClick={toggleSkip}>{entry.skipped ? 'Un-skip' : 'Skip'}</button>
       </div>
       <div style={{ marginTop: 8 }}>
-        <ReplaceSelect value={entry.replacedWith} onChange={replace} />
+        <ReplaceSelect value={entry.replacedWith} onChange={replace} state={state} />
+        <div className="hint" style={{ marginTop: 6 }}>Replacement changes exercise history, cues and future targets. Existing set rows and entered weights stay unchanged so nothing is overwritten.</div>
       </div>
     </div>
   );
@@ -297,6 +297,7 @@ export function RoundsLogger({ block, entry, state, onMutate }) {
                       skipReplace
                       onSkipToggle={() => cellSkip(ri, nm)}
                       onReplace={(name) => cellReplace(ri, nm, name)}
+                      state={state}
                     />
                   ) : null}
                 </div>
@@ -326,9 +327,9 @@ export function BlockLogger(props) {
 // ============================================================
 // Add unplanned exercise sheet (creates a single block/entry)
 // ============================================================
-export function AddExercisePicker({ onPick }) {
+export function AddExercisePicker({ onPick, state }) {
   const [q, setQ] = useState('');
-  const list = EXERCISE_NAMES.filter((n) => n.toLowerCase().includes(q.toLowerCase())).slice(0, 40);
+  const list = exerciseNames(state).filter((n) => n.toLowerCase().includes(q.toLowerCase())).slice(0, 40);
   return (
     <div>
       <div className="field lib-search">
@@ -336,7 +337,7 @@ export function AddExercisePicker({ onPick }) {
       </div>
       <div className="lib-list">
         {list.map((n) => {
-          const m = EXERCISES[n];
+          const m = exerciseMeta(n, state);
           return (
             <button key={n} className="lib-item" onClick={() => onPick(n)}>
               <b>{n}</b>
@@ -350,9 +351,15 @@ export function AddExercisePicker({ onPick }) {
   );
 }
 
-export function makeUnplannedEntry(name) {
+export function makeUnplannedEntry(name, state) {
   const id = `x#${Date.now()}`;
-  const sets = [makeSet(), makeSet(), makeSet()];
+  const meta = exerciseMeta(name, state);
+  const setCount = Math.max(1, Math.min(10, parseInt(meta.defaultSets, 10) || 3));
+  const repLow = Math.max(1, parseInt(meta.repLow, 10) || 8);
+  const repHigh = Math.max(repLow, parseInt(meta.repHigh, 10) || 12);
+  const rpe = Math.max(1, Math.min(10, parseFloat(meta.rpe) || 8));
+  const restSec = Math.max(0, parseInt(meta.restSec, 10) || 90);
+  const sets = Array.from({ length: setCount }, () => makeSet());
   return {
     id,
     entry: {
@@ -360,6 +367,6 @@ export function makeUnplannedEntry(name) {
       skipped: false, skipReason: '', replacedWith: '', completed: false, unplanned: true,
     },
     // a synthetic "block" so the logger can render a target line
-    block: { id, blockType: 'single', name, exercises: [{ name, sets: 3, repLow: 8, repHigh: 12, rpe: 8, restSec: 90, tempo: '2-1-1' }] },
+    block: { id, blockType: 'single', name, exercises: [{ name, sets: setCount, repLow, repHigh, rpe, restSec, tempo: meta.tempo || '2-1-1' }] },
   };
 }

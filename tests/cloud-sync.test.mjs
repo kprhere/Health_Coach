@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 
 import worker from '../cloudflare/src/worker.js';
 import { decryptJSON, deriveSync, encryptJSON, pullRemote, pushRemote } from '../src/sync.js';
+import { defaultState, exerciseMeta, exerciseNames, muscleGroupOf } from '../src/helpers.js';
 
 function memoryEnvironment() {
   const values = new Map();
@@ -51,4 +52,29 @@ test('Worker rejects malformed and oversized payloads', async () => {
     method: 'PUT', body: JSON.stringify({ cipher: 'x'.repeat(2_000_001) }),
   }), env);
   assert.equal(response.status, 413);
+});
+
+test('custom machines remain first-class data through encrypted cloud sync', async () => {
+  const env = memoryEnvironment();
+  const originalFetch = globalThis.fetch;
+  globalThis.fetch = (input, init) => worker.fetch(new Request(input, init), env);
+  try {
+    const state = defaultState();
+    state.customExercises['Gym80 Glute Drive'] = {
+      p: 'Glutes', s: 'Hamstrings', eq: 'Plate loaded', use: 'Stable hip extension',
+      defaultSets: 4, repLow: 8, repHigh: 12, rpe: 8, restSec: 120, custom: true,
+    };
+    state.dayOverrides['2026-08-03'] = 'fast2';
+    assert.ok(exerciseNames(state).includes('Gym80 Glute Drive'));
+    assert.equal(exerciseMeta('Gym80 Glute Drive', state).defaultSets, 4);
+    assert.equal(muscleGroupOf('Gym80 Glute Drive', state), 'Glutes');
+
+    const { syncId, key } = await deriveSync('custom-machine-regression-passphrase');
+    await pushRemote('https://worker.test', syncId, key, state);
+    const pulled = await pullRemote('https://worker.test', syncId, key);
+    assert.deepEqual(pulled.state.customExercises, state.customExercises);
+    assert.deepEqual(pulled.state.dayOverrides, state.dayOverrides);
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
 });

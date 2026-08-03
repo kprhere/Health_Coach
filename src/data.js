@@ -23,7 +23,6 @@ export const PROFILE_DEFAULT = {
 };
 
 export const SETTINGS_DEFAULT = {
-  eggAllowed: true,
   units: 'imperial',
   proteinTarget: 190,
   waterTargetL: 3.75,
@@ -389,6 +388,8 @@ export const NUTRITION = {
     training: { kcal: 2400, protein: 195, carbs: 235, fat: 70, fiber: 35, waterL: 3.75 },
     rest: { kcal: 2100, protein: 190, carbs: 165, fat: 68, fiber: 35, waterL: 3.5 },
     fastThu: { kcal: 2000, protein: 185, carbs: 150, fat: 62, fiber: 32, waterL: 3.75 },
+    noMoonFast1: { kcal: 2100, protein: 190, carbs: 165, fat: 62, fiber: 32, waterL: 3.75 },
+    noMoonFast2: { kcal: 2050, protein: 190, carbs: 150, fat: 62, fiber: 32, waterL: 3.75 },
     vegSat: { kcal: 2150, protein: 180, carbs: 190, fat: 65, fiber: 40, waterL: 3.5 },
   },
   plans: {
@@ -426,7 +427,9 @@ export const NUTRITION = {
   quickAdds: [
     { label: 'Whey scoop', p: 24, c: 3, f: 1, kcal: 120, meat: false },
     { label: 'Greek yogurt', p: 17, c: 8, f: 4, kcal: 130, meat: false },
-    { label: 'Egg', p: 6, c: 1, f: 5, kcal: 78, meat: false },
+    { label: '3 egg whites', p: 11, c: 1, f: 0, kcal: 51, meat: false, egg: true },
+    { label: '4 egg whites', p: 14, c: 1, f: 0, kcal: 68, meat: false, egg: true },
+    { label: 'Egg', p: 6, c: 1, f: 5, kcal: 78, meat: false, egg: true },
     { label: 'Chicken 150g', p: 46, c: 0, f: 6, kcal: 250, meat: true },
     { label: 'Fish 150g', p: 34, c: 0, f: 9, kcal: 220, meat: true },
     { label: 'Dal 1 bowl', p: 12, c: 30, f: 4, kcal: 200, meat: false },
@@ -631,5 +634,7 @@ export const DAY_VARIANTS = {
   training: { label: 'Training day', tone: 'cyan', why: 'Highest carbs and calories to fuel lifting and refill glycogen.' },
   rest:     { label: 'Rest day', tone: 'violet', why: 'Lower carbs, protein held high to keep recovery and muscle up.' },
   fastThu:  { label: 'Fast plus swim', tone: 'amber', why: 'Fasted until 6 PM, then a gentle break and a high-protein veg dinner around the swim.' },
-  vegSat:   { label: 'Vegetarian day', tone: 'green', why: 'No chicken or fish. Protein anchored on whey, paneer, tofu, dal and Greek yogurt.' },
+  noMoonFast1: { label: 'No-moon fast · 1 PM', tone: 'amber', why: 'Fasted until 1 PM, followed by a fully vegetarian high-protein plan.' },
+  noMoonFast2: { label: 'No-moon fast · 2 PM', tone: 'amber', why: 'Fasted until 2 PM, followed by a fully vegetarian high-protein plan.' },
+  vegSat:   { label: 'Vegetarian day', tone: 'green', why: 'No chicken, fish or eggs. Protein anchored on whey, paneer, tofu, dal and Greek yogurt.' },
 };

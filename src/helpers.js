@@ -38,8 +38,10 @@ export function defaultState() {
     supplementLogs: {},  // key -> { suppKey:true }
     bodyScans: [...SEED_SCANS],
     saturdayMode: {},    // key -> 'class' | 'fallback'
+    dayOverrides: {},    // key -> 'veg' | 'fast1' | 'fast2' (nutrition only; workout stays scheduled)
     activity: {},        // key -> { badminton:bool, swim:bool }
     restartWeights: {},  // exerciseName -> { old:'', pct:70 }
+    customExercises: {}, // exerciseName -> user-owned machine metadata (cloud-synced)
     lastBackup: null,
   };
 }
@@ -81,6 +83,18 @@ export function validateImport(obj) {
   return keys.some((k) => k in obj);
 }
 
+// Built-in exercises ship with the app. Custom exercises live in user state,
+// so JSON backups and encrypted cloud sync carry them across app updates and
+// devices without allowing them to overwrite a built-in definition.
+export function exerciseLibrary(state) {
+  const custom = (state && state.customExercises) || {};
+  const safeCustom = Object.fromEntries(Object.entries(custom).filter(([name]) => !EXERCISES[name]));
+  return { ...EXERCISES, ...safeCustom };
+}
+
+export const exerciseNames = (state) => Object.keys(exerciseLibrary(state)).sort((a, b) => a.localeCompare(b));
+export const exerciseMeta = (name, state) => exerciseLibrary(state)[name] || {};
+
 export function exportJSON(state) { return JSON.stringify(state, null, 2); }
 
 export function download(filename, text, type = 'application/json') {
@@ -96,13 +110,30 @@ export function download(filename, text, type = 'application/json') {
 }
 
 // ---------- day flags ----------
-export function dayFlags(key) {
+export function nutritionDayType(key, state) {
+  const override = state && state.dayOverrides && state.dayOverrides[key];
+  if (override === 'fast1') return 'noMoonFast1';
+  if (override === 'fast2' || override === 'fast') return 'noMoonFast2'; // migrate the original manual fast
+  if (override === 'veg') return 'vegSat';
+  return PROGRAM.days[dowOf(key)].dayType;
+}
+
+export function fastEndTime(key, state) {
+  const dayType = nutritionDayType(key, state);
+  if (dayType === 'noMoonFast1') return { hour: 13, label: '1 PM', noMoon: true };
+  if (dayType === 'noMoonFast2') return { hour: 14, label: '2 PM', noMoon: true };
+  if (dayType === 'fastThu') return { hour: 18, label: '6 PM', noMoon: false };
+  return null;
+}
+
+export function dayFlags(key, state) {
   const dow = dowOf(key);
+  const dayType = nutritionDayType(key, state);
   return {
     dow,
     swimDay: dow === 2 || dow === 4,
-    fastDay: dow === 4,
-    vegDay: dow === 4 || dow === 6,
+    fastDay: dayType === 'fastThu' || dayType === 'noMoonFast1' || dayType === 'noMoonFast2',
+    vegDay: dayType === 'fastThu' || dayType === 'noMoonFast1' || dayType === 'noMoonFast2' || dayType === 'vegSat',
     badmintonAvailable: dow >= 1 && dow <= 5,
     classDay: dow === 6,
   };
@@ -140,8 +171,7 @@ export function applyBadmintonAdjustment(targets) {
 }
 
 export function resolveNutrition(key, state) {
-  const dow = dowOf(key);
-  const dayType = PROGRAM.days[dow].dayType;
+  const dayType = nutritionDayType(key, state);
   // targets + meal options are DERIVED from the latest scan and goal
   let targets = targetsWithFallback(dayType, state);
   const profile = targets._profile;
@@ -157,7 +187,7 @@ export function resolveNutrition(key, state) {
 }
 
 export function getDayPlan(key, state) {
-  return { key, flags: dayFlags(key), workout: resolveWorkout(key, state), nutrition: resolveNutrition(key, state) };
+  return { key, flags: dayFlags(key, state), workout: resolveWorkout(key, state), nutrition: resolveNutrition(key, state) };
 }
 
 // ============================================================
@@ -293,8 +323,8 @@ export function getBestPerformance(name, state) {
   };
 }
 
-export function increment(name) {
-  const p = EXERCISES[name]?.p || '';
+export function increment(name, state) {
+  const p = exerciseMeta(name, state).p || '';
   const small = /Delt|Bicep|Tricep|Calf|Calves|Ab|Oblique|Core|Forearm|Brachialis/i.test(p);
   return small ? 2.5 : 5;
 }
@@ -310,8 +340,8 @@ export function getNextTarget(name, state, rx) {
   const setsN = last.sets.length;
   const hitTop = last.sets.every((s) => s.reps >= repHigh) && (top.rpe == null || top.rpe <= targetRpe + 0.5);
   if (hitTop) {
-    const nw = top.weight + increment(name);
-    return { text: `${nw} lb x ${repLow} for ${setsN} sets`, note: `Hit top reps last time. Add ${increment(name)} lb and reset to the bottom of the range.` };
+    const nw = top.weight + increment(name, state);
+    return { text: `${nw} lb x ${repLow} for ${setsN} sets`, note: `Hit top reps last time. Add ${increment(name, state)} lb and reset to the bottom of the range.` };
   }
   const targetReps = Math.min(repHigh, Math.max(...last.sets.map((s) => s.reps)) + 1);
   return { text: `${top.weight} lb x ${targetReps} for ${setsN} sets`, note: 'Keep the weight and add a rep per set toward the top of the range.' };
@@ -341,8 +371,7 @@ export function rxForExercise(name, plan) {
 // ============================================================
 export function nutritionActuals(key, state) {
   const log = (state.mealLogs && state.mealLogs[key]) || { eaten: {}, extras: [], water: 0, flags: {}, choices: {} };
-  const dow = dowOf(key);
-  const meals = mealPlanFor(PROGRAM.days[dow].dayType, state);
+  const meals = mealPlanFor(nutritionDayType(key, state), state);
   const choices = log.choices || {};
   let p = 0, c = 0, f = 0, kcal = 0;
   meals.forEach((m, i) => {
@@ -491,8 +520,8 @@ export function dailyScore(key, state) {
 // ============================================================
 // ANALYTICS  (volume + superset / finisher completion)
 // ============================================================
-export function muscleGroupOf(name) {
-  const p = EXERCISES[name]?.p || '';
+export function muscleGroupOf(name, state) {
+  const p = exerciseMeta(name, state).p || '';
   if (/Chest/i.test(p)) return 'Chest';
   if (/Lat|Back|Trap/i.test(p)) return 'Back';
   if (/Delt|Shoulder/i.test(p)) return 'Shoulders';
@@ -515,7 +544,7 @@ export function volumeByExercise(state) {
 
 export function volumeByMuscle(state) {
   const out = {};
-  allSetRecords(state).forEach((r) => { const g = muscleGroupOf(r.name); out[g] = (out[g] || 0) + r.weight * r.reps; });
+  allSetRecords(state).forEach((r) => { const g = muscleGroupOf(r.name, state); out[g] = (out[g] || 0) + r.weight * r.reps; });
   return out;
 }
 
@@ -601,7 +630,7 @@ export function volumeByMuscleWindow(state, days = 21, endKey = todayKey()) {
   const out = {};
   allSetRecords(state).forEach((r) => {
     if (r.date > start && r.date <= endKey) {
-      const g = muscleGroupOf(r.name);
+      const g = muscleGroupOf(r.name, state);
       out[g] = (out[g] || 0) + r.weight * r.reps;
     }
   });
@@ -614,7 +643,7 @@ export function setsByMuscleWindow(state, days = 21, endKey = todayKey()) {
   const out = {};
   allSetRecords(state).forEach((r) => {
     if (r.date > start && r.date <= endKey) {
-      const g = muscleGroupOf(r.name);
+      const g = muscleGroupOf(r.name, state);
       out[g] = (out[g] || 0) + 1;
     }
   });
@@ -664,7 +693,7 @@ export function muscleWeekTrend(state) {
   const win = (start, end) => {
     const o = {};
     allSetRecords(state).forEach((r) => {
-      if (r.date >= start && r.date <= end) { const g = muscleGroupOf(r.name); o[g] = (o[g] || 0) + r.weight * r.reps; }
+      if (r.date >= start && r.date <= end) { const g = muscleGroupOf(r.name, state); o[g] = (o[g] || 0) + r.weight * r.reps; }
     });
     return o;
   };
@@ -751,7 +780,8 @@ export function trainingLoadSummary(state) {
 // ============================================================
 export function coachInsights(key, state, now) {
   const out = [];
-  const flags = dayFlags(key);
+  const flags = dayFlags(key, state);
+  const fastEnd = fastEndTime(key, state);
   const w = watchFor(key, state);
   const isToday = key === todayKey();
   const hr = now ? now.getHours() : 12;
@@ -764,15 +794,18 @@ export function coachInsights(key, state, now) {
   if (!isNaN(sleep) && sleep < 6.5) out.push({ type: 'warn', text: `Sleep was ${sleep}h. Cap lifting at RPE 7 today and skip grinding reps.` });
   if (act.badminton) out.push({ type: 'action', text: 'Badminton done. Add electrolytes and 30-50g carbs, push water +0.5 L. Keep protein the same.' });
   if (flags.fastDay && isToday) {
-    if (hr < 18) out.push({ type: 'info', text: 'Fast active until 6 PM. Water, black coffee, green tea only. Emergency: one fruit OR one glass of milk.' });
-    else out.push({ type: 'action', text: 'Fast window over. Break it gently, then prioritise protein and hydration at dinner.' });
+    if (hr < fastEnd.hour) out.push({ type: 'info', text: `Fast active until ${fastEnd.label}. Water, black coffee and green tea only.` });
+    else out.push({ type: 'action', text: 'Fast window over. Break it gently, then prioritise vegetarian protein and hydration.' });
   } else if (flags.fastDay) {
-    out.push({ type: 'info', text: 'Thursday is a fast day: nothing until 6 PM, then a gentle break and a high-protein veg dinner.' });
+    out.push({ type: 'info', text: `This is a ${fastEnd.noMoon ? 'no-moon ' : ''}fast day: fast until ${fastEnd.label}, then follow the vegetarian plan.` });
   }
   if (flags.classDay) {
     const mode = (state.saturdayMode && state.saturdayMode[key]) || 'class';
     if (mode === 'fallback') out.push({ type: 'info', text: 'BodyBalance swapped for the Full Body fallback. Vegetarian protein: whey, paneer, dal, Greek yogurt.' });
     else out.push({ type: 'info', text: 'Vegetarian day. Anchor protein with whey, Greek yogurt, paneer, tofu and dal.' });
+  }
+  if (flags.vegDay && !flags.fastDay && !flags.classDay) {
+    out.push({ type: 'info', text: 'Vegetarian override active. Chicken, fish and eggs are removed; anchor protein with whey, Greek yogurt, paneer, tofu and dal.' });
   }
   if (isToday && hr >= 13 && a.protein < t.protein * 0.5) out.push({ type: 'action', text: `Protein is at ${Math.round(a.protein)}g of ${t.protein}g. Add a whey shake or Greek yogurt.` });
   const steps = parseFloat(w.steps);

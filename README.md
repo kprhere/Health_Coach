@@ -2,7 +2,7 @@
 
 A personal body-recomposition operating system. Mobile-first for iPhone Safari (Add to Home Screen), fully responsive up to laptop and desktop. Plans, logs, coaches and tracks a fat-loss + lean-muscle phase built around a 4-day Upper / Lower split, swimming, badminton and one mobility class.
 
-Single user, offline, no login. All data lives on the device in localStorage. Export a JSON backup any time. Changing program dates never deletes logs.
+Single user, local-first, no login. Data lives on the device in localStorage, with optional end-to-end encrypted Cloudflare KV sync. Export a JSON backup any time. Changing program dates never deletes logs.
 
 ## Run and build
 
@@ -40,6 +40,12 @@ Seeded from three real Evolt 360 scans. Add, edit, delete and compare scans in B
 ## Apple Health Shortcut
 
 The in-app guide uses today’s summed steps, total asleep duration from the previous 18 hours, the latest resting heart rate from the previous 24 hours and average HRV from the previous 18 hours. Sleep Score is optional because Shortcuts availability varies. Run the automation after waking, when overnight Health data is complete. Recovery uses sleep, resting heart rate and logged pain; HRV and Sleep Score remain tracking fields until a personal baseline is available.
+
+## Custom machines and nutrition logging
+
+Fuel includes separate 3- and 4-egg-white portions in Quick add. Planned non-vegetarian lunch and dinner use a macro-balanced protein trade: 105 g chicken + 4 whites (or about 115 g chicken + 3 whites) in place of 150 g chicken, rather than stacking eggs on top. More → Custom machines stores user-owned machine details, default sets and rep targets in normal app state, so JSON backup and encrypted cloud sync preserve them across devices and future releases. Exercise replacement reassigns history and coaching metadata but intentionally keeps existing set rows and weights to avoid overwriting a workout in progress.
+
+Planner and Fuel provide a per-date food-plan switch: Scheduled, Vegetarian, No-moon fast until 1 PM, or No-moon fast until 2 PM. Every vegetarian plan excludes chicken, fish, whole eggs and egg whites. The manual fast is fully vegetarian after the selected end time; the scheduled Thursday fast-plus-swim plan remains distinct. Overrides update meal choices, targets, totals and day labels for that date while preserving the scheduled workout and all existing logs. Overrides are included in JSON backup and encrypted cloud sync.
 
 ## Dependencies, warnings and security
 

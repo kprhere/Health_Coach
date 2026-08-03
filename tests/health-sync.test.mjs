@@ -1,8 +1,13 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import { NUTRITION } from '../src/data.js';
+import { FOODS, mealPlanFor } from '../src/nutritionEngine.js';
 
 import {
   defaultState,
+  dayFlags,
+  fastEndTime,
+  nutritionDayType,
   parseHealthParams,
   recoveryScore,
   resolveNutrition,
@@ -57,4 +62,59 @@ test('every weekly day resolves a workout and positive nutrition targets', () =>
     assert.ok(nutrition.targets.kcal > 0);
     assert.ok(nutrition.targets.protein > 0);
   }
+});
+
+test('egg whites can be logged in the requested 3 or 4 white portions', () => {
+  const byLabel = Object.fromEntries(NUTRITION.quickAdds.map((food) => [food.label, food]));
+  assert.deepEqual(byLabel['3 egg whites'], { label: '3 egg whites', p: 11, c: 1, f: 0, kcal: 51, meat: false, egg: true });
+  assert.deepEqual(byLabel['4 egg whites'], { label: '4 egg whites', p: 14, c: 1, f: 0, kcal: 68, meat: false, egg: true });
+});
+
+test('planned chicken meals trade chicken quantity for egg whites instead of stacking protein', () => {
+  assert.deepEqual(
+    { p: FOODS.chickenEgg.p, c: FOODS.chickenEgg.c, f: FOODS.chickenEgg.f, kcal: FOODS.chickenEgg.kcal },
+    { p: 46, c: 1, f: 4, kcal: 243 },
+  );
+  const meals = mealPlanFor('training', defaultState());
+  for (const name of ['Lunch', 'Dinner']) {
+    const meal = meals.find((item) => item.name === name);
+    assert.ok(meal.options[0].keys.includes('chickenEgg'));
+    assert.ok(meal.options[0].items[0].includes('105 g chicken + 4 egg whites'));
+  }
+});
+
+test('any date can override its nutrition plan to vegetarian or fast without changing the workout', () => {
+  const date = '2026-08-03';
+  const state = defaultState();
+  const scheduledWorkout = resolveWorkout(date, state);
+
+  state.dayOverrides[date] = 'veg';
+  assert.equal(nutritionDayType(date, state), 'vegSat');
+  assert.deepEqual(dayFlags(date, state), { dow: 1, swimDay: false, fastDay: false, vegDay: true, badmintonAvailable: true, classDay: false });
+  const vegetarian = resolveNutrition(date, state);
+  assert.ok(vegetarian.meals.flatMap((meal) => meal.options).every((option) => option.veg));
+  assert.ok(vegetarian.meals.flatMap((meal) => meal.options).flatMap((option) => option.items).every((item) => !/egg/i.test(item)));
+  assert.deepEqual(resolveWorkout(date, state), scheduledWorkout);
+
+  state.dayOverrides[date] = 'fast1';
+  assert.equal(nutritionDayType(date, state), 'noMoonFast1');
+  assert.equal(dayFlags(date, state).fastDay, true);
+  assert.deepEqual(fastEndTime(date, state), { hour: 13, label: '1 PM', noMoon: true });
+  assert.equal(resolveNutrition(date, state).meals[0].fasting, true);
+  assert.ok(resolveNutrition(date, state).meals.flatMap((meal) => meal.options).every((option) => option.veg));
+  assert.ok(resolveNutrition(date, state).meals.flatMap((meal) => meal.options).flatMap((option) => option.items).every((item) => !/egg/i.test(item)));
+  assert.deepEqual(resolveWorkout(date, state), scheduledWorkout);
+
+  state.dayOverrides[date] = 'fast2';
+  assert.equal(nutritionDayType(date, state), 'noMoonFast2');
+  assert.deepEqual(fastEndTime(date, state), { hour: 14, label: '2 PM', noMoon: true });
+  assert.ok(resolveNutrition(date, state).meals[0].time.endsWith('2:00 PM'));
+
+  delete state.dayOverrides[date];
+  assert.equal(nutritionDayType(date, state), scheduledWorkout.dayType);
+
+  const scheduledThursday = '2026-08-06';
+  assert.equal(nutritionDayType(scheduledThursday, state), 'fastThu');
+  assert.deepEqual(fastEndTime(scheduledThursday, state), { hour: 18, label: '6 PM', noMoon: false });
+  assert.ok(resolveNutrition(scheduledThursday, state).meals.flatMap((meal) => meal.options).flatMap((option) => option.items).every((item) => !/egg/i.test(item)));
 });

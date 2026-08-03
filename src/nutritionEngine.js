@@ -86,8 +86,8 @@ export function nutritionProfile(state) {
 }
 
 // day-type calorie multipliers around the personal base (calorie cycling)
-const DAY_CAL_MULT = { training: 1.09, rest: 0.955, fastThu: 0.91, vegSat: 0.977 };
-const DAY_FAT_MULT = { training: 1.0, rest: 1.0, fastThu: 0.9, vegSat: 0.95 };
+const DAY_CAL_MULT = { training: 1.09, rest: 0.955, fastThu: 0.91, noMoonFast1: 0.955, noMoonFast2: 0.93, vegSat: 0.977 };
+const DAY_FAT_MULT = { training: 1.0, rest: 1.0, fastThu: 0.9, noMoonFast1: 0.9, noMoonFast2: 0.9, vegSat: 0.95 };
 
 // ============================================================
 // 2. PER-DAY TARGETS  (replaces the hardcoded NUTRITION.targets)
@@ -102,7 +102,7 @@ export function personalTargets(dayType, state) {
   const fat = Math.round((p.fat * fatMult) / 5) * 5;
   const carbs = Math.max(60, Math.round((kcal - protein * 4 - fat * 9) / 4 / 5) * 5);
   const fiber = clamp(Math.round((kcal / 1000) * 15), 28, 45);
-  const waterL = dayType === 'training' || dayType === 'fastThu'
+  const waterL = dayType === 'training' || dayType === 'fastThu' || dayType === 'noMoonFast1' || dayType === 'noMoonFast2'
     ? Math.round((p.waterL + 0.25) * 100) / 100
     : p.waterL;
 
@@ -121,8 +121,9 @@ const F = (label, per, p, c, f, kcal, veg, tags = []) => ({ label, per, p, c, f,
 export const FOODS = {
   // proteins
   chicken:   F('Grilled chicken breast', '150 g', 46, 0, 6, 250, false, ['lean', 'ldl', 'gi']),
+  chickenEgg:F('105 g chicken + 4 egg whites (or 115 g chicken + 3 whites)', '', 46, 1, 4, 243, false, ['lean', 'gi']),
   fish:      F('Grilled fish (rohu / tilapia)', '150 g', 34, 0, 9, 220, false, ['lean', 'omega', 'ldl', 'gi']),
-  eggmix:    F('4 egg whites + 1 whole egg', '', 20, 1, 5, 120, true, ['lean', 'gi']),
+  eggmix:    F('4 egg whites + 1 whole egg', '', 20, 1, 5, 120, false, ['lean', 'gi']),
   whey15:    F('Whey', '1.5 scoops', 36, 5, 2, 180, true, ['lean', 'gi']),
   whey1:     F('Whey', '1 scoop', 24, 3, 1, 120, true, ['lean', 'gi']),
   gyog:      F('Greek yogurt', '200 g', 20, 9, 5, 165, true, ['lean', 'gi']),
@@ -145,6 +146,7 @@ export const FOODS = {
   salad:     F('Large salad + olive oil', '', 2, 8, 6, 90, true, ['ldl']),
   sabzi:     F('Mixed veg sabzi', '', 3, 10, 5, 90, true, ['ldl']),
   buttermilk:F('Buttermilk', '1 glass', 4, 6, 2, 70, true, ['gi']),
+  fastDrinks:F('Water, black coffee or green tea', '', 0, 0, 0, 0, true, []),
 };
 
 function sumFoods(keys) {
@@ -162,11 +164,11 @@ function sumFoods(keys) {
 
 // short chip name for the option switcher, taken from the headline food
 const SHORT = {
-  chicken: 'Chicken', fish: 'Fish', paneer: 'Paneer', tofu: 'Tofu', eggmix: 'Eggs',
+  chicken: 'Chicken', chickenEgg: 'Chicken + whites', fish: 'Fish', paneer: 'Paneer', tofu: 'Tofu', eggmix: 'Eggs',
   whey15: 'Whey', whey1: 'Whey', gyog: 'Yogurt', rajma: 'Rajma', dal: 'Dal',
   oats: 'Oats', banana: 'Fruit', buttermilk: 'Chaas', berries: 'Berries', chiaflax: 'Seeds',
 };
-const HEADLINE_ORDER = ['chicken', 'fish', 'paneer', 'tofu', 'eggmix', 'whey15', 'whey1', 'gyog', 'rajma', 'dal', 'oats', 'banana', 'buttermilk', 'berries', 'chiaflax'];
+const HEADLINE_ORDER = ['chickenEgg', 'chicken', 'fish', 'paneer', 'tofu', 'eggmix', 'whey15', 'whey1', 'gyog', 'rajma', 'dal', 'oats', 'banana', 'buttermilk', 'berries', 'chiaflax'];
 
 // build one option object from a list of food keys
 function opt(keys, extraTags = []) {
@@ -196,15 +198,14 @@ function slot(name, time, optionKeyLists) {
 }
 
 export function mealPlanFor(dayType, state) {
-  const settings = (state && state.settings) || {};
-  const egg = settings.eggAllowed !== false;
-  const isVegDay = dayType === 'vegSat' || dayType === 'fastThu';
+  const noMoonFast = dayType === 'noMoonFast1' || dayType === 'noMoonFast2';
+  const isVegDay = dayType === 'vegSat' || dayType === 'fastThu' || noMoonFast;
 
   let slots;
   if (dayType === 'fastThu') {
     // fasted until 6 PM, then break gently + high-protein veg dinner
     slots = [
-      { name: 'Fasting window', time: '5 AM – 6 PM', options: [opt(['buttermilk'])], fasting: true,
+      { name: 'Fasting window', time: '5 AM – 6 PM', options: [opt(['fastDrinks'])], fasting: true,
         note: 'Water, black coffee, green tea only. Emergency: one fruit OR one glass of milk.' },
       slot('Break the fast (gentle)', '6:00 PM', [['banana', 'almonds'], ['berries', 'buttermilk']]),
       slot('High-protein veg dinner', '7:30 PM', [
@@ -214,6 +215,26 @@ export function mealPlanFor(dayType, state) {
       ]),
       slot('Protein before bed', '9:30 PM', [['whey1'], ['gyog']]),
     ];
+  } else if (noMoonFast) {
+    const end = dayType === 'noMoonFast1' ? '1:00 PM' : '2:00 PM';
+    const lunch = dayType === 'noMoonFast1' ? '2:00 PM' : '3:00 PM';
+    slots = [
+      { name: 'No-moon fasting window', time: `On waking – ${end}`, options: [opt(['fastDrinks'])], fasting: true,
+        note: `Fast until ${end}. Water, black coffee and green tea only.` },
+      slot('Break the fast (gentle)', end, [['banana', 'almonds'], ['berries', 'buttermilk']]),
+      slot('High-protein vegetarian lunch', lunch, [
+        ['paneer', 'rajma', 'brownrice', 'salad'],
+        ['tofu', 'dal', 'quinoa', 'salad'],
+        ['paneer', 'dal', 'millet2', 'salad'],
+      ]),
+      slot('Protein snack', '5:00 PM', [['whey1', 'berries'], ['gyog', 'berries', 'almonds']]),
+      slot('Vegetarian dinner', '8:00 PM', [
+        ['paneer', 'dal', 'roti2', 'salad'],
+        ['tofu', 'sabzi', 'quinoa', 'salad'],
+        ['paneer', 'sabzi', 'millet2', 'gyog'],
+      ]),
+      { ...slot('Optional bedtime (if protein low)', '9:30 PM', [['whey1'], ['gyog']]), optional: true },
+    ];
   } else {
     const wake = slot('On waking (fasted)', dayType === 'training' ? '5:15 AM' : '6:00 AM', [
       ['chiaflax', 'almonds'], ['banana', 'almonds'], ['buttermilk'],
@@ -221,20 +242,20 @@ export function mealPlanFor(dayType, state) {
     const breakfast = slot(dayType === 'training' ? 'Post-workout breakfast' : 'Breakfast',
       dayType === 'training' ? '7:30 AM' : '8:00 AM', [
         ['oats', 'whey15', 'chiaflax', 'berries'],
-        egg ? ['eggmix', 'idli2', 'berries'] : ['gyog', 'idli2', 'berries'],
+        isVegDay ? ['gyog', 'idli2', 'berries'] : ['eggmix', 'idli2', 'berries'],
         ['gyog', 'oats', 'berries', 'almonds'],
       ]);
     const lunch = slot('Lunch', dayType === 'vegSat' ? '1:00 PM' : '12:30 PM',
       isVegDay
         ? [['paneer', 'rajma', 'brownrice', 'salad'], ['tofu', 'dal', 'quinoa', 'salad'], ['paneer', 'dal', 'millet2', 'salad']]
-        : [['chicken', 'brownrice', 'dal', 'salad'], ['fish', 'quinoa', 'salad'], ['paneer', 'rajma', 'brownrice', 'salad']]);
+        : [['chickenEgg', 'brownrice', 'dal', 'salad'], ['fish', 'quinoa', 'salad'], ['paneer', 'rajma', 'brownrice', 'salad']]);
     const snack = slot('Snack', '4:00 PM', [
       ['whey1', 'banana'], ['gyog', 'berries', 'almonds'], ['buttermilk', 'almonds'],
     ]);
     const dinner = slot('Dinner', '7:30 PM',
       isVegDay
         ? [['paneer', 'dal', 'roti2', 'salad'], ['tofu', 'sabzi', 'quinoa', 'salad'], ['paneer', 'sabzi', 'millet2', 'gyog']]
-        : [['chicken', 'millet2', 'sabzi', 'salad'], ['fish', 'sabzi', 'quinoa', 'salad'], ['paneer', 'dal', 'roti2', 'salad']]);
+        : [['chickenEgg', 'millet2', 'sabzi', 'salad'], ['fish', 'sabzi', 'quinoa', 'salad'], ['paneer', 'dal', 'roti2', 'salad']]);
     const bed = { ...slot('Optional bedtime (if protein low)', '9:30 PM', [['whey1'], ['gyog']]), optional: true };
     slots = dayType === 'rest'
       ? [wake, breakfast, lunch, snack, dinner, bed]
