@@ -47,6 +47,8 @@ Fuel includes separate 3- and 4-egg-white portions in Quick add. Planned non-veg
 
 Planner and Fuel provide a per-date food-plan switch: Scheduled, Vegetarian, No-moon fast until 1 PM, or No-moon fast until 2 PM. Every vegetarian plan excludes chicken, fish, whole eggs and egg whites. The manual fast is fully vegetarian after the selected end time; the scheduled Thursday fast-plus-swim plan remains distinct. Overrides update meal choices, targets, totals and day labels for that date while preserving the scheduled workout and all existing logs. Overrides are included in JSON backup and encrypted cloud sync.
 
+Fuel → Daily drinks tracks unsweetened green tea at 10 AM and 3 PM without changing meal indices or calories. It also offers 250 ml unsweetened coconut water as a sport-day hydration choice; its estimated 45 kcal, 10.5 g carbohydrate and 0.25 L fluid are included in daily totals. Coconut water is not part of the fasting window.
+
 ## Dependencies, warnings and security
 
 Handled, not suppressed:

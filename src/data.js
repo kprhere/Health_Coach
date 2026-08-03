@@ -442,6 +442,14 @@ export const NUTRITION = {
   ],
 };
 
+// Daily drinks are stored separately from indexed meal slots so adding a new
+// drink never shifts or corrupts existing meal completion history.
+export const DAILY_BEVERAGES = [
+  { key: 'greenTeaAm', label: 'Unsweetened green tea', timing: '10:00 AM', detail: 'First cup; count caffeine from coffee and other tea too.', p: 0, c: 0, f: 0, kcal: 0, water: 0 },
+  { key: 'greenTeaPm', label: 'Unsweetened green tea', timing: '3:00 PM', detail: 'Second cup; use decaf or skip if caffeine affects sleep.', p: 0, c: 0, f: 0, kcal: 0, water: 0 },
+  { key: 'coconutWater', label: 'Unsweetened coconut water', timing: '250 ml around sport', detail: 'Useful option after sweaty swim/badminton; not during a fast.', p: 0.5, c: 10.5, f: 0, kcal: 45, water: 0.25, potassiumMg: 413, sportOption: true },
+];
+
 // ============================================================
 // SUPPLEMENTS (daily)
 // ============================================================

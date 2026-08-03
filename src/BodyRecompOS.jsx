@@ -12,7 +12,7 @@ import {
 import {
   PROGRAM, NUTRITION, SUPPLEMENTS, HABITS, SCAN_FIELDS, WATCH_FIELDS, DAY_SHORT,
   EXERCISES, PROGRAM_RATIONALE, BADMINTON_FUEL, SWIMMING_FUEL, DAY_VARIANTS,
-  LABS, HAIR_HEALTH,
+  LABS, HAIR_HEALTH, DAILY_BEVERAGES,
 } from './data.js';
 import {
   todayKey, addDays, prettyDate, shortDate, dowOf, clone, fastEndTime,
@@ -636,6 +636,25 @@ function FuelTab({ ctx }) {
               ))}
             </Card>
           ) : null}
+
+          <SectionTitle>Daily drinks</SectionTitle>
+          <Card>
+            {DAILY_BEVERAGES.map((drink) => {
+              const selected = !!(((s.beverageLogs || {})[date] || {})[drink.key]);
+              const sportDay = flags.swimDay || !!((s.activity[date] || {}).badminton);
+              return (
+                <div className="row" key={drink.key} onClick={() => ctx.toggleBeverage(date, drink.key)} style={{ cursor: 'pointer' }}>
+                  <button className={`check ${selected ? 'on' : ''}`}><Check size={15} /></button>
+                  <div className="row-main">
+                    <div className="row-title">{drink.label} · {drink.timing}</div>
+                    <div className="row-sub">{drink.detail}{drink.sportOption ? ` ${sportDay ? 'Recommended for today’s activity.' : 'Water is the default on a normal day.'}` : ''}</div>
+                  </div>
+                  {drink.kcal ? <span className="num" style={{ fontSize: 11 }}>{drink.kcal} kcal</span> : null}
+                </div>
+              );
+            })}
+            <div className="hint" style={{ marginTop: 8 }}>Green tea is a beverage, not a fat-loss treatment. Coconut water contains carbohydrate and breaks a fast; choose unsweetened products and check the package label.</div>
+          </Card>
 
           {flags.badmintonAvailable ? (
             <>
@@ -1511,6 +1530,7 @@ export default function BodyRecompOS() {
   const setWatch = (date, key, val) => setState((prev) => ({ ...prev, watchLogs: { ...prev.watchLogs, [date]: { ...(prev.watchLogs[date] || {}), [key]: val } } }));
   const toggleHabit = (date, key, val) => setState((prev) => ({ ...prev, habitLogs: { ...prev.habitLogs, [date]: { ...(prev.habitLogs[date] || {}), [key]: val } } }));
   const toggleSupplement = (date, key) => setState((prev) => { const cur = (prev.supplementLogs && prev.supplementLogs[date]) || {}; return { ...prev, supplementLogs: { ...(prev.supplementLogs || {}), [date]: { ...cur, [key]: !cur[key] } } }; });
+  const toggleBeverage = (date, key) => setState((prev) => { const cur = (prev.beverageLogs && prev.beverageLogs[date]) || {}; return { ...prev, beverageLogs: { ...(prev.beverageLogs || {}), [date]: { ...cur, [key]: !cur[key] } } }; });
   const toggleActivity = (date, key) => setState((prev) => { const cur = (prev.activity[date] || {}); return { ...prev, activity: { ...prev.activity, [date]: { ...cur, [key]: !cur[key] } } }; });
   const setSatMode = (date, mode) => setState((prev) => ({ ...prev, saturdayMode: { ...prev.saturdayMode, [date]: mode } }));
   const setDayOverride = (date, mode) => mutate((d) => {
@@ -1627,7 +1647,7 @@ export default function BodyRecompOS() {
 
   const ctx = {
     state, setState, mutate, patchSession, mutateEntry, getSession,
-    setMeal, setWatch, toggleHabit, toggleSupplement, toggleActivity, setSatMode, setDayOverride,
+    setMeal, setWatch, toggleHabit, toggleSupplement, toggleBeverage, toggleActivity, setSatMode, setDayOverride,
     addScan, updateScan, deleteScan, setProfile, setSetting, setRestart, saveCustomExercise, deleteCustomExercise, restartCalendar, autoScanDate, recalcNow, replaceState, resetAll, loadDemo,
     doPull, doPush, syncStatus, syncBusy, getSyncSecret, setSyncSecret,
     selDate, setSelDate, goto: setTab,

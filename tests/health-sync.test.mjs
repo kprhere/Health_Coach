@@ -8,6 +8,7 @@ import {
   dayFlags,
   fastEndTime,
   nutritionDayType,
+  nutritionActuals,
   parseHealthParams,
   recoveryScore,
   resolveNutrition,
@@ -117,4 +118,23 @@ test('any date can override its nutrition plan to vegetarian or fast without cha
   assert.equal(nutritionDayType(scheduledThursday, state), 'fastThu');
   assert.deepEqual(fastEndTime(scheduledThursday, state), { hour: 18, label: '6 PM', noMoon: false });
   assert.ok(resolveNutrition(scheduledThursday, state).meals.flatMap((meal) => meal.options).flatMap((option) => option.items).every((item) => !/egg/i.test(item)));
+});
+
+test('daily green tea is zero-calorie tracking and coconut water counts toward macros and hydration', () => {
+  const date = '2026-08-03';
+  const state = defaultState();
+  state.mealLogs[date] = { eaten: {}, extras: [], water: 1, flags: {}, choices: {} };
+  state.beverageLogs[date] = { greenTeaAm: true, greenTeaPm: true, coconutWater: true };
+  const actual = nutritionActuals(date, state);
+  assert.equal(actual.kcal, 45);
+  assert.equal(actual.carbs, 10.5);
+  assert.equal(actual.protein, 0.5);
+  assert.equal(actual.water, 1.25);
+
+  state.beverageLogs[date].coconutWater = false;
+  const teaOnly = nutritionActuals(date, state);
+  assert.deepEqual(
+    { kcal: teaOnly.kcal, carbs: teaOnly.carbs, protein: teaOnly.protein, water: teaOnly.water },
+    { kcal: 0, carbs: 0, protein: 0, water: 1 },
+  );
 });

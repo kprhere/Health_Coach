@@ -65,6 +65,7 @@ test('custom machines remain first-class data through encrypted cloud sync', asy
       defaultSets: 4, repLow: 8, repHigh: 12, rpe: 8, restSec: 120, custom: true,
     };
     state.dayOverrides['2026-08-03'] = 'fast2';
+    state.beverageLogs['2026-08-03'] = { greenTeaAm: true, greenTeaPm: true, coconutWater: false };
     assert.ok(exerciseNames(state).includes('Gym80 Glute Drive'));
     assert.equal(exerciseMeta('Gym80 Glute Drive', state).defaultSets, 4);
     assert.equal(muscleGroupOf('Gym80 Glute Drive', state), 'Glutes');
@@ -74,6 +75,7 @@ test('custom machines remain first-class data through encrypted cloud sync', asy
     const pulled = await pullRemote('https://worker.test', syncId, key);
     assert.deepEqual(pulled.state.customExercises, state.customExercises);
     assert.deepEqual(pulled.state.dayOverrides, state.dayOverrides);
+    assert.deepEqual(pulled.state.beverageLogs, state.beverageLogs);
   } finally {
     globalThis.fetch = originalFetch;
   }

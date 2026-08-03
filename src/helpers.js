@@ -4,7 +4,7 @@
 // ============================================================
 import {
   PROGRAM, NUTRITION, EXERCISES, SEED_SCANS, HABITS,
-  PROFILE_DEFAULT, SETTINGS_DEFAULT, STORAGE_KEY, HEALTH_PARAM_MAP,
+  PROFILE_DEFAULT, SETTINGS_DEFAULT, STORAGE_KEY, HEALTH_PARAM_MAP, DAILY_BEVERAGES,
 } from './data.js';
 import { targetsWithFallback, mealPlanFor, nutritionProfile } from './nutritionEngine.js';
 
@@ -33,6 +33,7 @@ export function defaultState() {
     settings: { ...SETTINGS_DEFAULT },
     workoutSessions: {}, // key -> session
     mealLogs: {},        // key -> { eaten:{}, extras:[], water:0, flags:{} }
+    beverageLogs: {},    // key -> { greenTeaAm, greenTeaPm, coconutWater }
     habitLogs: {},       // key -> { habitKey:true }
     watchLogs: {},       // key -> { steps, ... }
     supplementLogs: {},  // key -> { suppKey:true }
@@ -382,7 +383,14 @@ export function nutritionActuals(key, state) {
     p += o.p; c += o.c; f += o.f; kcal += o.kcal;
   });
   (log.extras || []).forEach((e) => { p += e.p || 0; c += e.c || 0; f += e.f || 0; kcal += e.kcal || 0; });
-  return { protein: p, carbs: c, fat: f, kcal, water: log.water || 0, log };
+  const beverageLog = (state.beverageLogs && state.beverageLogs[key]) || {};
+  let beverageWater = 0;
+  DAILY_BEVERAGES.forEach((drink) => {
+    if (!beverageLog[drink.key]) return;
+    p += drink.p || 0; c += drink.c || 0; f += drink.f || 0; kcal += drink.kcal || 0;
+    beverageWater += drink.water || 0;
+  });
+  return { protein: p, carbs: c, fat: f, kcal, water: (log.water || 0) + beverageWater, log, beverageLog };
 }
 
 export function nutritionAdherence(key, state) {
