@@ -23,12 +23,12 @@ export const PROFILE_DEFAULT = {
 };
 
 export const SETTINGS_DEFAULT = {
-  eggAllowed: true,
   units: 'imperial',
   proteinTarget: 190,
   waterTargetL: 3.75,
   stepsTarget: 10000,
   sleepTargetH: 7.5,
+  deficitPercent: 20,                  // fat-loss deficit vs maintenance (drives all calorie + food targets)
   // ---- program calendar (all editable in More, week/day recalculate from these) ----
   programStartDate: '2026-07-14',      // program day 1
   restartPhaseStartDate: '2026-07-14', // restart phase day 1
@@ -42,6 +42,9 @@ export const SETTINGS_DEFAULT = {
   labWarningOn: true,                  // show biotin lab-interference warnings
   upcomingLabDate: '',                 // YYYY-MM-DD, blank = none scheduled
   pauseBiotinBeforeLabs: true,         // remind to pause biotin before blood work
+  // ---- encrypted cross-device sync (passphrase is stored separately, never here) ----
+  syncUrl: '',                         // your Cloudflare Worker URL, e.g. https://acp-sync.<you>.workers.dev
+  syncAuto: false,                     // pull on open + push on change
 };
 
 // shown on Home + README
@@ -385,6 +388,8 @@ export const NUTRITION = {
     training: { kcal: 2400, protein: 195, carbs: 235, fat: 70, fiber: 35, waterL: 3.75 },
     rest: { kcal: 2100, protein: 190, carbs: 165, fat: 68, fiber: 35, waterL: 3.5 },
     fastThu: { kcal: 2000, protein: 185, carbs: 150, fat: 62, fiber: 32, waterL: 3.75 },
+    noMoonFast1: { kcal: 2100, protein: 190, carbs: 165, fat: 62, fiber: 32, waterL: 3.75 },
+    noMoonFast2: { kcal: 2050, protein: 190, carbs: 150, fat: 62, fiber: 32, waterL: 3.75 },
     vegSat: { kcal: 2150, protein: 180, carbs: 190, fat: 65, fiber: 40, waterL: 3.5 },
   },
   plans: {
@@ -422,7 +427,9 @@ export const NUTRITION = {
   quickAdds: [
     { label: 'Whey scoop', p: 24, c: 3, f: 1, kcal: 120, meat: false },
     { label: 'Greek yogurt', p: 17, c: 8, f: 4, kcal: 130, meat: false },
-    { label: 'Egg', p: 6, c: 1, f: 5, kcal: 78, meat: false },
+    { label: '3 egg whites', p: 11, c: 1, f: 0, kcal: 51, meat: false, egg: true },
+    { label: '4 egg whites', p: 14, c: 1, f: 0, kcal: 68, meat: false, egg: true },
+    { label: 'Egg', p: 6, c: 1, f: 5, kcal: 78, meat: false, egg: true },
     { label: 'Chicken 150g', p: 46, c: 0, f: 6, kcal: 250, meat: true },
     { label: 'Fish 150g', p: 34, c: 0, f: 9, kcal: 220, meat: true },
     { label: 'Dal 1 bowl', p: 12, c: 30, f: 4, kcal: 200, meat: false },
@@ -434,6 +441,14 @@ export const NUTRITION = {
     { label: 'Water 500 ml', water: 0.5, meat: false },
   ],
 };
+
+// Daily drinks are stored separately from indexed meal slots so adding a new
+// drink never shifts or corrupts existing meal completion history.
+export const DAILY_BEVERAGES = [
+  { key: 'greenTeaAm', label: 'Unsweetened green tea', timing: '10:00 AM', detail: 'First cup; count caffeine from coffee and other tea too.', p: 0, c: 0, f: 0, kcal: 0, water: 0 },
+  { key: 'greenTeaPm', label: 'Unsweetened green tea', timing: '3:00 PM', detail: 'Second cup; use decaf or skip if caffeine affects sleep.', p: 0, c: 0, f: 0, kcal: 0, water: 0 },
+  { key: 'coconutWater', label: 'Unsweetened coconut water', timing: '250 ml around sport', detail: 'Useful option after sweaty swim/badminton; not during a fast.', p: 0.5, c: 10.5, f: 0, kcal: 45, water: 0.25, potassiumMg: 413, sportOption: true },
+];
 
 // ============================================================
 // SUPPLEMENTS (daily)
@@ -525,10 +540,43 @@ export const WATCH_FIELDS = [
   { key: 'standHours', label: 'Stand Hours', unit: 'hr' },
   { key: 'restingHR', label: 'Resting HR', unit: 'bpm' },
   { key: 'sleepH', label: 'Sleep', unit: 'hr' },
+  { key: 'sleepScore', label: 'Sleep Score', unit: '/100' },
+  { key: 'hrv', label: 'HRV', unit: 'ms' },
   { key: 'vo2max', label: 'VO2 Max', unit: '' },
+  { key: 'walkingHR', label: 'Walking HR', unit: 'bpm' },
+  { key: 'spo2', label: 'Blood Oxygen', unit: '%' },
+  { key: 'respiratoryRate', label: 'Respiratory Rate', unit: 'br/min' },
+  { key: 'distance', label: 'Walk+Run Distance', unit: 'km' },
+  { key: 'flights', label: 'Flights Climbed', unit: '' },
+  { key: 'basalCal', label: 'Resting Energy', unit: 'kcal' },
   { key: 'workoutCal', label: 'Workout Calories', unit: 'kcal' },
+  { key: 'workoutMin', label: 'Workout Minutes', unit: 'min' },
   { key: 'avgHR', label: 'Average HR', unit: 'bpm' },
-];
+].filter((f) => f.label);
+
+// Apple Health Shortcut deep-link: query param -> watch field key.
+// A Shortcut reads these HealthKit values and opens the app with e.g.
+//   ?steps=9412&sleep=7.3&rhr=58&hrv=64&sleepScore=88&vo2max=44&active=540&spo2=98
+export const HEALTH_PARAM_MAP = {
+  steps: 'steps',
+  active: 'activeCal', activeCal: 'activeCal',
+  basal: 'basalCal', basalCal: 'basalCal',
+  exercise: 'exerciseMin', exerciseMin: 'exerciseMin',
+  stand: 'standHours', standHours: 'standHours',
+  rhr: 'restingHR', restingHR: 'restingHR',
+  walkingHR: 'walkingHR', walkHR: 'walkingHR',
+  sleep: 'sleepH', sleepH: 'sleepH',
+  sleepScore: 'sleepScore',
+  hrv: 'hrv',
+  vo2max: 'vo2max', vo2: 'vo2max',
+  spo2: 'spo2', oxygen: 'spo2', bloodOxygen: 'spo2',
+  respiratoryRate: 'respiratoryRate', respRate: 'respiratoryRate', resp: 'respiratoryRate',
+  distance: 'distance', distanceKm: 'distance',
+  flights: 'flights', flightsClimbed: 'flights',
+  workoutCal: 'workoutCal',
+  workoutMin: 'workoutMin', workout: 'workoutMin',
+  avgHR: 'avgHR',
+};
 
 export const DAY_NAMES = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
 export const DAY_SHORT = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
@@ -594,5 +642,7 @@ export const DAY_VARIANTS = {
   training: { label: 'Training day', tone: 'cyan', why: 'Highest carbs and calories to fuel lifting and refill glycogen.' },
   rest:     { label: 'Rest day', tone: 'violet', why: 'Lower carbs, protein held high to keep recovery and muscle up.' },
   fastThu:  { label: 'Fast plus swim', tone: 'amber', why: 'Fasted until 6 PM, then a gentle break and a high-protein veg dinner around the swim.' },
-  vegSat:   { label: 'Vegetarian day', tone: 'green', why: 'No chicken or fish. Protein anchored on whey, paneer, tofu, dal and Greek yogurt.' },
+  noMoonFast1: { label: 'No-moon fast · 1 PM', tone: 'amber', why: 'Fasted until 1 PM, followed by a fully vegetarian high-protein plan.' },
+  noMoonFast2: { label: 'No-moon fast · 2 PM', tone: 'amber', why: 'Fasted until 2 PM, followed by a fully vegetarian high-protein plan.' },
+  vegSat:   { label: 'Vegetarian day', tone: 'green', why: 'No chicken, fish or eggs. Protein anchored on whey, paneer, tofu, dal and Greek yogurt.' },
 };

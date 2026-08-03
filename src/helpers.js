@@ -4,8 +4,11 @@
 // ============================================================
 import {
   PROGRAM, NUTRITION, EXERCISES, SEED_SCANS, HABITS,
-  PROFILE_DEFAULT, SETTINGS_DEFAULT, STORAGE_KEY,
+  PROFILE_DEFAULT, SETTINGS_DEFAULT, STORAGE_KEY, HEALTH_PARAM_MAP, DAILY_BEVERAGES,
 } from './data.js';
+import { targetsWithFallback, mealPlanFor, nutritionProfile } from './nutritionEngine.js';
+
+export { nutritionProfile };
 
 export const PROGRAM_START = '2026-07-08'; // start of the current fat-loss phase (latest scan)
 export const PHASE_NAME = 'Fat Loss Phase 1';
@@ -30,13 +33,16 @@ export function defaultState() {
     settings: { ...SETTINGS_DEFAULT },
     workoutSessions: {}, // key -> session
     mealLogs: {},        // key -> { eaten:{}, extras:[], water:0, flags:{} }
+    beverageLogs: {},    // key -> { greenTeaAm, greenTeaPm, coconutWater }
     habitLogs: {},       // key -> { habitKey:true }
     watchLogs: {},       // key -> { steps, ... }
     supplementLogs: {},  // key -> { suppKey:true }
     bodyScans: [...SEED_SCANS],
     saturdayMode: {},    // key -> 'class' | 'fallback'
+    dayOverrides: {},    // key -> 'veg' | 'fast1' | 'fast2' (nutrition only; workout stays scheduled)
     activity: {},        // key -> { badminton:bool, swim:bool }
     restartWeights: {},  // exerciseName -> { old:'', pct:70 }
+    customExercises: {}, // exerciseName -> user-owned machine metadata (cloud-synced)
     lastBackup: null,
   };
 }
@@ -78,6 +84,18 @@ export function validateImport(obj) {
   return keys.some((k) => k in obj);
 }
 
+// Built-in exercises ship with the app. Custom exercises live in user state,
+// so JSON backups and encrypted cloud sync carry them across app updates and
+// devices without allowing them to overwrite a built-in definition.
+export function exerciseLibrary(state) {
+  const custom = (state && state.customExercises) || {};
+  const safeCustom = Object.fromEntries(Object.entries(custom).filter(([name]) => !EXERCISES[name]));
+  return { ...EXERCISES, ...safeCustom };
+}
+
+export const exerciseNames = (state) => Object.keys(exerciseLibrary(state)).sort((a, b) => a.localeCompare(b));
+export const exerciseMeta = (name, state) => exerciseLibrary(state)[name] || {};
+
 export function exportJSON(state) { return JSON.stringify(state, null, 2); }
 
 export function download(filename, text, type = 'application/json') {
@@ -93,13 +111,30 @@ export function download(filename, text, type = 'application/json') {
 }
 
 // ---------- day flags ----------
-export function dayFlags(key) {
+export function nutritionDayType(key, state) {
+  const override = state && state.dayOverrides && state.dayOverrides[key];
+  if (override === 'fast1') return 'noMoonFast1';
+  if (override === 'fast2' || override === 'fast') return 'noMoonFast2'; // migrate the original manual fast
+  if (override === 'veg') return 'vegSat';
+  return PROGRAM.days[dowOf(key)].dayType;
+}
+
+export function fastEndTime(key, state) {
+  const dayType = nutritionDayType(key, state);
+  if (dayType === 'noMoonFast1') return { hour: 13, label: '1 PM', noMoon: true };
+  if (dayType === 'noMoonFast2') return { hour: 14, label: '2 PM', noMoon: true };
+  if (dayType === 'fastThu') return { hour: 18, label: '6 PM', noMoon: false };
+  return null;
+}
+
+export function dayFlags(key, state) {
   const dow = dowOf(key);
+  const dayType = nutritionDayType(key, state);
   return {
     dow,
     swimDay: dow === 2 || dow === 4,
-    fastDay: dow === 4,
-    vegDay: dow === 4 || dow === 6,
+    fastDay: dayType === 'fastThu' || dayType === 'noMoonFast1' || dayType === 'noMoonFast2',
+    vegDay: dayType === 'fastThu' || dayType === 'noMoonFast1' || dayType === 'noMoonFast2' || dayType === 'vegSat',
     badmintonAvailable: dow >= 1 && dow <= 5,
     classDay: dow === 6,
   };
@@ -137,10 +172,11 @@ export function applyBadmintonAdjustment(targets) {
 }
 
 export function resolveNutrition(key, state) {
-  const dow = dowOf(key);
-  const dayType = PROGRAM.days[dow].dayType;
-  let targets = { ...NUTRITION.targets[dayType] };
-  const meals = NUTRITION.plans[dayType] || [];
+  const dayType = nutritionDayType(key, state);
+  // targets + meal options are DERIVED from the latest scan and goal
+  let targets = targetsWithFallback(dayType, state);
+  const profile = targets._profile;
+  const meals = mealPlanFor(dayType, state);
   const adjustments = [];
   const act = (state.activity && state.activity[key]) || {};
   if (act.badminton) {
@@ -148,11 +184,11 @@ export function resolveNutrition(key, state) {
     adjustments.push('Badminton played: +40g carbs, +0.5 L water, add electrolytes. Protein unchanged.');
   }
   if (act.swim) adjustments.push('Swim done: extra hydration, add protein if dinner is delayed.');
-  return { dayType, targets, meals, adjustments };
+  return { dayType, targets, meals, adjustments, profile };
 }
 
 export function getDayPlan(key, state) {
-  return { key, flags: dayFlags(key), workout: resolveWorkout(key, state), nutrition: resolveNutrition(key, state) };
+  return { key, flags: dayFlags(key, state), workout: resolveWorkout(key, state), nutrition: resolveNutrition(key, state) };
 }
 
 // ============================================================
@@ -288,8 +324,8 @@ export function getBestPerformance(name, state) {
   };
 }
 
-export function increment(name) {
-  const p = EXERCISES[name]?.p || '';
+export function increment(name, state) {
+  const p = exerciseMeta(name, state).p || '';
   const small = /Delt|Bicep|Tricep|Calf|Calves|Ab|Oblique|Core|Forearm|Brachialis/i.test(p);
   return small ? 2.5 : 5;
 }
@@ -305,8 +341,8 @@ export function getNextTarget(name, state, rx) {
   const setsN = last.sets.length;
   const hitTop = last.sets.every((s) => s.reps >= repHigh) && (top.rpe == null || top.rpe <= targetRpe + 0.5);
   if (hitTop) {
-    const nw = top.weight + increment(name);
-    return { text: `${nw} lb x ${repLow} for ${setsN} sets`, note: `Hit top reps last time. Add ${increment(name)} lb and reset to the bottom of the range.` };
+    const nw = top.weight + increment(name, state);
+    return { text: `${nw} lb x ${repLow} for ${setsN} sets`, note: `Hit top reps last time. Add ${increment(name, state)} lb and reset to the bottom of the range.` };
   }
   const targetReps = Math.min(repHigh, Math.max(...last.sets.map((s) => s.reps)) + 1);
   return { text: `${top.weight} lb x ${targetReps} for ${setsN} sets`, note: 'Keep the weight and add a rep per set toward the top of the range.' };
@@ -335,13 +371,26 @@ export function rxForExercise(name, plan) {
 // NUTRITION actuals + adherence
 // ============================================================
 export function nutritionActuals(key, state) {
-  const log = (state.mealLogs && state.mealLogs[key]) || { eaten: {}, extras: [], water: 0, flags: {} };
-  const dow = dowOf(key);
-  const meals = NUTRITION.plans[PROGRAM.days[dow].dayType] || [];
+  const log = (state.mealLogs && state.mealLogs[key]) || { eaten: {}, extras: [], water: 0, flags: {}, choices: {} };
+  const meals = mealPlanFor(nutritionDayType(key, state), state);
+  const choices = log.choices || {};
   let p = 0, c = 0, f = 0, kcal = 0;
-  meals.forEach((m, i) => { if (log.eaten && log.eaten[i]) { p += m.p; c += m.c; f += m.f; kcal += m.kcal; } });
+  meals.forEach((m, i) => {
+    if (!(log.eaten && log.eaten[i])) return;
+    const opts = m.options || [];
+    if (!opts.length) return;
+    const o = opts[Math.min(choices[i] ?? 0, opts.length - 1)];
+    p += o.p; c += o.c; f += o.f; kcal += o.kcal;
+  });
   (log.extras || []).forEach((e) => { p += e.p || 0; c += e.c || 0; f += e.f || 0; kcal += e.kcal || 0; });
-  return { protein: p, carbs: c, fat: f, kcal, water: log.water || 0, log };
+  const beverageLog = (state.beverageLogs && state.beverageLogs[key]) || {};
+  let beverageWater = 0;
+  DAILY_BEVERAGES.forEach((drink) => {
+    if (!beverageLog[drink.key]) return;
+    p += drink.p || 0; c += drink.c || 0; f += drink.f || 0; kcal += drink.kcal || 0;
+    beverageWater += drink.water || 0;
+  });
+  return { protein: p, carbs: c, fat: f, kcal, water: (log.water || 0) + beverageWater, log, beverageLog };
 }
 
 export function nutritionAdherence(key, state) {
@@ -352,6 +401,51 @@ export function nutritionAdherence(key, state) {
   const calClose = a.kcal === 0 ? 0 : 1 - Math.min(Math.abs(a.kcal - targets.kcal) / (targets.kcal || 1), 1);
   const pct = Math.round((proteinPct * 0.45 + waterPct * 0.2 + calClose * 0.35) * 100);
   return { pct, actual: a, targets };
+}
+
+// ---------- Apple Health deep-link ingestion ----------
+// Reads #health?steps=..&sleep=..&rhr=.. from a URL an Apple Shortcut opens.
+// Legacy ?steps=.. query strings remain supported, but the app now generates
+// fragments so private Health values never leave the browser in an HTTP URL.
+// and returns { date, patch, count } to merge into that day's watch log.
+const HEALTH_FIELD_RANGES = {
+  steps: [0, 250000], activeCal: [0, 20000], basalCal: [0, 10000],
+  exerciseMin: [0, 1440], standHours: [0, 24], restingHR: [20, 250],
+  walkingHR: [20, 250], sleepH: [0, 24], sleepScore: [0, 100],
+  hrv: [0, 1000], vo2max: [5, 100], spo2: [50, 100],
+  respiratoryRate: [2, 80], distance: [0, 1000], flights: [0, 10000],
+  workoutCal: [0, 20000], workoutMin: [0, 1440], avgHR: [20, 250],
+};
+
+function healthParamString(input) {
+  const raw = String(input || '').trim();
+  if (raw.startsWith('#health?')) return raw.slice('#health?'.length);
+  if (raw.startsWith('#')) return raw.slice(1);
+  if (raw.startsWith('?')) return raw.slice(1);
+  return raw;
+}
+
+function strictHealthNumber(raw, field) {
+  const text = String(raw || '').trim();
+  if (!/^(?:\d+(?:\.\d*)?|\.\d+)$/.test(text)) return null;
+  const value = Number(text);
+  const [min, max] = HEALTH_FIELD_RANGES[field] || [0, Number.MAX_SAFE_INTEGER];
+  return Number.isFinite(value) && value >= min && value <= max ? value : null;
+}
+
+export function parseHealthParams(input) {
+  const p = new URLSearchParams(healthParamString(input));
+  if (![...p.keys()].length) return null;
+  const dp = p.get('date');
+  const date = dp && /^\d{4}-\d{2}-\d{2}$/.test(dp) && toKey(parseKey(dp)) === dp ? dp : todayKey();
+  const patch = {};
+  for (const [param, field] of Object.entries(HEALTH_PARAM_MAP)) {
+    if (field in patch) continue; // aliases map to one stored value and count once
+    const value = strictHealthNumber(p.get(param), field);
+    if (value != null) patch[field] = String(value);
+  }
+  const count = Object.keys(patch).length;
+  return count ? { date, patch, count } : null;
 }
 
 // ---------- watch / recovery ----------
@@ -434,8 +528,8 @@ export function dailyScore(key, state) {
 // ============================================================
 // ANALYTICS  (volume + superset / finisher completion)
 // ============================================================
-export function muscleGroupOf(name) {
-  const p = EXERCISES[name]?.p || '';
+export function muscleGroupOf(name, state) {
+  const p = exerciseMeta(name, state).p || '';
   if (/Chest/i.test(p)) return 'Chest';
   if (/Lat|Back|Trap/i.test(p)) return 'Back';
   if (/Delt|Shoulder/i.test(p)) return 'Shoulders';
@@ -458,7 +552,7 @@ export function volumeByExercise(state) {
 
 export function volumeByMuscle(state) {
   const out = {};
-  allSetRecords(state).forEach((r) => { const g = muscleGroupOf(r.name); out[g] = (out[g] || 0) + r.weight * r.reps; });
+  allSetRecords(state).forEach((r) => { const g = muscleGroupOf(r.name, state); out[g] = (out[g] || 0) + r.weight * r.reps; });
   return out;
 }
 
@@ -518,12 +612,184 @@ function mondayOf(key) {
   return addDays(key, -diff);
 }
 
+export const fmtVol = (v) => (v >= 1000 ? `${(v / 1000).toFixed(v >= 10000 ? 0 : 1)}k` : `${Math.round(v)}`);
+
+// ---------- week-over-week training volume improvement ----------
+// The current week is usually mid-progress, so the headline compares the
+// last COMPLETED week with the one before it (a clean full-vs-full number),
+// and reports the current week separately as "so far".
+export function volumeTrend(state) {
+  const weeks = weeklyVolumeSeries(state, 6);
+  const n = weeks.length;
+  const current = weeks[n - 1] || { value: 0 };
+  const lastFull = weeks[n - 2] || { value: 0 };
+  const prevFull = weeks[n - 3] || { value: 0 };
+  const pct = prevFull.value > 0 ? Math.round(((lastFull.value - prevFull.value) / prevFull.value) * 100) : null;
+  const curPct = lastFull.value > 0 ? Math.round(((current.value - lastFull.value) / lastFull.value) * 100) : null;
+  return {
+    current: current.value, lastFull: lastFull.value, prevFull: prevFull.value,
+    pct, up: pct != null && pct >= 0, curPct, hasData: lastFull.value > 0 || current.value > 0,
+  };
+}
+
+// ---------- muscle-group volume over a recent window ----------
+export function volumeByMuscleWindow(state, days = 21, endKey = todayKey()) {
+  const start = addDays(endKey, -days);
+  const out = {};
+  allSetRecords(state).forEach((r) => {
+    if (r.date > start && r.date <= endKey) {
+      const g = muscleGroupOf(r.name, state);
+      out[g] = (out[g] || 0) + r.weight * r.reps;
+    }
+  });
+  return out;
+}
+
+// count of working SETS per muscle group in a recent window
+export function setsByMuscleWindow(state, days = 21, endKey = todayKey()) {
+  const start = addDays(endKey, -days);
+  const out = {};
+  allSetRecords(state).forEach((r) => {
+    if (r.date > start && r.date <= endKey) {
+      const g = muscleGroupOf(r.name, state);
+      out[g] = (out[g] || 0) + 1;
+    }
+  });
+  return out;
+}
+
+// ---------- smart lagging-muscle detector ----------
+// Uses weekly SET COUNT (the standard training-volume metric), NOT tonnage -
+// otherwise arms and delts, which always move less weight than legs, would
+// be flagged forever. Flags muscles below the effective range, missing, or
+// falling week over week, and gives an actionable fix. ~8-12 sets/week is
+// the growth range; below 6 is under-stimulated.
+const BALANCE_MUSCLES = ['Chest', 'Back', 'Shoulders', 'Biceps', 'Triceps', 'Quads', 'Hamstrings', 'Glutes', 'Calves', 'Core'];
+const LOW_SETS = 6;
+export function muscleBalance(state) {
+  const days = 21, weeks = days / 7;
+  const recent = setsByMuscleWindow(state, days);
+  const prior = setsByMuscleWindow(state, days, addDays(todayKey(), -days));
+  const ranked = BALANCE_MUSCLES
+    .map((m) => ({ muscle: m, sets: Math.round(((recent[m] || 0) / weeks) * 10) / 10, prevSets: Math.round(((prior[m] || 0) / weeks) * 10) / 10 }))
+    .sort((a, b) => b.sets - a.sets);
+  const totalSets = ranked.reduce((sum, x) => sum + x.sets, 0);
+  const hints = [];
+  if (totalSets >= 10) {
+    ranked.forEach(({ muscle, sets, prevSets }) => {
+      const low = muscle.toLowerCase();
+      if (sets === 0) {
+        hints.push({ muscle, kind: 'missing', tone: 'warn', text: `No direct ${low} sets in 3 weeks. Add a ${low} exercise to your next session.` });
+      } else if (sets < LOW_SETS) {
+        hints.push({ muscle, kind: 'low', tone: 'warn', text: `${muscle} is light at ~${sets} sets/week — aim 8-12. Add 1-2 ${low} exercises or a few sets.` });
+      } else if (prevSets >= LOW_SETS && sets < prevSets * 0.6) {
+        hints.push({ muscle, kind: 'declining', tone: 'warn', text: `${muscle} dropped from ~${prevSets} to ~${sets} sets/week. Don't skip its sessions this week.` });
+      }
+    });
+  }
+  return { ranked, hints: hints.slice(0, 4), enough: totalSets >= 10 };
+}
+
+// ---------- per-muscle week-over-week volume change ----------
+// So you can see which groups climbed or slipped. Compares the last FULL
+// week with the week before (clean, not skewed by the in-progress week),
+// and also carries this week's running total.
+export function muscleWeekTrend(state) {
+  const cW = mondayOf(todayKey());
+  const w1 = addDays(cW, -7);   // last full week start
+  const w2 = addDays(cW, -14);  // prior full week start
+  const win = (start, end) => {
+    const o = {};
+    allSetRecords(state).forEach((r) => {
+      if (r.date >= start && r.date <= end) { const g = muscleGroupOf(r.name, state); o[g] = (o[g] || 0) + r.weight * r.reps; }
+    });
+    return o;
+  };
+  const cur = win(cW, todayKey());
+  const last = win(w1, addDays(cW, -1));
+  const prev = win(w2, addDays(w1, -1));
+  const skip = new Set(['Other', 'Conditioning', 'Mobility']);
+  const muscles = [...new Set([...Object.keys(cur), ...Object.keys(last), ...Object.keys(prev)])].filter((m) => !skip.has(m));
+  return muscles.map((m) => {
+    const cv = cur[m] || 0, lv = last[m] || 0, pv = prev[m] || 0;
+    const pct = pv > 0 ? Math.round(((lv - pv) / pv) * 100) : null; // null = new / no prior week
+    return { muscle: m, cur: cv, last: lv, prev: pv, pct, up: pct == null || pct >= 0 };
+  }).sort((a, b) => b.last - a.last);
+}
+
+// ============================================================
+// HOME "meaningful numbers" (all derived from existing data)
+// ============================================================
+
+// Recomp Signal: lean mass moving up while body fat holds flat/down.
+export function recompSignal(state) {
+  const scans = sortedScans(state);
+  if (scans.length < 2) return null;
+  const first = scans[0], last = scans[scans.length - 1];
+  const leanDelta = Math.round((last.leanMass - first.leanMass) * 10) / 10;
+  const bfDelta = Math.round((last.bodyFatPct - first.bodyFatPct) * 10) / 10;
+  const onTrack = leanDelta > 0 && bfDelta <= 1; // muscle up, fat flat or down
+  return {
+    leanDelta, bfDelta, count: scans.length,
+    leanSeries: scans.map((s) => s.leanMass),
+    firstLean: first.leanMass, lastLean: last.leanMass,
+    lastBf: last.bodyFatPct, onTrack,
+    text: onTrack
+      ? `Lean mass ${first.leanMass} → ${last.leanMass} lb while body fat holds near ${Math.round(last.bodyFatPct)}%. Muscle up, fat steady — recomposition confirmed.`
+      : `Lean mass ${first.leanMass} → ${last.leanMass} lb, body fat ${first.bodyFatPct} → ${last.bodyFatPct}%. Hold protein high and keep the deficit moderate to protect muscle.`,
+  };
+}
+
+// Consistency streak: consecutive days with a daily score at/above the threshold.
+export function consistencyStreak(state, threshold = 60) {
+  let n = 0, d = todayKey();
+  for (let i = 0; i < 180; i++) {
+    if (dailyScore(d, state).score >= threshold) { n += 1; d = addDays(d, -1); } else break;
+  }
+  return n;
+}
+
+// Energy balance vs maintenance (negative = fat-loss deficit).
+export function energyBalance(date, state) {
+  const a = nutritionActuals(date, state);
+  const prof = nutritionProfile(state);
+  const intake = Math.round(a.kcal);
+  return { intake, expenditure: prof.tdee, net: intake - prof.tdee, hasData: intake > 0 };
+}
+
+// Protein per lb of lean mass (>= 1.0 g/lb is muscle-sparing in a deficit).
+export function proteinPerLbLean(state) {
+  const prof = nutritionProfile(state);
+  const scan = latestScan(state);
+  const lean = scan?.leanMass || prof.leanMass;
+  if (!lean) return null;
+  const value = Math.round((prof.protein / lean) * 100) / 100;
+  return { value, muscleSparing: value >= 1.0 };
+}
+
+// Training-load summary for the Home card: weekly volume trend, hard sets
+// this week, the best e1RM lift, and any lagging muscle.
+export function trainingLoadSummary(state) {
+  const trend = volumeTrend(state);
+  const cW = mondayOf(todayKey());
+  const hardSets = allSetRecords(state).filter((r) => r.date >= cW && r.weight > 0).length;
+  const exVol = volumeByExercise(state);
+  let top = null;
+  Object.keys(exVol).forEach((n) => {
+    const b = getBestPerformance(n, state);
+    if (b && (!top || b.e1rm > top.e1rm)) top = { name: n, e1rm: Math.round(b.e1rm) };
+  });
+  const balance = muscleBalance(state);
+  return { trend, hardSets, top, lagging: balance.hints[0] || null };
+}
+
 // ============================================================
 // COACH INSIGHTS
 // ============================================================
 export function coachInsights(key, state, now) {
   const out = [];
-  const flags = dayFlags(key);
+  const flags = dayFlags(key, state);
+  const fastEnd = fastEndTime(key, state);
   const w = watchFor(key, state);
   const isToday = key === todayKey();
   const hr = now ? now.getHours() : 12;
@@ -535,14 +801,19 @@ export function coachInsights(key, state, now) {
 
   if (!isNaN(sleep) && sleep < 6.5) out.push({ type: 'warn', text: `Sleep was ${sleep}h. Cap lifting at RPE 7 today and skip grinding reps.` });
   if (act.badminton) out.push({ type: 'action', text: 'Badminton done. Add electrolytes and 30-50g carbs, push water +0.5 L. Keep protein the same.' });
-  if (flags.fastDay) {
-    if (isToday && hr < 18) out.push({ type: 'info', text: 'Fast active until 6 PM. Water, black coffee, green tea only. Emergency: one fruit OR one glass of milk.' });
-    else out.push({ type: 'action', text: 'Fast window over. Break it gently, then prioritise protein and hydration at dinner.' });
+  if (flags.fastDay && isToday) {
+    if (hr < fastEnd.hour) out.push({ type: 'info', text: `Fast active until ${fastEnd.label}. Water, black coffee and green tea only.` });
+    else out.push({ type: 'action', text: 'Fast window over. Break it gently, then prioritise vegetarian protein and hydration.' });
+  } else if (flags.fastDay) {
+    out.push({ type: 'info', text: `This is a ${fastEnd.noMoon ? 'no-moon ' : ''}fast day: fast until ${fastEnd.label}, then follow the vegetarian plan.` });
   }
   if (flags.classDay) {
     const mode = (state.saturdayMode && state.saturdayMode[key]) || 'class';
     if (mode === 'fallback') out.push({ type: 'info', text: 'BodyBalance swapped for the Full Body fallback. Vegetarian protein: whey, paneer, dal, Greek yogurt.' });
     else out.push({ type: 'info', text: 'Vegetarian day. Anchor protein with whey, Greek yogurt, paneer, tofu and dal.' });
+  }
+  if (flags.vegDay && !flags.fastDay && !flags.classDay) {
+    out.push({ type: 'info', text: 'Vegetarian override active. Chicken, fish and eggs are removed; anchor protein with whey, Greek yogurt, paneer, tofu and dal.' });
   }
   if (isToday && hr >= 13 && a.protein < t.protein * 0.5) out.push({ type: 'action', text: `Protein is at ${Math.round(a.protein)}g of ${t.protein}g. Add a whey shake or Greek yogurt.` });
   const steps = parseFloat(w.steps);
@@ -556,6 +827,9 @@ export function coachInsights(key, state, now) {
   }
   if (a.protein >= t.protein * 0.95 && a.water >= t.waterL * 0.9) out.push({ type: 'good', text: 'Protein and water on target. That is the recomp engine running.' });
   if (out.length === 0) out.push({ type: 'info', text: 'On plan. Log your work as you go and the coach adapts.' });
+  // surface the most urgent first: warnings, then actions, then wins, then info
+  const rank = { warn: 0, action: 1, good: 2, info: 3 };
+  out.sort((a, b) => rank[a.type] - rank[b.type]);
   return out;
 }
 

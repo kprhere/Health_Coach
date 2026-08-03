@@ -1,0 +1,13 @@
+# Cloudflare Worker config for the Recomp OS sync backend.
+# Deploy from this folder:
+#   npx wrangler login
+#   npx wrangler kv namespace create ACP_SYNC     # copy the returned id below
+#   npx wrangler deploy
+name = "acp-sync"
+main = "src/worker.js"
+compatibility_date = "2024-11-01"
+
+# After `wrangler kv namespace create ACP_SYNC`, paste the printed id here:
+kv_namespaces = [
+  { binding = "ACP_SYNC", id = "b0b3e072052a4716b06d513bf742c417" }
+]
