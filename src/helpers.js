@@ -475,7 +475,28 @@ export function recoveryScore(key, state) {
   return { pct, sleep: isNaN(sleep) ? null : sleep, maxPain, rhr: isNaN(rhr) ? null : rhr };
 }
 
+// Non-veg keyword check for the "extras" quick-add log — the structured
+// meal plan already hides non-veg options on veg days (see mealPlanFor's
+// safety filter), so this only catches a manually-added exception.
+const NON_VEG_RE = /chicken|fish|mutton|prawn|shrimp|turkey|meat|beef|pork|salmon|tuna|\begg\b/i;
+
 // ---------- habits ----------
+// Which Rules-group habits even apply today. Only Thursday needs the fast +
+// its own veg rule, only Saturday needs its veg rule + BodyBalance (and only
+// when BodyBalance itself was picked over the lifting fallback) - a rule
+// that doesn't apply today must not drag the score down.
+export function habitApplicability(key, state) {
+  const dow = dowOf(key);
+  const flags = dayFlags(key, state);
+  const satMode = (state.saturdayMode && state.saturdayMode[key]) || 'class';
+  return {
+    thu_fast: flags.fastDay,
+    thu_veg: dow === 4,
+    sat_veg: dow === 6,
+    bodybalance: dow === 6 && satMode === 'class',
+  };
+}
+
 export function habitStatus(key, state) {
   const manual = (state.habitLogs && state.habitLogs[key]) || {};
   const a = nutritionActuals(key, state);
@@ -485,6 +506,8 @@ export function habitStatus(key, state) {
   const prog = s ? workoutProgress(s) : { done: 0, total: 0 };
   const act = (state.activity && state.activity[key]) || {};
   const supp = (state.supplementLogs && state.supplementLogs[key]) || {};
+  const extras = a.log.extras || [];
+  const applicable = habitApplicability(key, state);
   const auto = {
     workout_logged: !!(s && Object.keys(s.entries || {}).length && prog.done > 0),
     workout_done: !!(s && (s.completed || (prog.total > 0 && prog.done === prog.total))),
@@ -500,15 +523,26 @@ export function habitStatus(key, state) {
     vitd: !!supp.vitd,
     magnesium: !!supp.magnesium,
     biotin: !!supp.biotin,
+    // fasting/veg are enforced structurally by the app (fast days only offer
+    // the post-fast meal; veg days hide non-veg meal options), so default to
+    // compliant and only flip false if a logged extra breaks the rule.
+    thu_fast: !extras.some((e) => NON_VEG_RE.test(e.name || '')) && extras.length < 3,
+    thu_veg: !extras.some((e) => NON_VEG_RE.test(e.name || '')),
+    sat_veg: !extras.some((e) => NON_VEG_RE.test(e.name || '')),
+    bodybalance: !!(s && s.completed),
   };
   const status = {};
-  HABITS.forEach((h) => { status[h.key] = (h.key in manual) ? !!manual[h.key] : (auto[h.key] || false); });
-  return { status, manual, auto };
+  HABITS.forEach((h) => {
+    if (applicable[h.key] === false) return; // not today's rule - leave out of status entirely
+    status[h.key] = (h.key in manual) ? !!manual[h.key] : (auto[h.key] || false);
+  });
+  return { status, manual, auto, applicable };
 }
 
 export function habitPct(key, state) {
   const { status } = habitStatus(key, state);
   const keys = Object.keys(status);
+  if (!keys.length) return 100;
   const done = keys.filter((k) => status[k]).length;
   return Math.round((done / keys.length) * 100);
 }

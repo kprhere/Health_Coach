@@ -434,9 +434,24 @@ function TrainTab({ ctx }) {
   const rec = recoveryScore(date, s);
   const balance = muscleBalance(s);
   const balanceTip = balance.hints[0];
+  const fastEnd = fastEndTime(date, s);
 
   const planIds = new Set(plan.blocks.map((b) => b.id));
-  const extras = Object.keys(session.entries).filter((id) => !planIds.has(id));
+  const extraIds = Object.keys(session.entries).filter((id) => !planIds.has(id));
+  // an added exercise renders right after the block it was inserted at, not
+  // always at the end - falls back to the end if that block no longer exists
+  // (e.g. the plan changed) or none was chosen.
+  const extrasByAfter = {};
+  const endExtras = [];
+  extraIds.forEach((id) => {
+    const afterId = session.entries[id].afterBlockId;
+    if (afterId && planIds.has(afterId)) (extrasByAfter[afterId] = extrasByAfter[afterId] || []).push(id);
+    else endExtras.push(id);
+  });
+  const insertPositions = [
+    ...plan.blocks.map((b) => ({ id: b.id, label: `After: ${b.name}` })),
+    { id: null, label: 'At the end' },
+  ];
 
   const blockFromEntry = (id, entry) => ({
     id, blockType: 'single', name: entry.name || entry.exName,
@@ -455,7 +470,10 @@ function TrainTab({ ctx }) {
             <span className={`block-status ${done ? 'on' : ''}`} />
             <div>
               <div className="block-title">{block.name}</div>
-              <div style={{ marginTop: 4 }}><span className={`block-kind ${block.blockType}`}>{block.blockType}</span></div>
+              <div style={{ marginTop: 4 }}>
+                <span className={`block-kind ${block.blockType}`}>{block.blockType}</span>
+                {entry.unplanned ? <span className="block-kind added">added</span> : null}
+              </div>
             </div>
           </div>
           <ChevronDown size={18} color="var(--muted)" style={{ transform: open ? 'none' : 'rotate(-90deg)', transition: '0.15s' }} />
@@ -494,9 +512,14 @@ function TrainTab({ ctx }) {
 
           {plan.blocks.length === 0 ? (
             <Card><EmptyState icon={Waves} title="No lifting scheduled" sub={fastEnd ? `Recovery day: fast until ${fastEnd.label}, then follow the vegetarian plan.` : 'Recovery day. Use the mobility and conditioning below.'} /></Card>
-          ) : plan.blocks.map(renderBlock)}
+          ) : plan.blocks.map((b) => (
+            <React.Fragment key={b.id}>
+              {renderBlock(b)}
+              {(extrasByAfter[b.id] || []).map((id) => renderBlock(blockFromEntry(id, session.entries[id])))}
+            </React.Fragment>
+          ))}
 
-          {extras.map((id) => renderBlock(blockFromEntry(id, session.entries[id])))}
+          {endExtras.map((id) => renderBlock(blockFromEntry(id, session.entries[id])))}
 
           <div className="btn-row" style={{ marginTop: 6 }}>
             <button className="btn sm" onClick={() => setAdding(true)}><Plus size={15} /> Add exercise</button>
@@ -543,8 +566,8 @@ function TrainTab({ ctx }) {
 
       {adding ? (
         <Sheet title="Add an exercise" onClose={() => setAdding(false)}>
-          <AddExercisePicker state={s} onPick={(name) => {
-            const { id, entry } = makeUnplannedEntry(name, s);
+          <AddExercisePicker state={s} positions={insertPositions} onPick={(name, afterId) => {
+            const { id, entry } = makeUnplannedEntry(name, s, afterId);
             ctx.patchSession(date, (x) => { x.entries[id] = entry; });
             setAdding(false);
           }} />
@@ -910,11 +933,12 @@ function HabitsTab({ ctx }) {
   const s = ctx.state;
   const { status } = habitStatus(date, s);
   const pct = habitPct(date, s);
+  const todaysHabits = useMemo(() => HABITS.filter((h) => h.key in status), [status]);
   const groups = useMemo(() => {
     const g = {};
-    HABITS.forEach((h) => { (g[h.group] = g[h.group] || []).push(h); });
+    todaysHabits.forEach((h) => { (g[h.group] = g[h.group] || []).push(h); });
     return g;
-  }, []);
+  }, [todaysHabits]);
 
   // streak: consecutive days back from today with habit pct >= 60
   const streak = useMemo(() => {
@@ -923,7 +947,7 @@ function HabitsTab({ ctx }) {
     return n;
   }, [s]);
 
-  const missed = HABITS.filter((h) => !status[h.key]);
+  const missed = todaysHabits.filter((h) => !status[h.key]);
 
   return (
     <div>
