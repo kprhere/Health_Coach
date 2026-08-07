@@ -186,7 +186,7 @@ export function MealCard({ meal, index, eaten, choiceIndex = 0, onChoose, onTogg
       <div className="meal-head">
         <div><span className="mh-title">{meal.name}</span> <span className="mh-time">{meal.time}</span></div>
         {onToggleEaten ? (
-          <button className={`check ${eaten ? 'on' : ''}`} onClick={onToggleEaten} aria-label="Mark eaten"><Check size={15} /></button>
+          <button className={`check ${eaten ? 'on' : ''}`} onClick={onToggleEaten} aria-label={`Mark ${meal.name} as ${eaten ? 'not eaten' : 'eaten'}`} aria-pressed={eaten}><Check size={15} /></button>
         ) : null}
       </div>
       {meal.fasting ? <div className="fp-note amber" style={{ marginTop: 8 }}>{meal.note}</div> : null}
@@ -222,7 +222,7 @@ export function SupplementTiming({ items, takenMap = {}, onToggle, adherence, sh
         const adh = adherence ? adherence(s.key) : null;
         return (
           <div className={`supp ${taken ? 'taken' : ''}`} key={s.key}>
-            <button className={`check ${taken ? 'on' : ''}`} onClick={() => onToggle && onToggle(s.key)} aria-label={`Mark ${s.name} taken`}><Check size={15} /></button>
+            <button className={`check ${taken ? 'on' : ''}`} onClick={() => onToggle && onToggle(s.key)} aria-label={`Mark ${s.name} ${taken ? 'not taken' : 'taken'}`} aria-pressed={taken}><Check size={15} /></button>
             <div className="supp-body">
               <div className="supp-top">
                 <span className="supp-name">{s.name}</span>
@@ -482,11 +482,11 @@ export function Sheet({ title, onClose, children }) {
   }, [onClose]);
   return (
     <div className="sheet-backdrop" onClick={onClose}>
-      <div className="sheet" onClick={(e) => e.stopPropagation()}>
+      <div className="sheet" role="dialog" aria-modal="true" aria-label={title} onClick={(e) => e.stopPropagation()}>
         <div className="sheet-grab" />
         <div className="card-head" style={{ marginBottom: 12 }}>
           <h3 style={{ margin: 0 }}>{title}</h3>
-          <button className="btn xs ghost" onClick={onClose}><X size={16} /></button>
+          <button className="btn xs ghost" onClick={onClose} aria-label={`Close ${title}`}><X size={16} /></button>
         </div>
         {children}
       </div>

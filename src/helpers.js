@@ -78,6 +78,66 @@ function mergeState(base, incoming) {
   return out;
 }
 
+// Merge a newer encrypted cloud snapshot into this device without treating the
+// snapshot as a replacement. Local dated logs always survive; cloud-only dates
+// and fields are added. This protects a device that has offline work which was
+// never pushed, while still letting a fresh device recover everything stored in
+// the cloud. The next auto-push writes the combined state back to the Worker.
+export function mergeSyncedState(localState, remoteState) {
+  const local = mergeState(defaultState(), localState && typeof localState === 'object' ? localState : {});
+  const remote = remoteState && typeof remoteState === 'object' ? remoteState : {};
+  const out = { ...local };
+
+  if (remote.profile && typeof remote.profile === 'object') out.profile = { ...local.profile, ...remote.profile };
+  if (remote.settings && typeof remote.settings === 'object') {
+    out.settings = { ...local.settings, ...remote.settings };
+    // Connection details belong to this browser/device. Keep them when set so
+    // a cloud pull cannot disconnect the device that just performed the pull.
+    if (local.settings.syncUrl) out.settings.syncUrl = local.settings.syncUrl;
+    out.settings.syncAuto = local.settings.syncAuto;
+  }
+  if (typeof remote.version === 'number') out.version = Math.max(local.version || 0, remote.version);
+
+  // Complex entries contain arrays of sets/meals. If both devices edited the
+  // same date, preserve this device's complete entry instead of partially
+  // combining arrays and risking corrupted or lost logs.
+  for (const key of ['workoutSessions', 'mealLogs']) {
+    const cloudMap = remote[key] && typeof remote[key] === 'object' ? remote[key] : {};
+    out[key] = { ...cloudMap, ...(local[key] || {}) };
+  }
+
+  // These per-date maps are safe to merge one field at a time. Local values
+  // win conflicts, including intentional false values.
+  for (const key of ['beverageLogs', 'habitLogs', 'watchLogs', 'supplementLogs', 'activity']) {
+    const cloudMap = remote[key] && typeof remote[key] === 'object' ? remote[key] : {};
+    const localMap = local[key] || {};
+    const dates = new Set([...Object.keys(cloudMap), ...Object.keys(localMap)]);
+    out[key] = {};
+    dates.forEach((date) => {
+      const cloudDay = cloudMap[date];
+      const localDay = localMap[date];
+      if (cloudDay && typeof cloudDay === 'object' && localDay && typeof localDay === 'object') out[key][date] = { ...cloudDay, ...localDay };
+      else out[key][date] = localDay !== undefined ? localDay : cloudDay;
+    });
+  }
+
+  // User-owned maps are additive. Never let a cloud snapshot remove something
+  // that still exists on this device.
+  for (const key of ['saturdayMode', 'dayOverrides', 'restartWeights', 'customExercises']) {
+    const cloudMap = remote[key] && typeof remote[key] === 'object' ? remote[key] : {};
+    out[key] = { ...cloudMap, ...(local[key] || {}) };
+  }
+
+  if (Array.isArray(remote.bodyScans)) {
+    const scans = new Map();
+    remote.bodyScans.forEach((scan) => { if (scan && scan.id) scans.set(scan.id, scan); });
+    (local.bodyScans || []).forEach((scan) => { if (scan && scan.id) scans.set(scan.id, scan); });
+    out.bodyScans = [...scans.values()];
+  }
+
+  return out;
+}
+
 export function validateImport(obj) {
   if (!obj || typeof obj !== 'object') return false;
   const keys = ['profile', 'settings', 'workoutSessions', 'mealLogs', 'bodyScans', 'watchLogs'];

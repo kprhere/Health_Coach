@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 
 import worker from '../cloudflare/src/worker.js';
 import { decryptJSON, deriveSync, encryptJSON, pullRemote, pushRemote } from '../src/sync.js';
-import { defaultState, exerciseMeta, exerciseNames, muscleGroupOf } from '../src/helpers.js';
+import { defaultState, exerciseMeta, exerciseNames, mergeSyncedState, muscleGroupOf } from '../src/helpers.js';
 
 function memoryEnvironment() {
   const values = new Map();
@@ -79,4 +79,33 @@ test('custom machines remain first-class data through encrypted cloud sync', asy
   } finally {
     globalThis.fetch = originalFetch;
   }
+});
+
+test('cloud restore adds remote data without deleting local logs', () => {
+  const local = defaultState();
+  local.settings.syncUrl = 'https://this-device.worker.test';
+  local.settings.syncAuto = true;
+  local.workoutSessions['2026-08-05'] = { date: '2026-08-05', entries: { local: { sets: [{ weight: '100', reps: '10' }] } } };
+  local.watchLogs['2026-08-05'] = { steps: '12000' };
+  local.habitLogs['2026-08-05'] = { workout_done: true, no_junk: false };
+  local.bodyScans.push({ id: 'local-scan', date: '2026-08-05', weight: 180 });
+
+  const remote = defaultState();
+  remote.settings.syncUrl = 'https://other-device.worker.test';
+  remote.settings.syncAuto = false;
+  remote.workoutSessions['2026-08-04'] = { date: '2026-08-04', entries: { cloud: { sets: [{ weight: '90', reps: '12' }] } } };
+  remote.workoutSessions['2026-08-05'] = { date: '2026-08-05', entries: { stale: { sets: [] } } };
+  remote.watchLogs['2026-08-05'] = { sleepH: '8', steps: '8000' };
+  remote.habitLogs['2026-08-05'] = { protein_hit: true, no_junk: true };
+  remote.bodyScans.push({ id: 'cloud-scan', date: '2026-08-04', weight: 181 });
+
+  const merged = mergeSyncedState(local, remote);
+  assert.deepEqual(merged.workoutSessions['2026-08-05'], local.workoutSessions['2026-08-05']);
+  assert.deepEqual(merged.workoutSessions['2026-08-04'], remote.workoutSessions['2026-08-04']);
+  assert.deepEqual(merged.watchLogs['2026-08-05'], { sleepH: '8', steps: '12000' });
+  assert.deepEqual(merged.habitLogs['2026-08-05'], { protein_hit: true, no_junk: false, workout_done: true });
+  assert.ok(merged.bodyScans.some((scan) => scan.id === 'local-scan'));
+  assert.ok(merged.bodyScans.some((scan) => scan.id === 'cloud-scan'));
+  assert.equal(merged.settings.syncUrl, local.settings.syncUrl);
+  assert.equal(merged.settings.syncAuto, true);
 });

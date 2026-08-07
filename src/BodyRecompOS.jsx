@@ -22,7 +22,7 @@ import {
   phaseInfo, programCalendar, sortedScans, latestScan, baselineScan, nextScanCountdown, monthlyTargetProgress,
   volumeByMuscle, volumeByExercise, supersetStats, finisherStats, weeklyVolumeSeries,
   allSetRecords, getBestPerformance, exportJSON, workoutCSV, download, validateImport,
-  defaultState, loadState, saveState,
+  defaultState, loadState, saveState, mergeSyncedState,
   supplementAdherence, hairHealthChecks, daysToLab,
   nutritionProfile, volumeTrend, muscleBalance, fmtVol, parseHealthParams, muscleWeekTrend,
   recompSignal, consistencyStreak, energyBalance, proteinPerLbLean, trainingLoadSummary,
@@ -317,9 +317,9 @@ function PlanTab({ ctx }) {
       <p className="page-sub">Weekly plan built from your Upper / Lower hybrid. Tap a day to see the workout and meals.</p>
 
       <div className="date-nav">
-        <button className="nav-btn" onClick={() => setDate(addDays(monday, -7))}><ChevronLeft size={18} /></button>
+        <button className="nav-btn" onClick={() => setDate(addDays(monday, -7))} aria-label="Previous week"><ChevronLeft size={18} /></button>
         <div className="dn-mid"><b>Week of {shortDate(monday)}</b><span>{prettyDate(date)}</span></div>
-        <button className="nav-btn" onClick={() => setDate(addDays(monday, 7))}><ChevronRight size={18} /></button>
+        <button className="nav-btn" onClick={() => setDate(addDays(monday, 7))} aria-label="Next week"><ChevronRight size={18} /></button>
       </div>
 
       <div className="week-grid">
@@ -463,9 +463,11 @@ function TrainTab({ ctx }) {
     if (!entry) return null;
     const done = blockDone(entry);
     const open = collapsed[block.id] !== true;
+    const toggleOpen = () => setCollapsed((c) => ({ ...c, [block.id]: !open ? false : true }));
     return (
       <div className={`block-card ${done ? 'done' : ''}`} key={block.id}>
-        <div className="block-head" onClick={() => setCollapsed((c) => ({ ...c, [block.id]: !open ? false : true }))}>
+        <div className="block-head" role="button" tabIndex={0} aria-expanded={open} aria-controls={`block-body-${block.id}`}
+          onClick={toggleOpen} onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); toggleOpen(); } }}>
           <div className="bh-lead">
             <span className={`block-status ${done ? 'on' : ''}`} />
             <div>
@@ -479,7 +481,7 @@ function TrainTab({ ctx }) {
           <ChevronDown size={18} color="var(--muted)" style={{ transform: open ? 'none' : 'rotate(-90deg)', transition: '0.15s' }} />
         </div>
         {open ? (
-          <div className="block-body">
+          <div className="block-body" id={`block-body-${block.id}`}>
             <BlockLogger block={block} entry={entry} plan={plan} state={s} onMutate={(fn) => ctx.mutateEntry(date, block.id, fn)} setRestart={ctx.setRestart} />
           </div>
         ) : null}
@@ -654,7 +656,7 @@ function FuelTab({ ctx }) {
               {log.extras.map((e, i) => (
                 <div className="row" key={i}>
                   <div className="row-main"><div className="row-title">{e.label}</div><div className="row-sub">{e.kcal} kcal · P {e.p}g · C {e.c}g · F {e.f}g</div></div>
-                  <button className="btn xs danger" onClick={() => ctx.setMeal(date, (x) => { x.extras.splice(i, 1); })}><Trash2 size={13} /></button>
+                  <button className="btn xs danger" onClick={() => ctx.setMeal(date, (x) => { x.extras.splice(i, 1); })} aria-label={`Remove ${e.label}`}><Trash2 size={13} /></button>
                 </div>
               ))}
             </Card>
@@ -666,14 +668,14 @@ function FuelTab({ ctx }) {
               const selected = !!(((s.beverageLogs || {})[date] || {})[drink.key]);
               const sportDay = flags.swimDay || !!((s.activity[date] || {}).badminton);
               return (
-                <div className="row" key={drink.key} onClick={() => ctx.toggleBeverage(date, drink.key)} style={{ cursor: 'pointer' }}>
-                  <button className={`check ${selected ? 'on' : ''}`}><Check size={15} /></button>
-                  <div className="row-main">
-                    <div className="row-title">{drink.label} · {drink.timing}</div>
-                    <div className="row-sub">{drink.detail}{drink.sportOption ? ` ${sportDay ? 'Recommended for today’s activity.' : 'Water is the default on a normal day.'}` : ''}</div>
-                  </div>
+                <button type="button" className="row row-action" key={drink.key} onClick={() => ctx.toggleBeverage(date, drink.key)} aria-pressed={selected}>
+                  <span className={`check ${selected ? 'on' : ''}`} aria-hidden="true"><Check size={15} /></span>
+                  <span className="row-main">
+                    <span className="row-title">{drink.label} · {drink.timing}</span>
+                    <span className="row-sub">{drink.detail}{drink.sportOption ? ` ${sportDay ? 'Recommended for today’s activity.' : 'Water is the default on a normal day.'}` : ''}</span>
+                  </span>
                   {drink.kcal ? <span className="num" style={{ fontSize: 11 }}>{drink.kcal} kcal</span> : null}
-                </div>
+                </button>
               );
             })}
             <div className="hint" style={{ marginTop: 8 }}>Green tea is a beverage, not a fat-loss treatment. Coconut water contains carbohydrate and breaks a fast; choose unsweetened products and check the package label.</div>
@@ -867,8 +869,8 @@ function BodyTab({ ctx }) {
             {scans.slice().reverse().map((sc) => (
               <div className="row" key={sc.id}>
                 <div className="row-main"><div className="row-title">{prettyDate(sc.date)}</div><div className="row-sub">{sc.weight} lb · {sc.bodyFatPct}% · waist {sc.waist} · VFA {sc.visceralFatArea}</div></div>
-                <button className="btn xs ghost" onClick={() => openEdit(sc)}><Pencil size={13} /></button>
-                <button className="btn xs danger" onClick={() => ctx.deleteScan(sc.id)}><Trash2 size={13} /></button>
+                <button className="btn xs ghost" onClick={() => openEdit(sc)} aria-label={`Edit scan from ${prettyDate(sc.date)}`}><Pencil size={13} /></button>
+                <button className="btn xs danger" onClick={() => ctx.deleteScan(sc.id)} aria-label={`Delete scan from ${prettyDate(sc.date)}`}><Trash2 size={13} /></button>
               </div>
             ))}
           </Card>
@@ -919,7 +921,7 @@ function WatchPanel({ ctx }) {
       <div className="hint">Import parser ready. Upload a CSV and map columns. Column mapping ships in a later version.</div>
       <label className="btn sm" style={{ marginTop: 8, display: 'inline-flex' }}>
         <Upload size={14} /> Choose CSV
-        <input type="file" accept=".csv" style={{ display: 'none' }} onChange={(e) => { const f = e.target.files?.[0]; if (f) alert(`Loaded ${f.name}. Import parser ready. Column mapping is coming in a later version.`); }} />
+        <input className="file-input" type="file" accept=".csv" onChange={(e) => { const f = e.target.files?.[0]; if (f) alert(`Loaded ${f.name}. Import parser ready. Column mapping is coming in a later version.`); }} />
       </label>
     </Card>
   );
@@ -948,6 +950,11 @@ function HabitsTab({ ctx }) {
   }, [s]);
 
   const missed = todaysHabits.filter((h) => !status[h.key]);
+  const allSelected = todaysHabits.length > 0 && missed.length === 0;
+
+  const toggleAll = () => {
+    ctx.setHabits(date, todaysHabits.map((h) => h.key), !allSelected);
+  };
 
   return (
     <div>
@@ -974,6 +981,13 @@ function HabitsTab({ ctx }) {
         </Card>
       </div>
 
+      <div className="habit-actions">
+        <span className="habit-count">{todaysHabits.length - missed.length} of {todaysHabits.length} selected</span>
+        <button className={`btn sm ${allSelected ? '' : 'primary'}`} onClick={toggleAll} aria-pressed={allSelected}>
+          <Check size={15} /> {allSelected ? 'Clear all' : 'Select all'}
+        </button>
+      </div>
+
       {Object.keys(groups).map((g) => (
         <div key={g}>
           <SectionTitle>{g}</SectionTitle>
@@ -981,10 +995,10 @@ function HabitsTab({ ctx }) {
             {groups[g].map((h) => {
               const on = status[h.key];
               return (
-                <div className="row" key={h.key} onClick={() => ctx.toggleHabit(date, h.key, !on)} style={{ cursor: 'pointer' }}>
-                  <button className={`check ${on ? 'on' : ''}`}><Check size={15} /></button>
-                  <div className="row-main"><div className="row-title">{h.label}</div></div>
-                </div>
+                <button type="button" className="row row-action" key={h.key} onClick={() => ctx.toggleHabit(date, h.key, !on)} aria-pressed={on}>
+                  <span className={`check ${on ? 'on' : ''}`} aria-hidden="true"><Check size={15} /></span>
+                  <span className="row-main"><span className="row-title">{h.label}</span></span>
+                </button>
               );
             })}
           </Card>
@@ -1217,10 +1231,10 @@ function SyncCard({ ctx }) {
         <input className="input mono" type={show ? 'text' : 'password'} placeholder="a long secret only you know" value={pass} onChange={(e) => savePass(e.target.value)} />
         <button className="btn xs ghost" style={{ marginTop: 6 }} onClick={() => setShow((v) => !v)}>{show ? 'Hide' : 'Show'} passphrase</button>
       </div>
-      <div className="row" onClick={() => ctx.setSetting('syncAuto', !s.settings.syncAuto)} style={{ cursor: 'pointer' }}>
-        <button className={`check ${s.settings.syncAuto ? 'on' : ''}`}><Check size={15} /></button>
-        <div className="row-main"><div className="row-title">Auto-sync</div><div className="row-sub">Pull on open, push a few seconds after any change</div></div>
-      </div>
+      <button type="button" className="row row-action" onClick={() => ctx.setSetting('syncAuto', !s.settings.syncAuto)} aria-pressed={s.settings.syncAuto}>
+        <span className={`check ${s.settings.syncAuto ? 'on' : ''}`} aria-hidden="true"><Check size={15} /></span>
+        <span className="row-main"><span className="row-title">Auto-sync</span><span className="row-sub">Pull on open, push a few seconds after any change</span></span>
+      </button>
       <div className="btn-row" style={{ marginTop: 10 }}>
         <button className="btn sm primary" disabled={ctx.syncBusy} onClick={ctx.doPush}><Upload size={14} /> Push to cloud</button>
         <button className="btn sm" disabled={ctx.syncBusy} onClick={ctx.doPull}><Download size={14} /> Pull from cloud</button>
@@ -1297,7 +1311,7 @@ function CustomMachineCard({ ctx }) {
       {Object.keys(custom).sort().map((name) => (
         <div className="row" key={name}>
           <div className="row-main"><div className="row-title">{name}</div><div className="row-sub">{custom[name].p || 'Other'} · {custom[name].eq || 'Machine'} · {custom[name].defaultSets || 3} sets</div></div>
-          <div className="btn-row"><button className="btn xs" onClick={() => edit(name)}>Edit</button><button className="btn xs danger" onClick={() => { if (confirm(`Delete ${name} from your custom library? Existing workout history is kept.`)) ctx.deleteCustomExercise(name); }}><Trash2 size={13} /></button></div>
+          <div className="btn-row"><button className="btn xs" onClick={() => edit(name)}>Edit</button><button className="btn xs danger" aria-label={`Delete ${name}`} onClick={() => { if (confirm(`Delete ${name} from your custom library? Existing workout history is kept.`)) ctx.deleteCustomExercise(name); }}><Trash2 size={13} /></button></div>
         </div>
       ))}
     </Card>
@@ -1397,14 +1411,14 @@ function MoreTab({ ctx }) {
               <input className="input mono" type="date" value={s.settings.upcomingLabDate || ''} onChange={(e) => ctx.setSetting('upcomingLabDate', e.target.value)} />
             </div>
 
-            <div className="row" onClick={() => ctx.setSetting('labWarningOn', !s.settings.labWarningOn)} style={{ cursor: 'pointer' }}>
-              <button className={`check ${s.settings.labWarningOn ? 'on' : ''}`}><Check size={15} /></button>
-              <div className="row-main"><div className="row-title">Show biotin lab-interference warnings</div><div className="row-sub">High-dose biotin can skew thyroid, troponin, vitamin D and hormone assays</div></div>
-            </div>
-            <div className="row" onClick={() => ctx.setSetting('pauseBiotinBeforeLabs', !s.settings.pauseBiotinBeforeLabs)} style={{ cursor: 'pointer' }}>
-              <button className={`check ${s.settings.pauseBiotinBeforeLabs ? 'on' : ''}`}><Check size={15} /></button>
-              <div className="row-main"><div className="row-title">Remind to pause biotin before labs</div><div className="row-sub">A stronger reminder appears in Fuel when a lab date is within 3 days</div></div>
-            </div>
+            <button type="button" className="row row-action" onClick={() => ctx.setSetting('labWarningOn', !s.settings.labWarningOn)} aria-pressed={s.settings.labWarningOn}>
+              <span className={`check ${s.settings.labWarningOn ? 'on' : ''}`} aria-hidden="true"><Check size={15} /></span>
+              <span className="row-main"><span className="row-title">Show biotin lab-interference warnings</span><span className="row-sub">High-dose biotin can skew thyroid, troponin, vitamin D and hormone assays</span></span>
+            </button>
+            <button type="button" className="row row-action" onClick={() => ctx.setSetting('pauseBiotinBeforeLabs', !s.settings.pauseBiotinBeforeLabs)} aria-pressed={s.settings.pauseBiotinBeforeLabs}>
+              <span className={`check ${s.settings.pauseBiotinBeforeLabs ? 'on' : ''}`} aria-hidden="true"><Check size={15} /></span>
+              <span className="row-main"><span className="row-title">Remind to pause biotin before labs</span><span className="row-sub">A stronger reminder appears in Fuel when a lab date is within 3 days</span></span>
+            </button>
           </Card>
         </div>
 
@@ -1416,7 +1430,7 @@ function MoreTab({ ctx }) {
           <Card>
             <div className="btn-row">
               <button className="btn sm" onClick={() => download('recomp-os-backup.json', exportJSON(s))}><Download size={14} /> Export JSON</button>
-              <label className="btn sm"><Upload size={14} /> Import JSON<input type="file" accept=".json" style={{ display: 'none' }} onChange={(e) => { const f = e.target.files?.[0]; if (f) doImport(f); }} /></label>
+              <label className="btn sm"><Upload size={14} /> Import JSON<input className="file-input" type="file" accept=".json" onChange={(e) => { const f = e.target.files?.[0]; if (f) doImport(f); }} /></label>
               <button className="btn sm ghost" onClick={() => download('workout-history.csv', workoutCSV(s), 'text/csv')}><Download size={14} /> Workout CSV</button>
             </div>
             {importErr ? <Banner tone="red" icon={AlertTriangle}>{importErr}</Banner> : null}
@@ -1553,6 +1567,11 @@ export default function BodyRecompOS() {
 
   const setWatch = (date, key, val) => setState((prev) => ({ ...prev, watchLogs: { ...prev.watchLogs, [date]: { ...(prev.watchLogs[date] || {}), [key]: val } } }));
   const toggleHabit = (date, key, val) => setState((prev) => ({ ...prev, habitLogs: { ...prev.habitLogs, [date]: { ...(prev.habitLogs[date] || {}), [key]: val } } }));
+  const setHabits = (date, keys, val) => setState((prev) => {
+    const day = { ...((prev.habitLogs && prev.habitLogs[date]) || {}) };
+    keys.forEach((key) => { day[key] = val; });
+    return { ...prev, habitLogs: { ...(prev.habitLogs || {}), [date]: day } };
+  });
   const toggleSupplement = (date, key) => setState((prev) => { const cur = (prev.supplementLogs && prev.supplementLogs[date]) || {}; return { ...prev, supplementLogs: { ...(prev.supplementLogs || {}), [date]: { ...cur, [key]: !cur[key] } } }; });
   const toggleBeverage = (date, key) => setState((prev) => { const cur = (prev.beverageLogs && prev.beverageLogs[date]) || {}; return { ...prev, beverageLogs: { ...(prev.beverageLogs || {}), [date]: { ...cur, [key]: !cur[key] } } }; });
   const toggleActivity = (date, key) => setState((prev) => { const cur = (prev.activity[date] || {}); return { ...prev, activity: { ...prev.activity, [date]: { ...cur, [key]: !cur[key] } } }; });
@@ -1597,9 +1616,9 @@ export default function BodyRecompOS() {
       const { syncId, key } = await deriveSync(pass);
       const remote = await pullRemote(url, syncId, key);
       if (!remote) { setSyncStatus({ type: 'info', msg: 'No cloud data yet. Push from your main device first.' }); return; }
-      setState(() => remote.state);
+      setState((local) => mergeSyncedState(local, remote.state));
       localStorage.setItem(SYNC_UPDATED_KEY, String(remote.updatedAt));
-      setSyncStatus({ type: 'ok', msg: 'Pulled the latest data from cloud.' });
+      setSyncStatus({ type: 'ok', msg: 'Merged cloud data. Logs already on this device were retained.' });
     } catch (e) {
       setSyncStatus({ type: 'err', msg: `Pull failed (wrong passphrase or URL?): ${e.message}` });
     } finally { setSyncBusy(false); }
@@ -1632,7 +1651,7 @@ export default function BodyRecompOS() {
         const remote = await pullRemote(url, syncId, key);
         const localAt = parseInt(localStorage.getItem(SYNC_UPDATED_KEY) || '0', 10);
         if (remote && remote.updatedAt > localAt) {
-          setState(() => remote.state);
+          setState((local) => mergeSyncedState(local, remote.state));
           localStorage.setItem(SYNC_UPDATED_KEY, String(remote.updatedAt));
         }
       } catch { /* silent on open */ }
@@ -1671,7 +1690,7 @@ export default function BodyRecompOS() {
 
   const ctx = {
     state, setState, mutate, patchSession, mutateEntry, getSession,
-    setMeal, setWatch, toggleHabit, toggleSupplement, toggleBeverage, toggleActivity, setSatMode, setDayOverride,
+    setMeal, setWatch, toggleHabit, setHabits, toggleSupplement, toggleBeverage, toggleActivity, setSatMode, setDayOverride,
     addScan, updateScan, deleteScan, setProfile, setSetting, setRestart, saveCustomExercise, deleteCustomExercise, restartCalendar, autoScanDate, recalcNow, replaceState, resetAll, loadDemo,
     doPull, doPush, syncStatus, syncBusy, getSyncSecret, setSyncSecret,
     selDate, setSelDate, goto: setTab,
