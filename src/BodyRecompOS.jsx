@@ -877,7 +877,7 @@ function BodyTab({ ctx }) {
         </div>
       </div>
 
-      <SectionTitle>Apple Watch (manual)</SectionTitle>
+      <SectionTitle>Apple Health & Watch</SectionTitle>
       <WatchPanel ctx={ctx} />
 
       {editing ? (
@@ -904,10 +904,19 @@ function BodyTab({ ctx }) {
 function WatchPanel({ ctx }) {
   const [date, setDate] = useState(todayKey());
   const w = watchFor(date, ctx.state);
+  const lastSync = ctx.state.lastHealthSync || {};
+  const syncedLabels = (lastSync.fields || []).map((key) => WATCH_FIELDS.find((field) => field.key === key)?.label || key);
   return (
     <Card>
       <DateNav date={date} setDate={setDate} />
-      <Banner tone="cyan" icon={Watch}>Apple Health sync is on. Run your "Health to Recomp" Shortcut (set it up in More) to auto-fill steps, sleep, resting HR and HRV. You can still type or correct any value here.</Banner>
+      {lastSync.at ? (
+        <Banner tone="green" icon={Watch}>
+          Last Apple Health import: {lastSync.count} value{lastSync.count === 1 ? '' : 's'} for {prettyDate(lastSync.date)} at {new Date(lastSync.at).toLocaleString()}.
+          {syncedLabels.length ? ` Imported: ${syncedLabels.join(', ')}.` : ''}
+        </Banner>
+      ) : (
+        <Banner tone="cyan" icon={Watch}>Run your "Health to Recomp" Shortcut (set it up in More) to auto-fill steps, sleep, resting HR and HRV. You can still type or correct any value here.</Banner>
+      )}
       <div className="field-row cols-3">
         {WATCH_FIELDS.map((f) => (
           <div className="field" key={f.key}>
@@ -1204,7 +1213,7 @@ function HealthSyncCard() {
         <div className="health-step"><b>6</b><span>Put those variables into the copied Text link, delete <span className="num">&amp;sleepScore=[Sleep Score]</span> if Shortcuts does not offer Sleep Score, then Open URLs.</span></div>
       </div>
       <div className="hint health-note">
-        Automate with the Waking Up trigger or 15–30 minutes after your usual wake time, then choose Run Immediately. Recovery currently uses sleep, resting HR and logged pain. HRV and Sleep Score are stored for tracking but are not scored without a personal baseline.
+        Automate with the Waking Up trigger or 15–30 minutes after your usual wake time, then choose Run Immediately. After it runs, Body → Apple Health &amp; Watch shows a persistent import receipt and the populated values. Recovery currently uses sleep, resting HR and logged pain. HRV and Sleep Score are stored for tracking but are not scored without a personal baseline.
       </div>
     </Card>
   );
@@ -1523,22 +1532,47 @@ export default function BodyRecompOS() {
   const [state, setState] = useState(loadState);
   const [tab, setTab] = useState('home');
   const [selDate, setSelDate] = useState(todayKey());
-  const [synced, setSynced] = useState(null);
+  const [healthNotice, setHealthNotice] = useState(null);
 
   useEffect(() => { saveState(state); }, [state]);
   useEffect(() => { window.scrollTo(0, 0); }, [tab]);
 
   // Apple Health sync: a Shortcut opens #health?steps=..&sleep=.. etc.
-  // Read them once, save to that day's watch log, then clean the URL.
+  // Read them on initial launch and on later hash changes. iOS may reuse an
+  // already-open Safari/PWA window, which changes only the fragment and does
+  // not remount React, so listening for hashchange is required for repeat runs.
   useEffect(() => {
-    const healthInput = window.location.hash.startsWith('#health?') ? window.location.hash : window.location.search;
-    const res = parseHealthParams(healthInput);
-    if (!res) return;
-    setState((prev) => ({ ...prev, watchLogs: { ...prev.watchLogs, [res.date]: { ...(prev.watchLogs[res.date] || {}), ...res.patch } } }));
-    setSynced(res.count);
-    window.history.replaceState({}, '', window.location.pathname);
-    const t = setTimeout(() => setSynced(null), 4500);
-    return () => clearTimeout(t);
+    let noticeTimer;
+    const ingestHealthLink = () => {
+      const healthInput = window.location.hash.startsWith('#health?') ? window.location.hash : window.location.search;
+      const isHealthLink = window.location.hash.startsWith('#health?') || /(?:^|[?&])(steps|sleep|rhr|hrv|active)=/i.test(window.location.search);
+      if (!isHealthLink) return;
+      const res = parseHealthParams(healthInput);
+      clearTimeout(noticeTimer);
+      if (!res) {
+        setHealthNotice({ error: true, message: 'No Apple Health values imported. The Shortcut must send plain numbers without units or lists.' });
+        window.history.replaceState({}, '', window.location.pathname);
+        noticeTimer = setTimeout(() => setHealthNotice(null), 7000);
+        return;
+      }
+      const at = Date.now();
+      const fields = Object.keys(res.patch);
+      setState((prev) => ({
+        ...prev,
+        watchLogs: { ...prev.watchLogs, [res.date]: { ...(prev.watchLogs[res.date] || {}), ...res.patch } },
+        lastHealthSync: { at, date: res.date, count: res.count, fields },
+      }));
+      setHealthNotice({ error: false, message: `Imported ${res.count} Apple Health value${res.count === 1 ? '' : 's'} for ${prettyDate(res.date)}` });
+      window.history.replaceState({}, '', window.location.pathname);
+      noticeTimer = setTimeout(() => setHealthNotice(null), 4500);
+    };
+
+    ingestHealthLink();
+    window.addEventListener('hashchange', ingestHealthLink);
+    return () => {
+      window.removeEventListener('hashchange', ingestHealthLink);
+      clearTimeout(noticeTimer);
+    };
   }, []);
 
   const phase = phaseInfo(state);
@@ -1700,9 +1734,9 @@ export default function BodyRecompOS() {
 
   return (
     <div className="app">
-      {synced ? (
-        <div className="sync-toast" role="status">
-          <Watch size={15} /> Synced {synced} Apple Health value{synced === 1 ? '' : 's'} for today
+      {healthNotice ? (
+        <div className={`sync-toast ${healthNotice.error ? 'error' : ''}`} role={healthNotice.error ? 'alert' : 'status'}>
+          {healthNotice.error ? <AlertTriangle size={15} /> : <Watch size={15} />} {healthNotice.message}
         </div>
       ) : null}
       <Sidebar tab={tab} setTab={setTab} phase={phase} />

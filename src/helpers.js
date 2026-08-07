@@ -43,6 +43,7 @@ export function defaultState() {
     activity: {},        // key -> { badminton:bool, swim:bool }
     restartWeights: {},  // exerciseName -> { old:'', pct:70 }
     customExercises: {}, // exerciseName -> user-owned machine metadata (cloud-synced)
+    lastHealthSync: { at: null, date: '', count: 0, fields: [] }, // device-visible Shortcut import receipt
     lastBackup: null,
   };
 }
