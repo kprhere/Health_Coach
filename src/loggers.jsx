@@ -181,7 +181,7 @@ export function SingleLogger({ block, entry, plan, state, onMutate, setRestart }
             <input inputMode="decimal" value={s.weight} placeholder="lb" onChange={(e) => setField(i, 'weight', e.target.value)} />
             <input inputMode="numeric" value={s.reps} placeholder="reps" onChange={(e) => setField(i, 'reps', e.target.value)} />
             <input inputMode="decimal" value={s.rpe} placeholder="rpe" onChange={(e) => setField(i, 'rpe', e.target.value)} />
-            <button className="set-del" onClick={() => setOpenIdx(openIdx === i ? -1 : i)}><MoreHorizontal size={16} /></button>
+            <button className="set-del" onClick={() => setOpenIdx(openIdx === i ? -1 : i)} aria-label={`Set ${i + 1} details`} aria-expanded={openIdx === i}><MoreHorizontal size={16} /></button>
           </div>
           {s.rpe !== '' && !isNaN(parseFloat(s.rpe)) ? <div className="rir-hint">Auto RIR {Math.max(0, 10 - parseFloat(s.rpe))}{s.isWarmup ? ' · warm-up, excluded from history' : ''}</div> : null}
           {openIdx === i ? <Detail data={s} patch={(f, v) => setField(i, f, v)} onDelete={() => { delSet(i); setOpenIdx(-1); }} /> : null}
@@ -287,7 +287,7 @@ export function RoundsLogger({ block, entry, state, onMutate }) {
                     <input inputMode="decimal" value={c.weight} placeholder="lb" onChange={(e) => cellField(ri, nm, 'weight', e.target.value)} />
                     <input inputMode="numeric" value={c.reps} placeholder="reps" onChange={(e) => cellField(ri, nm, 'reps', e.target.value)} />
                     <input inputMode="decimal" value={c.rpe} placeholder="rpe" onChange={(e) => cellField(ri, nm, 'rpe', e.target.value)} />
-                    <button className="cell-more" onClick={() => setOpen((o) => ({ ...o, [key]: !o[key] }))}><MoreHorizontal size={15} /></button>
+                    <button className="cell-more" onClick={() => setOpen((o) => ({ ...o, [key]: !o[key] }))} aria-label={`${shown} details`} aria-expanded={!!open[key]}><MoreHorizontal size={15} /></button>
                   </div>
                   {last ? <div className="hint" style={{ marginTop: 4 }}>Last: {last.sets.map((s) => `${s.weight}x${s.reps}`).join(', ')}</div> : null}
                   {open[key] ? (
@@ -327,11 +327,23 @@ export function BlockLogger(props) {
 // ============================================================
 // Add unplanned exercise sheet (creates a single block/entry)
 // ============================================================
-export function AddExercisePicker({ onPick, state }) {
+// positions: [{ id: null|blockId, label }] - null means "at the end". Lets the
+// user drop a new exercise exactly where it belongs in the session (e.g.
+// between block 6 and 7) instead of always appending it after everything.
+export function AddExercisePicker({ onPick, state, positions }) {
   const [q, setQ] = useState('');
+  const [afterId, setAfterId] = useState(positions && positions.length ? positions[positions.length - 1].id : null);
   const list = exerciseNames(state).filter((n) => n.toLowerCase().includes(q.toLowerCase())).slice(0, 40);
   return (
     <div>
+      {positions && positions.length ? (
+        <div className="field">
+          <label>Insert position</label>
+          <select className="select" value={afterId ?? '__end__'} onChange={(e) => setAfterId(e.target.value === '__end__' ? null : e.target.value)}>
+            {positions.map((p) => <option key={p.id ?? '__end__'} value={p.id ?? '__end__'}>{p.label}</option>)}
+          </select>
+        </div>
+      ) : null}
       <div className="field lib-search">
         <input className="input" placeholder="Search the exercise library" value={q} onChange={(e) => setQ(e.target.value)} autoFocus />
       </div>
@@ -339,7 +351,7 @@ export function AddExercisePicker({ onPick, state }) {
         {list.map((n) => {
           const m = exerciseMeta(n, state);
           return (
-            <button key={n} className="lib-item" onClick={() => onPick(n)}>
+            <button key={n} className="lib-item" onClick={() => onPick(n, afterId)}>
               <b>{n}</b>
               <span>{m.p} · {m.eq} · {m.use}</span>
             </button>
@@ -351,7 +363,7 @@ export function AddExercisePicker({ onPick, state }) {
   );
 }
 
-export function makeUnplannedEntry(name, state) {
+export function makeUnplannedEntry(name, state, afterBlockId = null) {
   const id = `x#${Date.now()}`;
   const meta = exerciseMeta(name, state);
   const setCount = Math.max(1, Math.min(10, parseInt(meta.defaultSets, 10) || 3));
@@ -363,7 +375,7 @@ export function makeUnplannedEntry(name, state) {
   return {
     id,
     entry: {
-      blockType: 'single', name, exName: name, sets,
+      blockType: 'single', name, exName: name, sets, afterBlockId,
       skipped: false, skipReason: '', replacedWith: '', completed: false, unplanned: true,
     },
     // a synthetic "block" so the logger can render a target line

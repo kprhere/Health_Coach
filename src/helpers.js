@@ -43,6 +43,7 @@ export function defaultState() {
     activity: {},        // key -> { badminton:bool, swim:bool }
     restartWeights: {},  // exerciseName -> { old:'', pct:70 }
     customExercises: {}, // exerciseName -> user-owned machine metadata (cloud-synced)
+    lastHealthSync: { at: null, date: '', count: 0, fields: [] }, // device-visible Shortcut import receipt
     lastBackup: null,
   };
 }
@@ -75,6 +76,66 @@ function mergeState(base, incoming) {
     else out[k] = v;
   }
   if (!Array.isArray(out.bodyScans) || out.bodyScans.length === 0) out.bodyScans = [...SEED_SCANS];
+  return out;
+}
+
+// Merge a newer encrypted cloud snapshot into this device without treating the
+// snapshot as a replacement. Local dated logs always survive; cloud-only dates
+// and fields are added. This protects a device that has offline work which was
+// never pushed, while still letting a fresh device recover everything stored in
+// the cloud. The next auto-push writes the combined state back to the Worker.
+export function mergeSyncedState(localState, remoteState) {
+  const local = mergeState(defaultState(), localState && typeof localState === 'object' ? localState : {});
+  const remote = remoteState && typeof remoteState === 'object' ? remoteState : {};
+  const out = { ...local };
+
+  if (remote.profile && typeof remote.profile === 'object') out.profile = { ...local.profile, ...remote.profile };
+  if (remote.settings && typeof remote.settings === 'object') {
+    out.settings = { ...local.settings, ...remote.settings };
+    // Connection details belong to this browser/device. Keep them when set so
+    // a cloud pull cannot disconnect the device that just performed the pull.
+    if (local.settings.syncUrl) out.settings.syncUrl = local.settings.syncUrl;
+    out.settings.syncAuto = local.settings.syncAuto;
+  }
+  if (typeof remote.version === 'number') out.version = Math.max(local.version || 0, remote.version);
+
+  // Complex entries contain arrays of sets/meals. If both devices edited the
+  // same date, preserve this device's complete entry instead of partially
+  // combining arrays and risking corrupted or lost logs.
+  for (const key of ['workoutSessions', 'mealLogs']) {
+    const cloudMap = remote[key] && typeof remote[key] === 'object' ? remote[key] : {};
+    out[key] = { ...cloudMap, ...(local[key] || {}) };
+  }
+
+  // These per-date maps are safe to merge one field at a time. Local values
+  // win conflicts, including intentional false values.
+  for (const key of ['beverageLogs', 'habitLogs', 'watchLogs', 'supplementLogs', 'activity']) {
+    const cloudMap = remote[key] && typeof remote[key] === 'object' ? remote[key] : {};
+    const localMap = local[key] || {};
+    const dates = new Set([...Object.keys(cloudMap), ...Object.keys(localMap)]);
+    out[key] = {};
+    dates.forEach((date) => {
+      const cloudDay = cloudMap[date];
+      const localDay = localMap[date];
+      if (cloudDay && typeof cloudDay === 'object' && localDay && typeof localDay === 'object') out[key][date] = { ...cloudDay, ...localDay };
+      else out[key][date] = localDay !== undefined ? localDay : cloudDay;
+    });
+  }
+
+  // User-owned maps are additive. Never let a cloud snapshot remove something
+  // that still exists on this device.
+  for (const key of ['saturdayMode', 'dayOverrides', 'restartWeights', 'customExercises']) {
+    const cloudMap = remote[key] && typeof remote[key] === 'object' ? remote[key] : {};
+    out[key] = { ...cloudMap, ...(local[key] || {}) };
+  }
+
+  if (Array.isArray(remote.bodyScans)) {
+    const scans = new Map();
+    remote.bodyScans.forEach((scan) => { if (scan && scan.id) scans.set(scan.id, scan); });
+    (local.bodyScans || []).forEach((scan) => { if (scan && scan.id) scans.set(scan.id, scan); });
+    out.bodyScans = [...scans.values()];
+  }
+
   return out;
 }
 
@@ -475,7 +536,28 @@ export function recoveryScore(key, state) {
   return { pct, sleep: isNaN(sleep) ? null : sleep, maxPain, rhr: isNaN(rhr) ? null : rhr };
 }
 
+// Non-veg keyword check for the "extras" quick-add log — the structured
+// meal plan already hides non-veg options on veg days (see mealPlanFor's
+// safety filter), so this only catches a manually-added exception.
+const NON_VEG_RE = /chicken|fish|mutton|prawn|shrimp|turkey|meat|beef|pork|salmon|tuna|\begg\b/i;
+
 // ---------- habits ----------
+// Which Rules-group habits even apply today. Only Thursday needs the fast +
+// its own veg rule, only Saturday needs its veg rule + BodyBalance (and only
+// when BodyBalance itself was picked over the lifting fallback) - a rule
+// that doesn't apply today must not drag the score down.
+export function habitApplicability(key, state) {
+  const dow = dowOf(key);
+  const flags = dayFlags(key, state);
+  const satMode = (state.saturdayMode && state.saturdayMode[key]) || 'class';
+  return {
+    thu_fast: flags.fastDay,
+    thu_veg: dow === 4,
+    sat_veg: dow === 6,
+    bodybalance: dow === 6 && satMode === 'class',
+  };
+}
+
 export function habitStatus(key, state) {
   const manual = (state.habitLogs && state.habitLogs[key]) || {};
   const a = nutritionActuals(key, state);
@@ -485,6 +567,8 @@ export function habitStatus(key, state) {
   const prog = s ? workoutProgress(s) : { done: 0, total: 0 };
   const act = (state.activity && state.activity[key]) || {};
   const supp = (state.supplementLogs && state.supplementLogs[key]) || {};
+  const extras = a.log.extras || [];
+  const applicable = habitApplicability(key, state);
   const auto = {
     workout_logged: !!(s && Object.keys(s.entries || {}).length && prog.done > 0),
     workout_done: !!(s && (s.completed || (prog.total > 0 && prog.done === prog.total))),
@@ -500,15 +584,26 @@ export function habitStatus(key, state) {
     vitd: !!supp.vitd,
     magnesium: !!supp.magnesium,
     biotin: !!supp.biotin,
+    // fasting/veg are enforced structurally by the app (fast days only offer
+    // the post-fast meal; veg days hide non-veg meal options), so default to
+    // compliant and only flip false if a logged extra breaks the rule.
+    thu_fast: !extras.some((e) => NON_VEG_RE.test(e.name || '')) && extras.length < 3,
+    thu_veg: !extras.some((e) => NON_VEG_RE.test(e.name || '')),
+    sat_veg: !extras.some((e) => NON_VEG_RE.test(e.name || '')),
+    bodybalance: !!(s && s.completed),
   };
   const status = {};
-  HABITS.forEach((h) => { status[h.key] = (h.key in manual) ? !!manual[h.key] : (auto[h.key] || false); });
-  return { status, manual, auto };
+  HABITS.forEach((h) => {
+    if (applicable[h.key] === false) return; // not today's rule - leave out of status entirely
+    status[h.key] = (h.key in manual) ? !!manual[h.key] : (auto[h.key] || false);
+  });
+  return { status, manual, auto, applicable };
 }
 
 export function habitPct(key, state) {
   const { status } = habitStatus(key, state);
   const keys = Object.keys(status);
+  if (!keys.length) return 100;
   const done = keys.filter((k) => status[k]).length;
   return Math.round((done / keys.length) * 100);
 }
