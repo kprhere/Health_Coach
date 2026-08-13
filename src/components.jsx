@@ -314,10 +314,10 @@ export function EmptyState({ icon, title, sub }) {
   );
 }
 
-export function Banner({ tone = 'cyan', icon, children }) {
+export function Banner({ tone = 'cyan', icon, children, ...rest }) {
   const I = icon;
   return (
-    <div className={`banner ${tone}`}>
+    <div className={`banner ${tone}`} {...rest}>
       {I ? <I size={17} style={{ flex: '0 0 17px', marginTop: 1, color: `var(--${tone === 'red' ? 'red' : tone === 'amber' ? 'amber' : tone === 'violet' ? 'violet' : 'cyan'})` }} /> : null}
       <p>{children}</p>
     </div>
@@ -486,7 +486,7 @@ export function Sheet({ title, onClose, children }) {
         <div className="sheet-grab" />
         <div className="card-head" style={{ marginBottom: 12 }}>
           <h3 style={{ margin: 0 }}>{title}</h3>
-          <button className="btn xs ghost" onClick={onClose} aria-label={`Close ${title}`}><X size={16} /></button>
+          <button className="btn xs ghost" onClick={onClose} aria-label={`Close ${title}`} autoFocus><X size={16} /></button>
         </div>
         {children}
       </div>

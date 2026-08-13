@@ -73,6 +73,7 @@ export const EXERCISES = {
   'Pec Deck': X('Chest', 'Front Delts', 'Machine', 'Beginner', 'Chest isolation and stretch', 'Cable Fly', 'Arsenal Laying Pec Fly', 'Slight elbow bend, squeeze at midline', 'Using shoulders to slam the pads'),
   'Cable Fly': X('Chest', 'Front Delts', 'Cable', 'Beginner', 'Constant-tension chest', 'Pec Deck', 'Arsenal Laying Pec Fly', 'Slight forward lean, hug motion', 'Turning it into a press'),
   'Dips': X('Chest', 'Triceps, Front Delts', 'Bodyweight', 'Intermediate', 'Lower chest and triceps', 'Chest Press Machine', 'Assisted Dip Machine', 'Lean forward for chest, control the bottom', 'Going too deep and stressing shoulders'),
+  'Chest-Assisted Dip': X('Chest', 'Triceps, Front Delts', 'Assisted Dip Machine', 'Beginner', 'Lower-chest pressing with controlled assistance', 'Arsenal Laying Pec Fly', 'Assisted Dip Machine', 'Lean slightly forward, let elbows travel back, and use only the pain-free depth', 'Staying upright or sinking deeper than the shoulders tolerate'),
 
   // ---- Back ----
   'Deadlift': X('Back, Hamstrings', 'Glutes, Traps, Grip', 'Barbell', 'Advanced', 'Full posterior chain strength', 'Romanian Deadlift', 'Hammer Strength Deadlift', 'Brace, push floor away, bar close to shins', 'Rounding the lower back and jerking the bar'),
@@ -306,7 +307,7 @@ export const PROGRAM = {
       blocks: [
         single('Hammer Strength Incline Press', 4, 8, 10, 8, 120, '3-1-1', 'Main upper chest press'),
         single('Hammer Strength Row', 4, 10, 12, 8, 90, '2-1-1', 'Back thickness'),
-        single('Arsenal Laying Pec Fly', 3, 12, 15, 9, 75, '2-1-2', 'Chest isolation and stretch'),
+        single('Chest-Assisted Dip', 3, 10, 12, 8, 90, '3-1-1', 'Lower-chest machine press. Keep 2 reps in reserve and use a pain-free depth'),
         single('Body Builder Standing Press', 3, 10, 12, 8, 90, '2-0-1', 'Overhead shoulder press'),
         single('Incline DB Curl', 3, 10, 12, 9, 75, '2-0-1', 'Direct biceps, long-head stretch'),
         single('Overhead Tricep Extension', 3, 12, 15, 9, 75, '2-1-2', 'Direct triceps, long head'),

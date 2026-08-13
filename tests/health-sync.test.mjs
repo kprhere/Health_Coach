@@ -13,6 +13,8 @@ import {
   recoveryScore,
   resolveNutrition,
   resolveWorkout,
+  workoutSessionHasData,
+  workoutSwapPartner,
 } from '../src/helpers.js';
 
 const eightValues = 'date=2026-07-31&steps=9412&sleep=7.3&rhr=58&hrv=64&sleepScore=88&vo2max=44&spo2=98&active=540';
@@ -118,6 +120,44 @@ test('any date can override its nutrition plan to vegetarian or fast without cha
   assert.equal(nutritionDayType(scheduledThursday, state), 'fastThu');
   assert.deepEqual(fastEndTime(scheduledThursday, state), { hour: 18, label: '6 PM', noMoon: false });
   assert.ok(resolveNutrition(scheduledThursday, state).meals.flatMap((meal) => meal.options).flatMap((option) => option.items).every((item) => !/egg/i.test(item)));
+});
+
+test('workout dates swap in both directions without moving their nutrition plans', () => {
+  const monday = '2026-08-03';
+  const wednesday = '2026-08-05';
+  const state = defaultState();
+  const mondayWorkout = resolveWorkout(monday, state);
+  const wednesdayWorkout = resolveWorkout(wednesday, state);
+  const mondayNutrition = resolveNutrition(monday, state);
+  const wednesdayNutrition = resolveNutrition(wednesday, state);
+
+  state.workoutSwaps[monday] = wednesday;
+  state.workoutSwaps[wednesday] = monday;
+
+  assert.equal(workoutSwapPartner(monday, state), wednesday);
+  assert.equal(workoutSwapPartner(wednesday, state), monday);
+  assert.equal(resolveWorkout(monday, state).title, wednesdayWorkout.title);
+  assert.equal(resolveWorkout(monday, state).sourceDate, wednesday);
+  assert.equal(resolveWorkout(wednesday, state).title, mondayWorkout.title);
+  assert.deepEqual(resolveNutrition(monday, state), mondayNutrition);
+  assert.deepEqual(resolveNutrition(wednesday, state), wednesdayNutrition);
+});
+
+test('workout swaps distinguish untouched generated rows from logged training data', () => {
+  const empty = {
+    completed: false,
+    notes: '',
+    entries: { planned: { sets: [{ weight: '', reps: '', rpe: '', pain: 0, notes: '' }] } },
+  };
+  assert.equal(workoutSessionHasData(empty), false);
+
+  const logged = structuredClone(empty);
+  logged.entries.planned.sets[0].weight = '90';
+  assert.equal(workoutSessionHasData(logged), true);
+
+  const customized = structuredClone(empty);
+  customized.entries.extra = { unplanned: true, sets: [] };
+  assert.equal(workoutSessionHasData(customized), true);
 });
 
 test('daily green tea is zero-calorie tracking and coconut water counts toward macros and hydration', () => {

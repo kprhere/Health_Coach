@@ -7,6 +7,7 @@ import {
   ChevronLeft, ChevronRight, ChevronDown, Plus, Check, Download, Upload, RotateCcw,
   Droplets, Footprints, Moon, Flame, Activity, Waves, TrendingUp, Trophy, Target,
   AlertTriangle, Watch, Pencil, Trash2, Info, Save, Beef, Leaf, Timer, Zap, Dumbbell,
+  Sparkles, ArrowLeftRight,
 } from 'lucide-react';
 
 import {
@@ -26,6 +27,7 @@ import {
   supplementAdherence, hairHealthChecks, daysToLab,
   nutritionProfile, volumeTrend, muscleBalance, fmtVol, parseHealthParams, muscleWeekTrend,
   recompSignal, consistencyStreak, energyBalance, proteinPerLbLean, trainingLoadSummary,
+  customExercisePlanFits, workoutSwapPartner, workoutSessionHasData,
 } from './helpers.js';
 import {
   Sidebar, BottomNav, Card, Chip, SectionTitle, MetricRing, ScoreRing, ProgressBar,
@@ -333,6 +335,7 @@ function PlanTab({ ctx }) {
               <div className="wd-title">{wp.title}</div>
               <div className="wd-focus">{wp.focus}</div>
               <div className="wd-tags">
+                {workoutSwapPartner(k, s) ? <span className="wd-tag swapped">swapped</span> : null}
                 {f.swimDay ? <span className="wd-tag">swim</span> : null}
                 {f.fastDay ? <span className="wd-tag">fast</span> : null}
                 {f.vegDay ? <span className="wd-tag">veg</span> : null}
@@ -348,7 +351,7 @@ function PlanTab({ ctx }) {
       <div className="split" style={{ marginTop: 8 }}>
         <div className="split-main">
           <SectionTitle right={<Chip tone="cyan">{plan.focus}</Chip>}>{plan.title}</SectionTitle>
-          {flags.classDay ? (
+          {plan.isClassDay ? (
             <Card>
               <div className="card-head"><h3>Saturday choice</h3></div>
               <div className="pill-toggle">
@@ -425,6 +428,9 @@ function TrainTab({ ctx }) {
   const [date, setDate] = useState(ctx.selDate);
   const [collapsed, setCollapsed] = useState({});
   const [adding, setAdding] = useState(false);
+  const [swapping, setSwapping] = useState(false);
+  const [swapDate, setSwapDate] = useState(addDays(ctx.selDate, 1));
+  const [swapNotice, setSwapNotice] = useState('');
   const s = ctx.state;
   const plan = resolveWorkout(date, s);
   const session = ctx.getSession(date);
@@ -435,6 +441,34 @@ function TrainTab({ ctx }) {
   const balance = muscleBalance(s);
   const balanceTip = balance.hints[0];
   const fastEnd = fastEndTime(date, s);
+  const swapPartner = workoutSwapPartner(date, s);
+  const targetSwapPartner = swapDate ? workoutSwapPartner(swapDate, s) : '';
+  const currentWorkoutStarted = workoutSessionHasData(s.workoutSessions && s.workoutSessions[date]);
+  const targetWorkoutStarted = swapDate ? workoutSessionHasData(s.workoutSessions && s.workoutSessions[swapDate]) : false;
+  const partnerWorkoutStarted = swapPartner ? workoutSessionHasData(s.workoutSessions && s.workoutSessions[swapPartner]) : false;
+  const scheduledTargetPlan = swapDate && swapDate !== date
+    ? resolveWorkout(swapDate, { ...s, workoutSwaps: {} })
+    : null;
+  const targetFlags = swapDate ? dayFlags(swapDate, s) : null;
+  const hardFastConflict = !!scheduledTargetPlan && (
+    (targetFlags && targetFlags.fastDay && plan.intensity === 'Hard')
+    || (flags.fastDay && scheduledTargetPlan.intensity === 'Hard')
+  );
+  let swapBlockReason = '';
+  if (!swapDate || swapDate === date) swapBlockReason = 'Choose a different date.';
+  else if (hardFastConflict) swapBlockReason = 'A hard lifting workout cannot be moved onto a fasting day. Choose a non-fasting date or change that date’s nutrition mode first.';
+  else if (currentWorkoutStarted) swapBlockReason = 'This workout already has logged data. Finish it here or remove those entries before swapping.';
+  else if (targetWorkoutStarted) swapBlockReason = `${prettyDate(swapDate)} already has logged workout data, so it cannot be replaced.`;
+  else if (targetSwapPartner && targetSwapPartner !== date) swapBlockReason = `${prettyDate(swapDate)} is already part of another swap. Undo that swap first.`;
+  const undoBlockReason = currentWorkoutStarted || partnerWorkoutStarted
+    ? 'This swap is locked because one of the two dates now has logged workout data.'
+    : '';
+
+  const openSwap = () => {
+    setSwapDate(swapPartner || addDays(date, 1));
+    setSwapNotice('');
+    setSwapping(true);
+  };
 
   const planIds = new Set(plan.blocks.map((b) => b.id));
   const extraIds = Object.keys(session.entries).filter((id) => !planIds.has(id));
@@ -442,13 +476,16 @@ function TrainTab({ ctx }) {
   // always at the end - falls back to the end if that block no longer exists
   // (e.g. the plan changed) or none was chosen.
   const extrasByAfter = {};
+  const startExtras = [];
   const endExtras = [];
   extraIds.forEach((id) => {
     const afterId = session.entries[id].afterBlockId;
-    if (afterId && planIds.has(afterId)) (extrasByAfter[afterId] = extrasByAfter[afterId] || []).push(id);
+    if (afterId === '__start__') startExtras.push(id);
+    else if (afterId && planIds.has(afterId)) (extrasByAfter[afterId] = extrasByAfter[afterId] || []).push(id);
     else endExtras.push(id);
   });
   const insertPositions = [
+    { id: '__start__', label: 'At the start' },
     ...plan.blocks.map((b) => ({ id: b.id, label: `After: ${b.name}` })),
     { id: null, label: 'At the end' },
   ];
@@ -494,9 +531,11 @@ function TrainTab({ ctx }) {
       <div className="page-title">Train</div>
       <DateNav date={date} setDate={setDate} />
 
+      {swapNotice ? <Banner tone="cyan" icon={Check} role="status" aria-live="polite">{swapNotice}</Banner> : null}
+
       {balanceTip ? <Banner tone="amber" icon={AlertTriangle}>Balance check: {balanceTip.text}</Banner> : null}
 
-      {flags.classDay ? (
+      {plan.isClassDay ? (
         <Card className="pad-sm">
           <div className="pill-toggle">
             <button className={(s.saturdayMode[date] || 'class') === 'class' ? 'active' : ''} onClick={() => ctx.setSatMode(date, 'class')}>BodyBalance class</button>
@@ -509,8 +548,27 @@ function TrainTab({ ctx }) {
         <div className="split-main">
           <div className="card-head" style={{ marginBottom: 10 }}>
             <div className="lead"><h3 style={{ margin: 0 }}>{plan.title}</h3><Chip tone="cyan">{plan.focus}</Chip></div>
-            <Chip tone={prog.total && prog.done === prog.total ? 'green' : 'amber'}>{prog.done}/{prog.total} done</Chip>
+            <div className="workout-plan-actions">
+              <Chip tone={prog.total && prog.done === prog.total ? 'green' : 'amber'}>{prog.done}/{prog.total} done</Chip>
+              <button className="btn xs ghost" onClick={openSwap}><ArrowLeftRight size={14} /> Swap day</button>
+            </div>
           </div>
+
+          {swapPartner ? (
+            <Banner tone="cyan" icon={ArrowLeftRight}>
+              <b>Workout days swapped:</b> this is the {prettyDate(plan.sourceDate)} workout. The {prettyDate(date)} workout moved to {prettyDate(swapPartner)}. Nutrition stays on its original calendar date.
+            </Banner>
+          ) : null}
+
+          <div className="workout-command">
+            <div className="workout-command-copy">
+              <span className="eyebrow"><Sparkles size={13} /> Build today’s session</span>
+              <b>Add your equipment before the first planned movement—or place it exactly where you want.</b>
+            </div>
+            <button className="btn primary" onClick={() => setAdding(true)}><Plus size={16} /> Add exercise</button>
+          </div>
+
+          {startExtras.map((id) => renderBlock(blockFromEntry(id, session.entries[id])))}
 
           {plan.blocks.length === 0 ? (
             <Card><EmptyState icon={Waves} title="No lifting scheduled" sub={fastEnd ? `Recovery day: fast until ${fastEnd.label}, then follow the vegetarian plan.` : 'Recovery day. Use the mobility and conditioning below.'} /></Card>
@@ -524,7 +582,7 @@ function TrainTab({ ctx }) {
           {endExtras.map((id) => renderBlock(blockFromEntry(id, session.entries[id])))}
 
           <div className="btn-row" style={{ marginTop: 6 }}>
-            <button className="btn sm" onClick={() => setAdding(true)}><Plus size={15} /> Add exercise</button>
+            <button className="btn sm" onClick={() => setAdding(true)}><Plus size={15} /> Add another exercise</button>
             <button className={`btn sm ${session.completed ? 'primary' : ''}`} onClick={() => ctx.patchSession(date, (x) => { x.completed = !x.completed; })}>
               <Check size={15} /> {session.completed ? 'Completed' : 'Mark complete'}
             </button>
@@ -573,6 +631,52 @@ function TrainTab({ ctx }) {
             ctx.patchSession(date, (x) => { x.entries[id] = entry; });
             setAdding(false);
           }} />
+        </Sheet>
+      ) : null}
+
+      {swapping ? (
+        <Sheet title="Swap workout days" onClose={() => setSwapping(false)}>
+          {swapPartner ? (
+            <div className="workout-swap-sheet">
+              <Banner tone="cyan" icon={ArrowLeftRight}>
+                {prettyDate(date)} and {prettyDate(swapPartner)} exchange workouts. Meals, fasting, activities, and health logs remain on their original dates.
+              </Banner>
+              {undoBlockReason ? <Banner tone="amber" icon={AlertTriangle} role="alert">{undoBlockReason}</Banner> : null}
+              <div className="btn-row">
+                <button className="btn sm primary" disabled={!!undoBlockReason} onClick={() => {
+                  ctx.clearWorkoutSwap(date);
+                  setSwapNotice(`Restored the scheduled workouts for ${prettyDate(date)} and ${prettyDate(swapPartner)}.`);
+                  setSwapping(false);
+                }}>Undo this swap</button>
+                <button className="btn sm ghost" onClick={() => setSwapping(false)}>Keep swap</button>
+              </div>
+            </div>
+          ) : (
+            <div className="workout-swap-sheet">
+              <p className="sheet-intro">Choose the other date. The two planned workouts trade places, so weekly frequency and volume do not increase.</p>
+              <div className="field">
+                <label htmlFor="workout-swap-date">Swap {prettyDate(date)} with</label>
+                <input id="workout-swap-date" className="input" type="date" value={swapDate} onChange={(e) => setSwapDate(e.target.value)} />
+              </div>
+              {scheduledTargetPlan ? (
+                <div className="swap-preview" aria-live="polite">
+                  <div><span>{prettyDate(date)}</span><b>{scheduledTargetPlan.title}</b></div>
+                  <ArrowLeftRight size={18} aria-hidden="true" />
+                  <div><span>{prettyDate(swapDate)}</span><b>{plan.title}</b></div>
+                </div>
+              ) : null}
+              {swapBlockReason ? <Banner tone="amber" icon={AlertTriangle} role="alert">{swapBlockReason}</Banner> : null}
+              <div className="hint">Only the workouts move. Nutrition, fasting, sports, Apple Health data, and completed logs stay attached to their dates.</div>
+              <div className="btn-row">
+                <button className="btn sm primary" disabled={!!swapBlockReason} onClick={() => {
+                  ctx.swapWorkoutDates(date, swapDate);
+                  setSwapNotice(`Swapped the workouts for ${prettyDate(date)} and ${prettyDate(swapDate)}.`);
+                  setSwapping(false);
+                }}><ArrowLeftRight size={14} /> Confirm swap</button>
+                <button className="btn sm ghost" onClick={() => setSwapping(false)}>Cancel</button>
+              </div>
+            </div>
+          )}
         </Sheet>
       ) : null}
     </div>
@@ -1264,6 +1368,7 @@ function CustomMachineCard({ ctx }) {
   const [draft, setDraft] = useState(EMPTY_MACHINE);
   const [editing, setEditing] = useState('');
   const [error, setError] = useState('');
+  const [savedFit, setSavedFit] = useState(null);
   const set = (key, value) => setDraft((d) => ({ ...d, [key]: value }));
   const reset = () => { setDraft(EMPTY_MACHINE); setEditing(''); setError(''); };
   const save = () => {
@@ -1271,7 +1376,7 @@ function CustomMachineCard({ ctx }) {
     if (!name || !draft.p.trim()) { setError('Add a machine/exercise name and primary muscle.'); return; }
     if (EXERCISES[name]) { setError('That name is already in the built-in exercise library. Choose a distinct name.'); return; }
     if (!editing && custom[name]) { setError('That custom name already exists. Tap Edit to update it.'); return; }
-    ctx.saveCustomExercise(editing, name, {
+    const meta = {
       p: draft.p.trim(), s: draft.s.trim(), eq: draft.eq.trim() || 'Machine',
       use: draft.use.trim(), sub: draft.sub.trim(), cue: draft.cue.trim(), err: draft.err.trim(),
       defaultSets: Math.max(1, Math.min(10, parseInt(draft.defaultSets, 10) || 3)),
@@ -1280,19 +1385,25 @@ function CustomMachineCard({ ctx }) {
       rpe: Math.max(1, Math.min(10, parseFloat(draft.rpe) || 8)),
       restSec: Math.max(0, parseInt(draft.restSec, 10) || 90),
       tempo: draft.tempo.trim() || '2-1-1', custom: true,
-    });
+    };
+    const previewState = { ...ctx.state, customExercises: { ...custom, [name]: meta } };
+    if (editing && editing !== name) delete previewState.customExercises[editing];
+    const fits = customExercisePlanFits(name, previewState);
+    ctx.saveCustomExercise(editing, name, meta);
+    setSavedFit({ name, fits });
     reset();
   };
   const edit = (name) => {
     setDraft({ ...EMPTY_MACHINE, ...custom[name], name });
     setEditing(name);
     setError('');
+    setSavedFit(null);
   };
 
   return (
     <Card>
-      <div className="block-tag"><span className="bar" />Your cloud-synced machine library</div>
-      <div className="hint" style={{ marginBottom: 10 }}>Custom machines are saved with your app data. JSON backup and encrypted Cloud sync carry them into later app versions and onto your other devices.</div>
+      <div className="block-tag"><span className="bar" />Your cloud-synced equipment library</div>
+      <div className="hint" style={{ marginBottom: 10 }}>Custom equipment is saved with your app data, survives upgrades, and is matched to compatible plan slots by muscle and movement pattern. Matches become recommended alternates, so the app does not silently add unwanted training volume.</div>
       <div className="field"><label>Machine / exercise name</label><input className="input" value={draft.name} onChange={(e) => set('name', e.target.value)} placeholder="Example: Gym80 Glute Drive" /></div>
       <div className="field-row cols-3">
         <div className="field"><label>Primary muscle</label><input className="input" value={draft.p} onChange={(e) => set('p', e.target.value)} placeholder="Glutes" /></div>
@@ -1312,17 +1423,32 @@ function CustomMachineCard({ ctx }) {
       </div>
       <div className="field"><label>Tempo</label><input className="input mono" value={draft.tempo} onChange={(e) => set('tempo', e.target.value)} placeholder="2-1-1" /></div>
       {error ? <Banner tone="red" icon={AlertTriangle}>{error}</Banner> : null}
+      {savedFit ? (
+        <Banner tone="green" icon={Sparkles}>
+          <b>{savedFit.name}</b> is ready in Train → Add exercise.
+          {savedFit.fits.length
+            ? ` It is now recommended as an alternate for ${savedFit.fits.slice(0, 2).map((fit) => `${fit.exerciseName} on ${fit.dayTitle}`).join(' and ')}.`
+            : ' No safe plan match was found, so it remains library-only until you choose it.'}
+        </Banner>
+      ) : null}
       <div className="btn-row">
         <button className="btn sm primary" onClick={save}><Save size={14} /> {editing ? 'Save changes' : 'Add machine'}</button>
         {editing ? <button className="btn sm ghost" onClick={reset}>Cancel</button> : null}
       </div>
       {Object.keys(custom).length ? <div className="divider" /> : null}
-      {Object.keys(custom).sort().map((name) => (
-        <div className="row" key={name}>
-          <div className="row-main"><div className="row-title">{name}</div><div className="row-sub">{custom[name].p || 'Other'} · {custom[name].eq || 'Machine'} · {custom[name].defaultSets || 3} sets</div></div>
-          <div className="btn-row"><button className="btn xs" onClick={() => edit(name)}>Edit</button><button className="btn xs danger" aria-label={`Delete ${name}`} onClick={() => { if (confirm(`Delete ${name} from your custom library? Existing workout history is kept.`)) ctx.deleteCustomExercise(name); }}><Trash2 size={13} /></button></div>
-        </div>
-      ))}
+      {Object.keys(custom).sort().map((name) => {
+        const topFit = customExercisePlanFits(name, ctx.state, 1)[0];
+        return (
+          <div className="row equipment-row" key={name}>
+            <div className="row-main">
+              <div className="row-title">{name}</div>
+              <div className="row-sub">{custom[name].p || 'Other'} · {custom[name].eq || 'Machine'} · {custom[name].defaultSets || 3} sets</div>
+              <div className={`plan-fit ${topFit ? 'matched' : ''}`}><Sparkles size={12} /> {topFit ? `Best plan fit: alternate for ${topFit.exerciseName}` : 'Library only · choose manually in Train'}</div>
+            </div>
+            <div className="btn-row"><button className="btn xs" onClick={() => edit(name)}>Edit</button><button className="btn xs danger" aria-label={`Delete ${name}`} onClick={() => { if (confirm(`Delete ${name} from your custom library? Existing workout history is kept.`)) ctx.deleteCustomExercise(name); }}><Trash2 size={13} /></button></div>
+          </div>
+        );
+      })}
     </Card>
   );
 }
@@ -1432,7 +1558,7 @@ function MoreTab({ ctx }) {
         </div>
 
         <div>
-          <SectionTitle>Custom machines</SectionTitle>
+          <SectionTitle>Custom equipment & exercises</SectionTitle>
           <CustomMachineCard ctx={ctx} />
 
           <SectionTitle>Data</SectionTitle>
@@ -1615,6 +1741,39 @@ export default function BodyRecompOS() {
     if (mode === 'veg' || mode === 'fast1' || mode === 'fast2') d.dayOverrides[date] = mode;
     else delete d.dayOverrides[date];
   });
+  const swapWorkoutDates = (firstDate, secondDate) => setState((prev) => {
+    if (!firstDate || !secondDate || firstDate === secondDate) return prev;
+    if (workoutSessionHasData(prev.workoutSessions && prev.workoutSessions[firstDate])) return prev;
+    if (workoutSessionHasData(prev.workoutSessions && prev.workoutSessions[secondDate])) return prev;
+    const firstPartner = workoutSwapPartner(firstDate, prev);
+    const secondPartner = workoutSwapPartner(secondDate, prev);
+    if (firstPartner || secondPartner) return prev;
+
+    const next = clone(prev);
+    if (!next.workoutSwaps) next.workoutSwaps = {};
+    next.workoutSwaps[firstDate] = secondDate;
+    next.workoutSwaps[secondDate] = firstDate;
+    // Empty persisted sessions contain only generated plan rows. Removing
+    // them lets each date initialize from its newly swapped plan.
+    [firstDate, secondDate].forEach((key) => {
+      if (next.workoutSessions[key] && !workoutSessionHasData(next.workoutSessions[key])) delete next.workoutSessions[key];
+    });
+    return next;
+  });
+  const clearWorkoutSwap = (date) => setState((prev) => {
+    const partner = workoutSwapPartner(date, prev);
+    if (!partner) return prev;
+    if (workoutSessionHasData(prev.workoutSessions && prev.workoutSessions[date])) return prev;
+    if (workoutSessionHasData(prev.workoutSessions && prev.workoutSessions[partner])) return prev;
+
+    const next = clone(prev);
+    delete next.workoutSwaps[date];
+    if (next.workoutSwaps[partner] === date) delete next.workoutSwaps[partner];
+    [date, partner].forEach((key) => {
+      if (next.workoutSessions[key] && !workoutSessionHasData(next.workoutSessions[key])) delete next.workoutSessions[key];
+    });
+    return next;
+  });
 
   const addScan = (scan) => mutate((d) => { d.bodyScans.push({ ...scan, id: 'scan-' + Date.now() }); });
   const updateScan = (id, scan) => mutate((d) => { d.bodyScans = d.bodyScans.map((x) => (x.id === id ? { ...x, ...scan, id } : x)); });
@@ -1724,7 +1883,7 @@ export default function BodyRecompOS() {
 
   const ctx = {
     state, setState, mutate, patchSession, mutateEntry, getSession,
-    setMeal, setWatch, toggleHabit, setHabits, toggleSupplement, toggleBeverage, toggleActivity, setSatMode, setDayOverride,
+    setMeal, setWatch, toggleHabit, setHabits, toggleSupplement, toggleBeverage, toggleActivity, setSatMode, setDayOverride, swapWorkoutDates, clearWorkoutSwap,
     addScan, updateScan, deleteScan, setProfile, setSetting, setRestart, saveCustomExercise, deleteCustomExercise, restartCalendar, autoScanDate, recalcNow, replaceState, resetAll, loadDemo,
     doPull, doPush, syncStatus, syncBusy, getSyncSecret, setSyncSecret,
     selDate, setSelDate, goto: setTab,
@@ -1734,6 +1893,7 @@ export default function BodyRecompOS() {
 
   return (
     <div className="app">
+      <a className="skip-link" href="#main-content">Skip to main content</a>
       {healthNotice ? (
         <div className={`sync-toast ${healthNotice.error ? 'error' : ''}`} role={healthNotice.error ? 'alert' : 'status'}>
           {healthNotice.error ? <AlertTriangle size={15} /> : <Watch size={15} />} {healthNotice.message}
@@ -1755,7 +1915,7 @@ export default function BodyRecompOS() {
           </div>
         </header>
 
-        <main className="app-main">
+        <main className="app-main" id="main-content" tabIndex="-1">
           {tab === 'home' && <HomeTab ctx={ctx} />}
           {tab === 'plan' && <PlanTab ctx={ctx} />}
           {tab === 'train' && <TrainTab ctx={ctx} />}

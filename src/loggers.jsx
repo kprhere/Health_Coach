@@ -6,11 +6,12 @@
 // ============================================================
 import React, { useState } from 'react';
 import {
-  Plus, Copy, Trash2, MoreHorizontal, Repeat, Check, RefreshCw, Search,
+  Plus, Copy, Trash2, MoreHorizontal, Repeat, Check, RefreshCw, Search, Sparkles,
 } from 'lucide-react';
 import {
   makeSet, makeCell, cellDone, roundDone, getLastSession, getBestPerformance,
   getNextTarget, rxForExercise, e1rm, restartSuggestion, exerciseMeta, exerciseNames,
+  duplicateLastSet, recommendedCustomAlternates,
 } from './helpers.js';
 import { RestTimer } from './components.jsx';
 
@@ -26,17 +27,27 @@ function PainScale({ value, onChange }) {
   );
 }
 
-function ReplaceSelect({ value, onChange, state }) {
+function ReplaceSelect({ value, onChange, state, targetName }) {
+  const recommended = targetName ? recommendedCustomAlternates(targetName, state) : [];
+  const recommendedNames = new Set(recommended.map((item) => item.name));
+  const remaining = exerciseNames(state).filter((name) => !recommendedNames.has(name));
   return (
     <select className="select" value={value || ''} onChange={(e) => onChange(e.target.value)} style={{ maxWidth: 200 }}>
       <option value="">Replace with...</option>
-      {exerciseNames(state).map((n) => <option key={n} value={n}>{n}</option>)}
+      {recommended.length ? (
+        <optgroup label="Recommended custom equipment">
+          {recommended.map(({ name }) => <option key={name} value={name}>{name}</option>)}
+        </optgroup>
+      ) : null}
+      <optgroup label="Exercise library">
+        {remaining.map((n) => <option key={n} value={n}>{n}</option>)}
+      </optgroup>
     </select>
   );
 }
 
 // details panel shared by single-set and round-cell
-function Detail({ data, patch, onDelete, skipReplace, onSkipToggle, onReplace, state }) {
+function Detail({ data, patch, onDelete, skipReplace, onSkipToggle, onReplace, state, targetName }) {
   return (
     <div className="cell-detail">
       <div className="field-row cols-3">
@@ -66,7 +77,7 @@ function Detail({ data, patch, onDelete, skipReplace, onSkipToggle, onReplace, s
       {skipReplace ? (
         <div className="btn-row">
           <button className="btn xs" onClick={onSkipToggle}>{data.skipped ? 'Un-skip' : 'Skip exercise'}</button>
-          <ReplaceSelect value={data.replacedWith} onChange={onReplace} state={state} />
+          <ReplaceSelect value={data.replacedWith} onChange={onReplace} state={state} targetName={targetName} />
         </div>
       ) : null}
       {data.skipped ? (
@@ -128,12 +139,13 @@ export function SingleLogger({ block, entry, plan, state, onMutate, setRestart }
   const isDrop = block.blockType === 'dropset';
   const rs = restartSuggestion(name, state);
   const rw = (state.restartWeights && state.restartWeights[name]) || { old: '', pct: '' };
+  const smartAlternates = recommendedCustomAlternates(ex.name, state, 2);
   const addWarmup = () => onMutate((e) => { e.sets.unshift({ ...makeSet(), isWarmup: true }); });
 
   const setField = (i, f, v) => onMutate((e) => { e.sets[i][f] = v; });
   const addSet = (drop) => onMutate((e) => { e.sets.push({ ...makeSet(), isDrop: !!drop }); });
   const delSet = (i) => onMutate((e) => { e.sets.splice(i, 1); });
-  const copyPrev = (i) => onMutate((e) => { if (i > 0) { const p = e.sets[i - 1]; e.sets[i] = { ...e.sets[i], weight: p.weight, reps: p.reps, rpe: p.rpe }; } });
+  const copyLast = () => onMutate((e) => { e.sets = duplicateLastSet(e.sets); });
   const toggleSkip = () => onMutate((e) => { e.skipped = !e.skipped; });
   const replace = (nm) => onMutate((e) => { e.replacedWith = nm; });
 
@@ -156,6 +168,22 @@ export function SingleLogger({ block, entry, plan, state, onMutate, setRestart }
       {isDrop ? <div className="hint">Drop set: hit the top set near failure, then strip the weight and keep going. Add each drop as a row below.</div> : null}
       {meta.cue ? <div className="hint"><b style={{ color: 'var(--muted)' }}>Cue:</b> {meta.cue}. <b style={{ color: 'var(--muted)' }}>Avoid:</b> {meta.err}.</div> : null}
       {meta.eos ? <div className="hint">EOS option: {meta.eos}. Substitute: {meta.sub}.</div> : null}
+
+      {smartAlternates.length ? (
+        <div className="smart-swap" role="note">
+          <div className="smart-swap-copy">
+            <Sparkles size={16} aria-hidden="true" />
+            <span><b>Your equipment fits this slot</b><small>Swap without adding extra weekly volume.</small></span>
+          </div>
+          <div className="smart-swap-actions">
+            {smartAlternates.map(({ name: option }) => (
+              <button key={option} className="smart-swap-btn" onClick={() => replace(option)} aria-label={`Replace ${ex.name} with ${option}`}>
+                {option}
+              </button>
+            ))}
+          </div>
+        </div>
+      ) : null}
 
       {setRestart ? (
         <div className="restart">
@@ -191,12 +219,12 @@ export function SingleLogger({ block, entry, plan, state, onMutate, setRestart }
       <div className="btn-row" style={{ marginTop: 10 }}>
         <button className="btn xs" onClick={() => addSet(false)}><Plus size={13} /> Set</button>
         <button className="btn xs ghost" onClick={addWarmup}><Plus size={13} /> Warm-up</button>
-        {entry.sets.length > 1 ? <button className="btn xs" onClick={() => copyPrev(entry.sets.length - 1)}><Copy size={13} /> Copy last</button> : null}
+        {entry.sets.length ? <button className="btn xs" onClick={copyLast}><Copy size={13} /> Copy last</button> : null}
         {isDrop ? <button className="btn xs" onClick={() => addSet(true)}><Plus size={13} /> Drop</button> : null}
         <button className="btn xs ghost" onClick={toggleSkip}>{entry.skipped ? 'Un-skip' : 'Skip'}</button>
       </div>
       <div style={{ marginTop: 8 }}>
-        <ReplaceSelect value={entry.replacedWith} onChange={replace} state={state} />
+        <ReplaceSelect value={entry.replacedWith} onChange={replace} state={state} targetName={ex.name} />
         <div className="hint" style={{ marginTop: 6 }}>Replacement changes exercise history, cues and future targets. Existing set rows and entered weights stay unchanged so nothing is overwritten.</div>
       </div>
     </div>
@@ -298,6 +326,7 @@ export function RoundsLogger({ block, entry, state, onMutate }) {
                       onSkipToggle={() => cellSkip(ri, nm)}
                       onReplace={(name) => cellReplace(ri, nm, name)}
                       state={state}
+                      targetName={nm}
                     />
                   ) : null}
                 </div>
@@ -332,8 +361,13 @@ export function BlockLogger(props) {
 // between block 6 and 7) instead of always appending it after everything.
 export function AddExercisePicker({ onPick, state, positions }) {
   const [q, setQ] = useState('');
-  const [afterId, setAfterId] = useState(positions && positions.length ? positions[positions.length - 1].id : null);
-  const list = exerciseNames(state).filter((n) => n.toLowerCase().includes(q.toLowerCase())).slice(0, 40);
+  const [afterId, setAfterId] = useState(positions && positions.length ? positions[0].id : null);
+  const custom = state.customExercises || {};
+  const matches = exerciseNames(state).filter((n) => n.toLowerCase().includes(q.toLowerCase()));
+  const list = [
+    ...matches.filter((name) => custom[name]),
+    ...matches.filter((name) => !custom[name]),
+  ].slice(0, 40);
   return (
     <div>
       {positions && positions.length ? (
@@ -345,14 +379,16 @@ export function AddExercisePicker({ onPick, state, positions }) {
         </div>
       ) : null}
       <div className="field lib-search">
-        <input className="input" placeholder="Search the exercise library" value={q} onChange={(e) => setQ(e.target.value)} autoFocus />
+        <label htmlFor="exercise-library-search">Find an exercise</label>
+        <input id="exercise-library-search" className="input" placeholder="Name, muscle, or equipment" value={q} onChange={(e) => setQ(e.target.value)} autoFocus />
       </div>
+      <div className="library-summary"><span>{list.length} matches</span><span>Custom equipment is marked</span></div>
       <div className="lib-list">
         {list.map((n) => {
           const m = exerciseMeta(n, state);
           return (
             <button key={n} className="lib-item" onClick={() => onPick(n, afterId)}>
-              <b>{n}</b>
+              <b>{n}{custom[n] ? <span className="library-badge">Your equipment</span> : null}</b>
               <span>{m.p} · {m.eq} · {m.use}</span>
             </button>
           );
