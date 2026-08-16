@@ -28,6 +28,7 @@ import {
   nutritionProfile, volumeTrend, muscleBalance, fmtVol, parseHealthParams, muscleWeekTrend,
   recompSignal, consistencyStreak, energyBalance, proteinPerLbLean, trainingLoadSummary,
   customExercisePlanFits, workoutSwapPartner, workoutSessionHasData,
+  observedActivityFactor,
 } from './helpers.js';
 import {
   Sidebar, BottomNav, Card, Chip, SectionTitle, MetricRing, ScoreRing, ProgressBar,
@@ -1453,6 +1454,59 @@ function CustomMachineCard({ ctx }) {
   );
 }
 
+// Audits settings.activityFactor against the scan history. This is the one
+// number in the nutrition engine that is a guess rather than a measurement, and
+// a wrong one invalidates every calorie target without ever looking wrong, so
+// it gets checked against what the body actually did between the last two scans.
+function ActivityFactorCheck({ s, ctx }) {
+  const r = useMemo(() => observedActivityFactor(s), [s]);
+
+  if (!r.ok) {
+    return (
+      <Card>
+        <div className="block-tag"><span className="bar" />Activity factor check</div>
+        <div className="hint">{r.reason} Until then the configured {r.configured || '—'} is taken on trust.</div>
+      </Card>
+    );
+  }
+
+  const over = r.gap > 0;
+  return (
+    <Card>
+      <div className="block-tag"><span className="bar" />Activity factor check</div>
+      <div className="stat-grid cols-3" style={{ marginBottom: 10 }}>
+        <StatCell k="You set" v={r.configured || '—'} />
+        <StatCell k="Scans say" v={r.factor} />
+        <StatCell k="Maintenance" v={r.tee} unit="kcal" />
+      </div>
+      {r.drifting ? (
+        <Banner tone={over ? 'amber' : 'cyan'} icon={AlertTriangle}>
+          {over
+            ? `Your factor looks ${r.drift} too high — about ${r.gap} kcal/day of burn that is not happening. Every target is that much too generous, so the deficit is smaller than it reads. Drop it toward ${r.suggestion}, or do the conditioning the ${r.configured} assumes.`
+            : `Your factor looks ${Math.abs(r.drift)} too low — about ${Math.abs(r.gap)} kcal/day of burn not being counted. You are cutting harder than intended, which costs muscle. Raise it toward ${r.suggestion}.`}
+        </Banner>
+      ) : (
+        <Banner tone="cyan" icon={Check}>
+          Configured {r.configured} matches the measured {r.factor}. Targets are built on a real maintenance number.
+        </Banner>
+      )}
+      <div className="hint" style={{ marginTop: 10 }}>
+        Measured {shortDate(r.from)} to {shortDate(r.to)} ({r.days} days): {r.fatLb} lb fat and {r.proteinLb} lb protein
+        came off while eating about {r.intake} kcal/day, which puts real maintenance at {r.tee}.
+        {r.coverage < 60
+          ? ` Only ${r.coverage}% of those days had logged meals, so intake is mostly the prescribed target rather than what you ate — log more and this gets sharper.`
+          : ` ${r.coverage}% of those days had logged meals.`}
+        {' '}A plan change inside this window shows up only at the next scan.
+      </div>
+      {r.drifting ? (
+        <button className="btn sm primary" style={{ marginTop: 10 }} onClick={() => ctx.setSetting('activityFactor', r.suggestion)}>
+          Use {r.suggestion}
+        </button>
+      ) : null}
+    </Card>
+  );
+}
+
 function MoreTab({ ctx }) {
   const s = ctx.state;
   const [importErr, setImportErr] = useState('');
@@ -1519,9 +1573,16 @@ function MoreTab({ ctx }) {
             ); })()}
             <div className="field-row cols-3">
               {num('Deficit %', 'deficitPercent', s.settings, (k, v) => ctx.setSetting(k, parseFloat(v) || 0))}
+              {num('Activity factor', 'activityFactor', s.settings, (k, v) => ctx.setSetting(k, parseFloat(v) || 0))}
               {num('Water (L)', 'waterTargetL', s.settings, (k, v) => ctx.setSetting(k, parseFloat(v) || 0))}
-              {num('Steps', 'stepsTarget', s.settings, (k, v) => ctx.setSetting(k, parseFloat(v) || 0))}
             </div>
+            <div className="field-row cols-3">
+              {num('Steps', 'stepsTarget', s.settings, (k, v) => ctx.setSetting(k, parseFloat(v) || 0))}
+              <div className="field"><label>Puratasi starts</label><input className="input" type="date" value={s.settings.puratasiStartDate || ''} onChange={(e) => ctx.setSetting('puratasiStartDate', e.target.value)} /></div>
+              <div className="field"><label>Puratasi ends</label><input className="input" type="date" value={s.settings.puratasiEndDate || ''} onChange={(e) => ctx.setSetting('puratasiEndDate', e.target.value)} /></div>
+            </div>
+            <div className="hint">Activity factor multiplies your BMR to give maintenance calories, and it overrides the scan&apos;s own TEE. It is the only estimate in the whole engine, so the card below audits it against your scans. Puratasi dates switch every day to vegetarian food while keeping calories, deficit and protein exactly the same; leave them blank to turn the month off.</div>
+            <ActivityFactorCheck s={s} ctx={ctx} />
             <div className="hint">Vegetarian days always exclude chicken, fish, whole eggs and egg whites.</div>
             <div className="field" style={{ marginTop: 10 }}>
               <label>Units</label>

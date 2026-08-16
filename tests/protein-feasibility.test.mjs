@@ -16,7 +16,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 
 import { mealPlanFor, personalTargets } from '../src/nutritionEngine.js';
-import { nutritionDayType, inPuratasi } from '../src/helpers.js';
+import { nutritionDayType, inPuratasi, observedActivityFactor } from '../src/helpers.js';
 import { SEED_SCANS, SETTINGS_DEFAULT, PROFILE_DEFAULT } from '../src/data.js';
 
 const baseState = () => ({
@@ -24,6 +24,9 @@ const baseState = () => ({
   settings: { ...SETTINGS_DEFAULT },
   profile: { ...PROFILE_DEFAULT },
   dayOverrides: {},
+  mealLogs: {},
+  beverageLogs: {},
+  activity: {},
 });
 
 // Highest protein the day can reach at all, ignoring calories.
@@ -135,6 +138,86 @@ test('no vegetarian day ever offers meat or eggs', () => {
       }
     }
   }
+});
+
+// Fill the window between the last two scans with genuinely logged intake, so
+// the audit reads real food rather than the plan's own prescription.
+function withLoggedIntake(state, kcalPerDay) {
+  const mealLogs = {};
+  let d = new Date('2026-07-09T00:00:00');
+  const end = new Date('2026-08-13T00:00:00');
+  while (d <= end) {
+    const key = d.toISOString().slice(0, 10);
+    mealLogs[key] = { eaten: {}, choices: {}, water: 0, flags: {}, extras: [{ p: 200, c: 200, f: 60, kcal: kcalPerDay }] };
+    d = new Date(d.getTime() + 86400000);
+  }
+  return { ...state, mealLogs };
+}
+
+test('the activity factor is audited against the scan history', () => {
+  const state = withLoggedIntake(baseState(), 2264);
+  const r = observedActivityFactor(state);
+  assert.equal(r.ok, true);
+  assert.equal(r.from, '2026-07-08');
+  assert.equal(r.to, '2026-08-13');
+  assert.equal(r.days, 36);
+  assert.equal(r.coverage, 100);
+  // 1.5 lb fat + 0.4 lb protein over 36 days is ~166 kcal/day of tissue energy.
+  assert.equal(r.fatLb, 1.5);
+  assert.equal(r.proteinLb, 0.4);
+  assert.equal(r.tissuePerDay, 166);
+  assert.equal(r.intake, 2264);
+  assert.equal(r.tee, 2430);
+  assert.equal(r.factor, Math.round((2430 / 1769) * 1000) / 1000);
+});
+
+test('the audit refuses to run on prescribed targets alone', () => {
+  // Without logged meals the only intake estimate is the plan's own target,
+  // which is derived from activityFactor. Reading that back would make the
+  // audit agree with whatever it was told, so it must decline instead.
+  const r = observedActivityFactor(baseState());
+  assert.equal(r.ok, false);
+  assert.equal(r.coverage, 0);
+  assert.match(r.reason, /logged meals/);
+});
+
+test('the audit flags an overstated activity factor and suggests a real one', () => {
+  const state = withLoggedIntake(baseState(), 2264);
+  state.settings.activityFactor = 1.9; // wildly optimistic
+  const r = observedActivityFactor(state);
+  assert.equal(r.drifting, true);
+  assert.ok(r.gap > 0, 'a too-high factor should report a positive kcal gap');
+  assert.ok(r.suggestion < 1.9);
+  assert.ok(r.suggestion > 1.0);
+});
+
+test('the audit verdict does not move with the factor it is auditing', () => {
+  // The whole point: logged intake is independent of activityFactor, so the
+  // measured answer must be identical no matter what the setting claims.
+  const a = observedActivityFactor({ ...withLoggedIntake(baseState(), 2264), settings: { ...SETTINGS_DEFAULT, activityFactor: 1.2 } });
+  const b = observedActivityFactor({ ...withLoggedIntake(baseState(), 2264), settings: { ...SETTINGS_DEFAULT, activityFactor: 1.9 } });
+  assert.equal(a.factor, b.factor);
+  assert.equal(a.tee, b.tee);
+});
+
+test('the audit stays quiet when the factor matches reality', () => {
+  const state = withLoggedIntake(baseState(), 2264);
+  const probe = observedActivityFactor(state);
+  state.settings.activityFactor = probe.factor;
+  const r = observedActivityFactor(state);
+  assert.equal(r.drifting, false);
+  assert.equal(r.gap, 0);
+});
+
+test('the audit refuses to guess from too little data', () => {
+  const one = { ...baseState(), bodyScans: [SEED_SCANS[0]] };
+  assert.equal(observedActivityFactor(one).ok, false);
+
+  // Two scans only twelve days apart: water noise swamps the signal.
+  const close = { ...baseState(), bodyScans: [SEED_SCANS[2], { ...SEED_SCANS[3], date: '2026-07-20' }] };
+  const r = observedActivityFactor(close);
+  assert.equal(r.ok, false);
+  assert.match(r.reason, /21\+/);
 });
 
 test('an unset Puratasi window disables the whole feature', () => {
