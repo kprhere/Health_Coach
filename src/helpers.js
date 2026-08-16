@@ -40,6 +40,7 @@ export function defaultState() {
     bodyScans: [...SEED_SCANS],
     saturdayMode: {},    // key -> 'class' | 'fallback'
     dayOverrides: {},    // key -> 'veg' | 'fast1' | 'fast2' (nutrition only; workout stays scheduled)
+    workoutSwaps: {},    // key -> paired date key (two-way workout-only swap)
     activity: {},        // key -> { badminton:bool, swim:bool }
     restartWeights: {},  // exerciseName -> { old:'', pct:70 }
     customExercises: {}, // exerciseName -> user-owned machine metadata (cloud-synced)
@@ -124,7 +125,7 @@ export function mergeSyncedState(localState, remoteState) {
 
   // User-owned maps are additive. Never let a cloud snapshot remove something
   // that still exists on this device.
-  for (const key of ['saturdayMode', 'dayOverrides', 'restartWeights', 'customExercises']) {
+  for (const key of ['saturdayMode', 'dayOverrides', 'workoutSwaps', 'restartWeights', 'customExercises']) {
     const cloudMap = remote[key] && typeof remote[key] === 'object' ? remote[key] : {};
     out[key] = { ...cloudMap, ...(local[key] || {}) };
   }
@@ -156,6 +157,127 @@ export function exerciseLibrary(state) {
 
 export const exerciseNames = (state) => Object.keys(exerciseLibrary(state)).sort((a, b) => a.localeCompare(b));
 export const exerciseMeta = (name, state) => exerciseLibrary(state)[name] || {};
+
+// Custom equipment should become useful immediately without silently adding
+// extra weekly volume. These helpers compare its muscle + movement pattern to
+// the current program and surface it as a recommended alternate for the best
+// matching slots. Because matches are derived from PROGRAM on every render,
+// they automatically adapt when a later app upgrade changes the plan.
+const MUSCLE_FAMILIES = [
+  ['chest', /chest|pec/i],
+  ['back', /\bback\b|lat|trap|rhomboid/i],
+  ['shoulders', /delt|shoulder|rotator/i],
+  ['biceps', /bicep|brachialis/i],
+  ['triceps', /tricep/i],
+  ['quads', /quad/i],
+  ['hamstrings', /hamstring/i],
+  ['glutes', /glute/i],
+  ['calves', /calf|calves|soleus/i],
+  ['core', /core|abdom|oblique/i],
+  ['cardio', /cardio/i],
+];
+
+const MOVEMENT_PATTERNS = [
+  'press', 'row', 'pulldown', 'pull-up', 'fly', 'curl', 'extension', 'pushdown',
+  'raise', 'dip', 'squat', 'lunge', 'deadlift', 'hinge', 'thrust', 'bridge', 'kickback',
+  'crunch', 'plank', 'woodchop', 'calf',
+];
+
+const muscleFamilies = (value) => MUSCLE_FAMILIES
+  .filter(([, pattern]) => pattern.test(String(value || '')))
+  .map(([family]) => family);
+
+const movementPatterns = (name) => MOVEMENT_PATTERNS.filter((pattern) => String(name || '').toLowerCase().includes(pattern));
+
+function exerciseFit(candidateName, targetName, state) {
+  const candidate = exerciseMeta(candidateName, state);
+  const target = exerciseMeta(targetName, state);
+  const candidatePrimary = muscleFamilies(candidate.p);
+  const targetPrimary = muscleFamilies(target.p);
+  const primaryMatch = candidatePrimary.some((family) => targetPrimary.includes(family));
+  if (!primaryMatch) return null;
+
+  let score = 8;
+  const reasons = ['same primary muscle'];
+  if (String(candidate.p || '').trim().toLowerCase() === String(target.p || '').trim().toLowerCase()) score += 2;
+
+  const candidateMoves = movementPatterns(candidateName);
+  const targetMoves = movementPatterns(targetName);
+  if (candidateMoves.some((pattern) => targetMoves.includes(pattern))) {
+    score += 4;
+    reasons.push('same movement pattern');
+  } else if (candidateMoves.length && targetMoves.length) score -= 3;
+
+  const candidateSecondary = muscleFamilies(candidate.s);
+  const targetSecondary = muscleFamilies(target.s);
+  if (candidateSecondary.some((family) => targetSecondary.includes(family))) score += 1;
+
+  const candidateEquipment = String(candidate.eq || '').toLowerCase();
+  const targetEquipment = String(target.eq || '').toLowerCase();
+  if (candidateEquipment && targetEquipment && (
+    candidateEquipment.includes(targetEquipment) || targetEquipment.includes(candidateEquipment)
+    || (/machine|hammer|arsenal|life fitness|plate/i.test(candidateEquipment) && /machine|hammer|arsenal|life fitness|plate/i.test(targetEquipment))
+  )) {
+    score += 2;
+    reasons.push('similar equipment');
+  }
+
+  const candidateLinks = `${candidate.sub || ''} ${candidate.eos || ''}`.toLowerCase();
+  const targetLinks = `${target.sub || ''} ${target.eos || ''}`.toLowerCase();
+  if (candidateLinks.includes(targetName.toLowerCase()) || targetLinks.includes(candidateName.toLowerCase())) {
+    score += 8;
+    reasons.push('explicit substitute');
+  }
+
+  return { score, reasons };
+}
+
+function programSlots() {
+  const slots = [];
+  Object.values(PROGRAM.days).forEach((day) => {
+    const variants = [{ ...day, variantLabel: day.title }];
+    if (day.fallback) variants.push({ ...day.fallback, variantLabel: `${day.fallback.title} fallback` });
+    variants.forEach((variant) => {
+      (variant.blocks || []).forEach((block, blockIndex) => {
+        (block.exercises || []).forEach((exercise) => {
+          slots.push({
+            dayKey: variant.key,
+            dayTitle: variant.variantLabel,
+            blockIndex,
+            blockName: block.name,
+            exerciseName: exercise.name,
+          });
+        });
+      });
+    });
+  });
+  return slots;
+}
+
+export function customExercisePlanFits(name, state, limit = 4) {
+  const seen = new Set();
+  return programSlots()
+    .map((slot) => ({ ...slot, ...exerciseFit(name, slot.exerciseName, state) }))
+    .filter((slot) => Number.isFinite(slot.score) && slot.score >= 11)
+    .sort((a, b) => b.score - a.score || a.dayTitle.localeCompare(b.dayTitle))
+    .filter((slot) => {
+      const key = `${slot.dayKey}:${slot.exerciseName}`;
+      if (seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    })
+    .slice(0, limit);
+}
+
+export function recommendedCustomAlternates(targetName, state, limit = 4) {
+  const customNames = Object.keys((state && state.customExercises) || {});
+  return customNames
+    .filter((name) => name !== targetName)
+    .map((name) => ({ name, ...exerciseFit(name, targetName, state) }))
+    .filter((item) => Number.isFinite(item.score) && item.score >= 11)
+    .sort((a, b) => b.score - a.score || a.name.localeCompare(b.name))
+    .slice(0, limit);
+}
 
 export function exportJSON(state) { return JSON.stringify(state, null, 2); }
 
@@ -202,8 +324,14 @@ export function dayFlags(key, state) {
 }
 
 // ---------- workout plan resolution ----------
+export function workoutSwapPartner(key, state) {
+  const partner = state && state.workoutSwaps && state.workoutSwaps[key];
+  return typeof partner === 'string' && partner !== key ? partner : '';
+}
+
 export function resolveWorkout(key, state) {
-  const dow = dowOf(key);
+  const sourceDate = workoutSwapPartner(key, state) || key;
+  const dow = dowOf(sourceDate);
   const base = PROGRAM.days[dow];
   let src = base, usingFallback = false;
   if (base.isClassDay) {
@@ -212,6 +340,7 @@ export function resolveWorkout(key, state) {
   }
   const blocks = (src.blocks || []).map((b, i) => ({ ...b, id: `${src.key}#${i}` }));
   return {
+    sourceDate,
     dayKey: src.key, title: src.title, focus: src.focus, intensity: src.intensity, dayType: src.dayType,
     isClassDay: !!base.isClassDay, usingFallback, hasFallback: !!base.fallback,
     blocks,
@@ -260,6 +389,20 @@ export function getDayPlan(key, state) {
 export const makeSet = () => ({ weight: '', reps: '', rpe: '', restSec: '', form: '', pain: 0, notes: '', isDrop: false, isWarmup: false });
 export const makeCell = () => ({ weight: '', reps: '', rpe: '', restSec: '', form: '', pain: 0, notes: '', done: false, skipped: false, skipReason: '', replacedWith: '' });
 
+export function duplicateLastSet(sets) {
+  const current = Array.isArray(sets) ? sets : [];
+  if (!current.length) return current;
+  const previous = current[current.length - 1];
+  return [...current, {
+    ...makeSet(),
+    weight: previous.weight,
+    reps: previous.reps,
+    rpe: previous.rpe,
+    isDrop: !!previous.isDrop,
+    isWarmup: !!previous.isWarmup,
+  }];
+}
+
 export function initSession(plan) {
   const entries = {};
   plan.blocks.forEach((b) => {
@@ -295,6 +438,25 @@ export function initSession(plan) {
 export function getWorkingSession(key, state) {
   if (state.workoutSessions && state.workoutSessions[key]) return state.workoutSessions[key];
   return { ...initSession(resolveWorkout(key, state)), date: key };
+}
+
+// A workout date can be swapped safely until either side contains intentional
+// user work. Merely creating an empty session does not count as started.
+export function workoutSessionHasData(session) {
+  if (!session || typeof session !== 'object') return false;
+  if (session.completed || String(session.notes || '').trim()) return true;
+
+  const valueEntered = (item) => ['weight', 'reps', 'rpe', 'restSec', 'form', 'notes', 'skipReason', 'replacedWith']
+    .some((key) => String((item && item[key]) || '').trim());
+  const setHasData = (set) => valueEntered(set) || Number(set && set.pain) > 0 || !!(set && (set.isDrop || set.isWarmup));
+  const cellHasData = (cell) => valueEntered(cell) || Number(cell && cell.pain) > 0 || !!(cell && (cell.done || cell.skipped));
+
+  return Object.values(session.entries || {}).some((entry) => {
+    if (!entry || typeof entry !== 'object') return false;
+    if (entry.unplanned || entry.completed || entry.skipped || valueEntered(entry)) return true;
+    if ((entry.sets || []).some(setHasData)) return true;
+    return (entry.rounds || []).some((round) => round.done || Object.values(round.byExercise || {}).some(cellHasData));
+  });
 }
 
 // ---------- completion logic ----------
