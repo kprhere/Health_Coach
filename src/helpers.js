@@ -294,12 +294,29 @@ export function download(filename, text, type = 'application/json') {
 }
 
 // ---------- day flags ----------
+// Puratasi (Tamil month) is observed pure vegetarian end to end. It is a food
+// rule, not a calorie rule, so it maps training -> trainingVeg and rest ->
+// restVeg, which carry identical calories and identical protein. Thursday and
+// Saturday are already vegetarian and need no mapping. Workouts never change.
+export function inPuratasi(key, state) {
+  const s = (state && state.settings) || {};
+  const start = s.puratasiStartDate;
+  const end = s.puratasiEndDate;
+  if (!start || !end || typeof key !== 'string') return false;
+  return key >= start && key <= end;
+}
+
 export function nutritionDayType(key, state) {
   const override = state && state.dayOverrides && state.dayOverrides[key];
   if (override === 'fast1') return 'noMoonFast1';
   if (override === 'fast2' || override === 'fast') return 'noMoonFast2'; // migrate the original manual fast
   if (override === 'veg') return 'vegSat';
-  return PROGRAM.days[dowOf(key)].dayType;
+  const scheduled = PROGRAM.days[dowOf(key)].dayType;
+  if (inPuratasi(key, state)) {
+    if (scheduled === 'training') return 'trainingVeg';
+    if (scheduled === 'rest') return 'restVeg';
+  }
+  return scheduled;
 }
 
 export function fastEndTime(key, state) {
@@ -317,7 +334,8 @@ export function dayFlags(key, state) {
     dow,
     swimDay: dow === 2 || dow === 4,
     fastDay: dayType === 'fastThu' || dayType === 'noMoonFast1' || dayType === 'noMoonFast2',
-    vegDay: dayType === 'fastThu' || dayType === 'noMoonFast1' || dayType === 'noMoonFast2' || dayType === 'vegSat',
+    vegDay: dayType === 'fastThu' || dayType === 'noMoonFast1' || dayType === 'noMoonFast2' || dayType === 'vegSat'
+      || dayType === 'trainingVeg' || dayType === 'restVeg',
     badmintonAvailable: dow >= 1 && dow <= 5,
     classDay: dow === 6,
   };
@@ -1145,6 +1163,91 @@ export function baselineScan(state) { const a = sortedScans(state); return a[0] 
 export function nextScanCountdown(state) {
   const c = programCalendar(state);
   return { next: c.nextBodyScanDate, days: c.daysUntilNextScan, explicit: c.nextScanManual };
+}
+
+// ---------- activity factor self-check ----------
+// settings.activityFactor is the only input to the whole nutrition engine that
+// is an estimate rather than a measurement, and a wrong one silently invalidates
+// every calorie target downstream. It is also the one estimate the scan history
+// can audit: between two scans we know how much tissue was lost and roughly what
+// was eaten, so real maintenance is recoverable.
+//
+//   real maintenance = average daily intake + energy released from tissue
+//
+// Fat carries ~3500 kcal/lb. Body water carries none, so only the protein change
+// counts on the lean side (~4 kcal/g). Logged intake is used for any day that has
+// it and the prescribed target fills the rest, with coverage reported so the
+// reader knows how much of the answer is assumption.
+const KCAL_PER_LB_FAT = 3500;
+const G_PER_LB = 453.6;
+const KCAL_PER_G_PROTEIN = 4;
+const MIN_WINDOW_DAYS = 21;   // shorter windows are dominated by water swings
+const DRIFT_TOLERANCE = 0.05; // ~90 kcal/day at a 1769 BMR
+// Logged intake has to carry most of the window. The prescribed target is itself
+// derived from activityFactor, so filling the window with it would make this
+// audit measure its own assumption: raise the factor, targets rise, the
+// "observed" factor rises to match, and it always agrees with itself. Prescribed
+// values may patch small gaps, never form the bulk of the answer.
+const MIN_COVERAGE = 50;
+
+export function observedActivityFactor(state) {
+  const scans = sortedScans(state);
+  const configured = Number((state.settings || {}).activityFactor) || 0;
+  if (scans.length < 2) {
+    return { ok: false, reason: 'Needs two body scans to compare.', configured };
+  }
+  const to = scans[scans.length - 1];
+  const from = scans[scans.length - 2];
+  const days = Math.round((parseKey(to.date) - parseKey(from.date)) / 86400000);
+  if (days < MIN_WINDOW_DAYS) {
+    return { ok: false, reason: `Only ${days} days between the last two scans; needs ${MIN_WINDOW_DAYS}+ to see past water shifts.`, configured, days };
+  }
+  const bmr = Number(to.bmr) || 0;
+  if (!bmr) return { ok: false, reason: 'Latest scan has no BMR.', configured, days };
+
+  // What was eaten across the window: logged where logged, prescribed elsewhere.
+  let intakeTotal = 0;
+  let logged = 0;
+  for (let i = 1; i <= days; i += 1) {
+    const key = addDays(from.date, i);
+    const actual = nutritionActuals(key, state);
+    if (actual.kcal > 0) { intakeTotal += actual.kcal; logged += 1; }
+    else intakeTotal += resolveNutrition(key, state).targets.kcal || 0;
+  }
+  const coverage = Math.round((logged / days) * 100);
+  if (coverage < MIN_COVERAGE) {
+    return {
+      ok: false,
+      reason: `Only ${coverage}% of the ${days} days since ${from.date} have logged meals. Below ${MIN_COVERAGE}% this would mostly be reading back the plan's own assumption instead of measuring you — log meals and it becomes real.`,
+      configured, days, coverage,
+    };
+  }
+  const intake = intakeTotal / days;
+
+  // Energy released from tissue. Fat is the bulk of it; protein mass is the
+  // honest lean-side proxy because the water inside lean tissue carries none.
+  const fatLb = (Number(from.fatMass) || 0) - (Number(to.fatMass) || 0);
+  const proteinLb = (Number(from.protein) || 0) - (Number(to.protein) || 0);
+  const tissueKcal = fatLb * KCAL_PER_LB_FAT + proteinLb * G_PER_LB * KCAL_PER_G_PROTEIN;
+  const tissuePerDay = tissueKcal / days;
+
+  const tee = Math.round(intake + tissuePerDay);
+  const factor = Math.round((tee / bmr) * 1000) / 1000;
+  const drift = configured ? Math.round((configured - factor) * 1000) / 1000 : 0;
+  const gap = configured ? Math.round(bmr * drift) : 0;
+
+  return {
+    ok: true,
+    from: from.date, to: to.date, days, coverage,
+    intake: Math.round(intake),
+    tissuePerDay: Math.round(tissuePerDay),
+    fatLb: Math.round(fatLb * 10) / 10,
+    proteinLb: Math.round(proteinLb * 10) / 10,
+    bmr, tee, factor, configured, drift,
+    gap,                                  // +ve = configured overstates the burn
+    drifting: !!configured && Math.abs(drift) >= DRIFT_TOLERANCE,
+    suggestion: Math.round(factor * 100) / 100,
+  };
 }
 
 // ---------- restart load ----------

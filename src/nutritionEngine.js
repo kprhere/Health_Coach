@@ -37,21 +37,33 @@ export function nutritionProfile(state) {
   const bfPct = scan?.bodyFatPct ?? profile.startBodyFatPct ?? 24;
   const leanMass = scan?.leanMass || Math.round(bw * (1 - bfPct / 100) * 10) / 10; // lb
   const bmr = scan?.bmr || Math.round(370 + 21.6 * (leanMass / LB_PER_KG));
-  // Maintenance: prefer the scan's measured total energy expenditure,
-  // otherwise estimate from BMR and a light-active multiplier.
-  const tdee = scan?.tee || Math.round(bmr * 1.55);
+  // ---- maintenance ----
+  // The Evolt TEE is BMR times an activity level the device GUESSES. When that
+  // guess is wrong every downstream target is wrong, and it was: the 08-13-2026
+  // scan assumed factor 1.54 (badminton included) while the observed weight
+  // change implies 1.37. So an explicit activityFactor, checked against real
+  // scale movement, wins over the device's number whenever it is set.
+  const activityFactor = Number(settings.activityFactor) > 0 ? Number(settings.activityFactor) : 0;
+  const tdee = activityFactor > 0
+    ? Math.round(bmr * activityFactor)
+    : (scan?.tee || Math.round(bmr * 1.55));
 
   // ---- deficit sized for steady, hair-safe fat loss ----
-  // Default 20% below maintenance = a moderate cut (~0.5-0.7% bodyweight
-  // per week), which the app's own hair guidance calls the safe ceiling.
-  const deficitPct = Number(settings.deficitPercent) > 0 ? Number(settings.deficitPercent) : 20;
+  // 15% below a TRUTHFUL maintenance. The lean-mass loss on 08-13-2026 happened
+  // at a real deficit of only ~166 kcal/day, so the deficit was never the
+  // problem and cutting it further only pushes the goal out of reach. Protein
+  // and training stimulus are the levers that protect muscle here.
+  const deficitPct = Number(settings.deficitPercent) > 0 ? Number(settings.deficitPercent) : 15;
   const calFloor = Math.max(1500, Math.round(bmr * 1.1)); // never diet below this
   const baseCals = Math.max(Math.round((tdee * (100 - deficitPct)) / 100), calFloor);
 
   // ---- protein: anchored to LEAN MASS, held high to keep muscle + hair ----
-  // 1.3 g per lb of lean mass, clamped to 1.6-2.4 g/kg bodyweight.
+  // 1.45 g per lb of lean mass, clamped to 1.7-2.6 g/kg bodyweight.
+  // Raised from 1.3 after the 08-13-2026 scan: at 1.3 (190 g) more than half
+  // the weight lost came off lean mass, so the anchor was too low to protect
+  // muscle at this training load. 1.45 also matches Evolt's own 204-212 g call.
   const bwKg = bw / LB_PER_KG;
-  const protein = Math.round(clamp(leanMass * 1.3, bwKg * 1.6, bwKg * 2.4) / 5) * 5;
+  const protein = Math.round(clamp(leanMass * 1.45, bwKg * 1.7, bwKg * 2.6) / 5) * 5;
 
   // ---- fat: 0.35 g/lb bodyweight (hormones), kept moderate for LDL 123 ----
   const fat = Math.round((bw * 0.35) / 5) * 5;
@@ -77,17 +89,28 @@ export function nutritionProfile(state) {
     goalWaistIn: profile.goalWaistIn || null,
     // human-readable rationale lines for the "targets from your scan" card
     explain: [
-      `Maintenance ${tdee} kcal comes from your ${scan?.date || 'latest'} scan (TEE${scan?.tee ? '' : ' est.'}).`,
+      activityFactor > 0
+        ? `Maintenance ${tdee} kcal is your ${bmr} BMR x ${activityFactor} activity, checked against real scale movement (the scan's own TEE assumes badminton you are not playing).`
+        : `Maintenance ${tdee} kcal comes from your ${scan?.date || 'latest'} scan (TEE${scan?.tee ? '' : ' est.'}).`,
       `A ${deficitPct}% cut sets ${baseCals} kcal/day — about ${lbPerWeek} lb/week, a hair-safe pace.`,
-      `Protein ${protein} g is 1.3 g per lb of your ${leanMass} lb lean mass, to hold muscle and hair.`,
+      `Protein ${protein} g is 1.45 g per lb of your ${leanMass} lb lean mass, to hold muscle and hair.`,
       `Fat ${fat} g (~0.35 g/lb) supports hormones while staying LDL-friendly; carbs fill the rest.`,
     ],
   };
 }
 
 // day-type calorie multipliers around the personal base (calorie cycling)
-const DAY_CAL_MULT = { training: 1.09, rest: 0.955, fastThu: 0.91, noMoonFast1: 0.955, noMoonFast2: 0.93, vegSat: 0.977 };
-const DAY_FAT_MULT = { training: 1.0, rest: 1.0, fastThu: 0.9, noMoonFast1: 0.9, noMoonFast2: 0.9, vegSat: 0.95 };
+// trainingVeg / restVeg are the Puratasi twins of training / rest: identical
+// calories and identical protein, vegetarian food only. Going pure veg must not
+// quietly become a calorie cut, and the deficit percentage stays where it is.
+const DAY_CAL_MULT = { training: 1.09, trainingVeg: 1.09, rest: 0.955, restVeg: 0.955, fastThu: 0.91, noMoonFast1: 0.955, noMoonFast2: 0.93, vegSat: 0.977 };
+const DAY_FAT_MULT = { training: 1.0, trainingVeg: 1.0, rest: 1.0, restVeg: 1.0, fastThu: 0.9, noMoonFast1: 0.9, noMoonFast2: 0.9, vegSat: 0.95 };
+// Protein normally never flexes with the day. The Thursday fast is the one
+// physical exception: a 6 PM to 10 PM eating window cannot hold 205 g without
+// stacking four whey servings, so it carries 80% (165 g) and the other six days
+// stay at the full target. The weekly average still lands near 199 g/day, which
+// is 1.06 g per lb of bodyweight — the muscle-protecting level is a weekly one.
+const DAY_PROTEIN_MULT = { fastThu: 0.8 };
 
 // ============================================================
 // 2. PER-DAY TARGETS  (replaces the hardcoded NUTRITION.targets)
@@ -98,11 +121,12 @@ export function personalTargets(dayType, state) {
   const fatMult = DAY_FAT_MULT[dayType] ?? 1;
 
   const kcal = Math.round((p.baseCals * calMult) / 10) * 10;
-  const protein = p.protein; // protein never flexes with the day
+  const protein = Math.round((p.protein * (DAY_PROTEIN_MULT[dayType] ?? 1)) / 5) * 5;
   const fat = Math.round((p.fat * fatMult) / 5) * 5;
   const carbs = Math.max(60, Math.round((kcal - protein * 4 - fat * 9) / 4 / 5) * 5);
   const fiber = clamp(Math.round((kcal / 1000) * 15), 28, 45);
-  const waterL = dayType === 'training' || dayType === 'fastThu' || dayType === 'noMoonFast1' || dayType === 'noMoonFast2'
+  const waterL = dayType === 'training' || dayType === 'trainingVeg' || dayType === 'fastThu'
+    || dayType === 'noMoonFast1' || dayType === 'noMoonFast2'
     ? Math.round((p.waterL + 0.25) * 100) / 100
     : p.waterL;
 
@@ -128,9 +152,19 @@ export const FOODS = {
   whey1:     F('Whey', '1 scoop', 24, 3, 1, 120, true, ['lean', 'gi']),
   gyog:      F('Greek yogurt', '200 g', 20, 9, 5, 165, true, ['lean', 'gi']),
   paneer:    F('Low-fat paneer', '100 g', 18, 4, 8, 160, true, ['ldl', 'gi']),
+  paneer150: F('Low-fat paneer', '150 g', 27, 6, 12, 240, true, ['ldl', 'gi']),
   tofu:      F('Tofu', '150 g', 17, 3, 9, 170, true, ['ldl', 'gi', 'omega']),
   dal:       F('Dal', '1 bowl', 12, 30, 4, 200, true, ['gi', 'ldl']),
   rajma:     F('Rajma / chana', '1 bowl', 13, 32, 3, 210, true, ['gi', 'ldl']),
+  // ---- Puratasi workhorses: the only veg foods dense enough to replace meat ----
+  // Soya chunks carry 0.15 g protein per kcal, within reach of chicken's 0.18,
+  // and nothing else vegetarian comes close. The pure-veg month depends on them.
+  soya:      F('Soya chunks (meal maker)', '60 g dry', 31, 18, 1, 205, true, ['lean', 'gi', 'ldl']),
+  soya90:    F('Soya chunks (meal maker)', '90 g dry', 47, 27, 2, 310, true, ['lean', 'gi', 'ldl']),
+  gyog250:   F('Greek yogurt', '250 g', 25, 11, 6, 205, true, ['lean', 'gi']),
+  milk:      F('Skim milk', '250 ml', 9, 12, 1, 88, true, ['gi']),
+  curd:      F('Low-fat curd', '200 g', 7, 9, 3, 90, true, ['gi', 'ldl']),
+  whey2:     F('Whey', '2 scoops', 48, 6, 2, 240, true, ['lean', 'gi']),
   // carbs
   oats:      F('Oats (in almond milk)', '50 g', 6, 30, 3, 170, true, ['gi']),
   brownrice: F('Brown rice', '1 cup', 5, 45, 2, 215, true, ['gi']),
@@ -199,7 +233,9 @@ function slot(name, time, optionKeyLists) {
 
 export function mealPlanFor(dayType, state) {
   const noMoonFast = dayType === 'noMoonFast1' || dayType === 'noMoonFast2';
-  const isVegDay = dayType === 'vegSat' || dayType === 'fastThu' || noMoonFast;
+  const isVegDay = dayType === 'vegSat' || dayType === 'fastThu' || noMoonFast
+    || dayType === 'trainingVeg' || dayType === 'restVeg';
+  const isTraining = dayType === 'training' || dayType === 'trainingVeg';
 
   let slots;
   if (dayType === 'fastThu') {
@@ -207,13 +243,17 @@ export function mealPlanFor(dayType, state) {
     slots = [
       { name: 'Fasting window', time: '5 AM – 6 PM', options: [opt(['fastDrinks'])], fasting: true,
         note: 'Water, black coffee, green tea only. Emergency: one fruit OR one glass of milk.' },
-      slot('Break the fast (gentle)', '6:00 PM', [['banana', 'almonds'], ['berries', 'buttermilk']]),
-      slot('High-protein veg dinner', '7:30 PM', [
-        ['paneer', 'dal', 'millet2', 'salad'],
+      slot('Break the fast (gentle)', '6:00 PM', [['whey1', 'banana'], ['banana', 'almonds'], ['berries', 'buttermilk']]),
+      // The swim sits between breaking the fast and dinner, so it earns a
+      // protein slot of its own. Without it Thursday tops out around 117 g and
+      // the day is impossible to eat, which is what this used to be.
+      slot('After the swim', '8:15 PM', [['whey2'], ['gyog250'], ['whey1', 'milk']]),
+      slot('High-protein veg dinner', '8:45 PM', [
+        ['soya90', 'paneer', 'millet2', 'salad'],
+        ['soya', 'dal', 'sabzi', 'salad'],
         ['tofu', 'rajma', 'quinoa', 'salad'],
-        ['paneer', 'sabzi', 'roti2', 'gyog'],
       ]),
-      slot('Protein before bed', '9:30 PM', [['whey1'], ['gyog']]),
+      slot('Protein before bed', '9:45 PM', [['whey1', 'milk'], ['gyog250'], ['curd']]),
     ];
   } else if (noMoonFast) {
     const end = dayType === 'noMoonFast1' ? '1:00 PM' : '2:00 PM';
@@ -221,41 +261,47 @@ export function mealPlanFor(dayType, state) {
     slots = [
       { name: 'No-moon fasting window', time: `On waking – ${end}`, options: [opt(['fastDrinks'])], fasting: true,
         note: `Fast until ${end}. Water, black coffee and green tea only.` },
-      slot('Break the fast (gentle)', end, [['banana', 'almonds'], ['berries', 'buttermilk']]),
+      slot('Break the fast (gentle)', end, [['whey1', 'banana'], ['banana', 'almonds'], ['berries', 'buttermilk']]),
       slot('High-protein vegetarian lunch', lunch, [
-        ['paneer', 'rajma', 'brownrice', 'salad'],
-        ['tofu', 'dal', 'quinoa', 'salad'],
-        ['paneer', 'dal', 'millet2', 'salad'],
+        ['soya', 'brownrice', 'dal', 'salad'],
+        ['soya', 'paneer', 'millet2', 'salad'],
+        ['tofu', 'rajma', 'quinoa', 'salad'],
       ]),
-      slot('Protein snack', '5:00 PM', [['whey1', 'berries'], ['gyog', 'berries', 'almonds']]),
+      slot('Protein snack', '5:00 PM', [['whey2', 'berries'], ['gyog250', 'berries'], ['whey1', 'milk']]),
       slot('Vegetarian dinner', '8:00 PM', [
-        ['paneer', 'dal', 'roti2', 'salad'],
-        ['tofu', 'sabzi', 'quinoa', 'salad'],
-        ['paneer', 'sabzi', 'millet2', 'gyog'],
+        ['soya', 'paneer', 'sabzi', 'salad'],
+        ['paneer150', 'dal', 'roti2', 'salad'],
+        ['tofu', 'rajma', 'millet2', 'salad'],
       ]),
-      { ...slot('Optional bedtime (if protein low)', '9:30 PM', [['whey1'], ['gyog']]), optional: true },
+      { ...slot('Optional bedtime (if protein low)', '9:30 PM', [['whey1'], ['gyog250'], ['milk']]), optional: true },
     ];
   } else {
-    const wake = slot('On waking (fasted)', dayType === 'training' ? '5:15 AM' : '6:00 AM', [
+    const wake = slot('On waking (fasted)', isTraining ? '5:15 AM' : '6:00 AM', [
       ['chiaflax', 'almonds'], ['banana', 'almonds'], ['buttermilk'],
     ]);
-    const breakfast = slot(dayType === 'training' ? 'Post-workout breakfast' : 'Breakfast',
-      dayType === 'training' ? '7:30 AM' : '8:00 AM', [
-        ['oats', 'whey15', 'chiaflax', 'berries'],
-        isVegDay ? ['gyog', 'idli2', 'berries'] : ['eggmix', 'idli2', 'berries'],
+    const breakfast = slot(isTraining ? 'Post-workout breakfast' : 'Breakfast',
+      isTraining ? '7:30 AM' : '8:00 AM', [
+        isVegDay ? ['oats', 'whey2', 'chiaflax', 'berries'] : ['oats', 'whey15', 'chiaflax', 'berries'],
+        isVegDay ? ['gyog250', 'idli2', 'berries', 'whey1'] : ['eggmix', 'idli2', 'berries'],
         ['gyog', 'oats', 'berries', 'almonds'],
       ]);
+    // Veg lunch and dinner lead with soya chunks. Paneer- and dal-only plates
+    // top out near 40 g protein, which cannot reach 205 g across the day.
+    // The last option in each list is the low-carb plate: protein, sabzi and
+    // salad with the starch dropped. Rest days only budget 165 g carbs, so
+    // without it no combination of full-starch plates fits the calories.
     const lunch = slot('Lunch', dayType === 'vegSat' ? '1:00 PM' : '12:30 PM',
       isVegDay
-        ? [['paneer', 'rajma', 'brownrice', 'salad'], ['tofu', 'dal', 'quinoa', 'salad'], ['paneer', 'dal', 'millet2', 'salad']]
-        : [['chickenEgg', 'brownrice', 'dal', 'salad'], ['fish', 'quinoa', 'salad'], ['paneer', 'rajma', 'brownrice', 'salad']]);
-    const snack = slot('Snack', '4:00 PM', [
-      ['whey1', 'banana'], ['gyog', 'berries', 'almonds'], ['buttermilk', 'almonds'],
-    ]);
+        ? [['soya', 'brownrice', 'dal', 'salad'], ['soya', 'paneer', 'millet2', 'salad'], ['soya', 'paneer', 'salad']]
+        : [['chickenEgg', 'brownrice', 'dal', 'salad'], ['fish', 'quinoa', 'salad'], ['chicken', 'sabzi', 'salad']]);
+    const snack = slot('Snack', '4:00 PM',
+      isVegDay
+        ? [['whey1', 'banana'], ['gyog250', 'berries'], ['whey1', 'milk']]
+        : [['whey1', 'banana'], ['gyog', 'berries', 'almonds'], ['buttermilk', 'almonds']]);
     const dinner = slot('Dinner', '7:30 PM',
       isVegDay
-        ? [['paneer', 'dal', 'roti2', 'salad'], ['tofu', 'sabzi', 'quinoa', 'salad'], ['paneer', 'sabzi', 'millet2', 'gyog']]
-        : [['chickenEgg', 'millet2', 'sabzi', 'salad'], ['fish', 'sabzi', 'quinoa', 'salad'], ['paneer', 'dal', 'roti2', 'salad']]);
+        ? [['soya', 'paneer', 'sabzi', 'salad'], ['paneer150', 'dal', 'roti2', 'salad'], ['soya', 'sabzi', 'salad']]
+        : [['chickenEgg', 'millet2', 'sabzi', 'salad'], ['fish', 'sabzi', 'quinoa', 'salad'], ['chicken', 'sabzi', 'salad']]);
     const bed = { ...slot('Optional bedtime (if protein low)', '9:30 PM', [['whey1'], ['gyog']]), optional: true };
     slots = dayType === 'rest'
       ? [wake, breakfast, lunch, snack, dinner, bed]

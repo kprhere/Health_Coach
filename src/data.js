@@ -24,11 +24,24 @@ export const PROFILE_DEFAULT = {
 
 export const SETTINGS_DEFAULT = {
   units: 'imperial',
-  proteinTarget: 190,
+  proteinTarget: 205,
   waterTargetL: 3.75,
   stepsTarget: 10000,
   sleepTargetH: 7.5,
-  deficitPercent: 20,                  // fat-loss deficit vs maintenance (drives all calorie + food targets)
+  deficitPercent: 15,                  // fat-loss deficit vs maintenance (drives all calorie + food targets)
+  // Maintenance = BMR x this, and it OVERRIDES the scan's own TEE. The Evolt
+  // guessed 1.54 because it assumed the badminton sessions; observed weight
+  // change over 07-08 -> 08-13 implies 1.374 for the old schedule. 1.44 is the
+  // reworked week (4 lifts + 2 swims + 5 scheduled walks + BodyBalance).
+  // If the walks stop happening, drop this toward 1.37 or the targets lie.
+  activityFactor: 1.44,
+  // ---- Puratasi: pure vegetarian for the whole Tamil month ----
+  // Calories and the 15% deficit are UNCHANGED across it, and protein stays at
+  // the full target — going veg is a food restriction, not a reason to eat less
+  // or accept less protein. Dates are approximate (the month turns when the sun
+  // enters Kanya, around Sept 17); confirm against your almanac and edit here.
+  puratasiStartDate: '2026-09-17',
+  puratasiEndDate: '2026-10-17',
   // ---- program calendar (all editable in More, week/day recalculate from these) ----
   programStartDate: '2026-07-14',      // program day 1
   restartPhaseStartDate: '2026-07-14', // restart phase day 1
@@ -49,10 +62,13 @@ export const SETTINGS_DEFAULT = {
 
 // shown on Home + README
 export const PROGRAM_RATIONALE =
-  'Chosen split: 4-day Upper / Lower hybrid around swimming, badminton and one mobility class. ' +
+  'Chosen split: 4-day Upper / Lower hybrid around swimming and one mobility class. ' +
   'After a 40-day layoff and while eating in a fat-loss deficit, recovery is the limiter, so a 6-day PPL is too much. ' +
   'Upper / Lower hits every muscle about 2x per week at moderate volume, which is the sweet spot for holding muscle while losing fat. ' +
-  'Tuesday and Thursday evening swims plus optional morning badminton already cover conditioning, so no extra cardio is forced. ' +
+  'Conditioning is now SCHEDULED, not assumed: five zone 2 walks (20 min after Mon and Fri lifts, 20 min Wed, 25 min Sat, 15 min Sun) plus the Tuesday and Thursday swims. ' +
+  'Wednesday also carries the single hard cardio session of the week, 8 x 1 min bike intervals. It is there because Wednesday has no lifting and Thursday is a fast plus easy swim, so it costs the least recovery, and because zone 2 walking alone does not move VO2 max — which this app tracks but nothing else addresses. Bike over sprints keeps it non-impact. Cut this first if recovery slips. ' +
+  'The earlier version leaned on optional morning badminton to cover conditioning. That badminton never happened, so the real activity level came in far below what the Evolt scan assumed and the plan quietly stopped working. ' +
+  'Badminton is still welcome as a bonus and simply replaces that day\'s walk when it happens, but nothing in the plan depends on it any more. ' +
   'Thursday stays a true recovery day (fast + no heavy lifting + swim). Saturday is the BodyBalance mobility slot with a lifting fallback.';
 
 // ============================================================
@@ -249,9 +265,10 @@ export const PROGRAM = {
           { name: 'Rope Pushdown', targetReps: '12-15', targetRpe: 9 },
         ], 'Biceps then triceps, back to back'),
       ],
-      conditioning: [], mobility: [],
-      sport: [{ name: 'Badminton', detail: 'Optional 5:30-7:00 AM. If played, lift after and add electrolytes + 30-50g carbs.' }],
-      notes: 'First hard upper session. Quality reps over load. Direct biceps and triceps included. Log everything so next targets auto-calc.',
+      conditioning: [{ name: 'Incline Walk', detail: '20 min zone 2 after lifting, incline 8-12%. Skip only if badminton actually happened.' }],
+      mobility: [],
+      sport: [{ name: 'Badminton', detail: 'Bonus, not required. 5:30-7:00 AM. If played it REPLACES today\'s walk: lift after and add electrolytes + 30-50g carbs.' }],
+      notes: 'First hard upper session. Quality reps over load. Direct biceps and triceps included. Log everything so next targets auto-calc. The walk is part of the plan, not an extra.',
     },
     2: {
       key: 'lowerA', title: 'Lower Body A', focus: 'Strength', dayType: 'training', intensity: 'Hard',
@@ -281,14 +298,17 @@ export const PROGRAM = {
           { name: 'Plank', targetReps: '30-45s', targetRpe: 6 },
         ], 'Move station to station, rest 60s after the full round'),
       ],
-      conditioning: [{ name: 'Incline Walk', detail: '20-25 min zone 2, incline 8-12%. Drives steps and fat loss.' }],
+      conditioning: [
+        { name: 'Incline Walk', detail: '20 min zone 2, incline 8-12%. Do this first as the warm-up for the intervals.' },
+        { name: 'Bike', detail: 'Intervals: 8 x (1 min hard / 1 min easy), ~16 min. The only hard cardio of the week. Bike, not sprints — no impact, no next-day soreness, so it will not touch Sunday legs. This is the one session to cut first if sleep or recovery slips.' },
+      ],
       mobility: [
         { name: 'Hip Flexor Stretch', detail: '2 x 30s per side' },
         { name: 'Thoracic Rotation', detail: '2 x 8 per side' },
         { name: 'Foam Rolling', detail: 'Quads, back, calves' },
       ],
-      sport: [{ name: 'Badminton', detail: 'Optional morning session if recovery feels good.' }],
-      notes: 'Deliberately easy. Recover from Mon and Tue, keep steps and water up.',
+      sport: [{ name: 'Badminton', detail: 'Bonus, not required. If played, shorten the walk to 15 min so this stays a recovery day.' }],
+      notes: 'No lifting today, which is exactly why the week\'s one hard cardio session sits here — Thursday is a fast and swim, so there are two easy days before Sunday legs. Everything else stays deliberately easy: keep steps and water up.',
     },
     4: {
       key: 'fastRest', title: 'Fast + Recovery', focus: 'Rest + Swim', dayType: 'fastThu', intensity: 'Recovery',
@@ -320,14 +340,15 @@ export const PROGRAM = {
           { name: 'Rope Pushdown', targetReps: '12-15', targetRpe: 9 },
         ]),
       ],
-      conditioning: [], mobility: [],
-      sport: [{ name: 'Badminton', detail: 'Optional morning. If played, lift after and refuel.' }],
-      notes: 'Pump-focused with direct arms. Controlled tempo, add reps before adding weight.',
+      conditioning: [{ name: 'Incline Walk', detail: '20 min zone 2 after lifting, incline 8-12%. Skip only if badminton actually happened.' }],
+      mobility: [],
+      sport: [{ name: 'Badminton', detail: 'Bonus, not required. If played it REPLACES today\'s walk: lift after and refuel.' }],
+      notes: 'Pump-focused with direct arms. Controlled tempo, add reps before adding weight. Finish with the walk.',
     },
     6: {
       key: 'saturday', title: 'BodyBalance', focus: 'Mobility Class', dayType: 'vegSat', intensity: 'Light', isClassDay: true,
       blocks: [],
-      conditioning: [],
+      conditioning: [{ name: 'Incline Walk', detail: '25 min zone 2. Do it whether or not BodyBalance happens — the class is mobility, not conditioning.' }],
       mobility: [{ name: 'BodyBalance Class', detail: 'Les Mills BodyBalance, 45-55 min. Yoga, tai chi and pilates blend for flexibility, balance and core.' }],
       sport: [],
       notes: 'Vegetarian day. If BodyBalance is missed, switch to the Full Body fallback below and keep protein high (whey, paneer, dal, Greek yogurt).',
@@ -371,9 +392,10 @@ export const PROGRAM = {
           { name: 'Lying Leg Raise', targetReps: '12-15', targetRpe: 8 },
         ]),
       ],
-      conditioning: [], mobility: [],
+      conditioning: [{ name: 'Incline Walk', detail: '15 min easy, low incline. Short on purpose — legs were just worked.' }],
+      mobility: [],
       sport: [],
-      notes: 'Last hard session of the week. If performance has stalled two weeks running, take an easy deload next week.',
+      notes: 'Last hard session of the week. If performance has stalled two weeks running, take an easy deload next week. Progressive overload is what protects muscle in a deficit, so beat last week on something: reps, load or a cleaner tempo.',
     },
   },
 };
@@ -385,17 +407,26 @@ export const PROGRAM = {
 const M = (name, time, veg, items, kcal, p, c, f) => ({ name, time, veg, items, kcal, p, c, f });
 
 export const NUTRITION = {
+  // Fallback only — used when no body scan exists. The live numbers come from
+  // nutritionEngine.personalTargets(), driven by the latest scan, activityFactor
+  // and deficitPercent. Kept in step with that engine (maintenance 2547 from
+  // BMR 1769 x 1.44, 15% cut, 205 g protein) so the two cannot contradict.
   targets: {
-    training: { kcal: 2400, protein: 195, carbs: 235, fat: 70, fiber: 35, waterL: 3.75 },
-    rest: { kcal: 2100, protein: 190, carbs: 165, fat: 68, fiber: 35, waterL: 3.5 },
-    fastThu: { kcal: 2000, protein: 185, carbs: 150, fat: 62, fiber: 32, waterL: 3.75 },
-    noMoonFast1: { kcal: 2100, protein: 190, carbs: 165, fat: 62, fiber: 32, waterL: 3.75 },
-    noMoonFast2: { kcal: 2050, protein: 190, carbs: 150, fat: 62, fiber: 32, waterL: 3.75 },
-    vegSat: { kcal: 2150, protein: 180, carbs: 190, fat: 65, fiber: 40, waterL: 3.5 },
+    training: { kcal: 2360, protein: 205, carbs: 240, fat: 65, fiber: 35, waterL: 3.25 },
+    trainingVeg: { kcal: 2360, protein: 205, carbs: 240, fat: 65, fiber: 35, waterL: 3.25 },
+    rest: { kcal: 2070, protein: 205, carbs: 165, fat: 65, fiber: 31, waterL: 3.0 },
+    restVeg: { kcal: 2070, protein: 205, carbs: 165, fat: 65, fiber: 31, waterL: 3.0 },
+    // Protein is 165 here, not 205: a 6 PM to 10 PM eating window physically
+    // cannot hold the full target. The other six days stay at 205 and the
+    // weekly average still lands at 199 g/day (1.06 g per lb bodyweight).
+    fastThu: { kcal: 1970, protein: 165, carbs: 195, fat: 60, fiber: 30, waterL: 3.25 },
+    noMoonFast1: { kcal: 2070, protein: 205, carbs: 180, fat: 60, fiber: 31, waterL: 3.25 },
+    noMoonFast2: { kcal: 2010, protein: 205, carbs: 165, fat: 60, fiber: 30, waterL: 3.25 },
+    vegSat: { kcal: 2120, protein: 205, carbs: 190, fat: 60, fiber: 32, waterL: 3.0 },
   },
   plans: {
     training: [
-      M('On waking (fasted)', '5:15 AM', true, ['Overnight soaked chia seeds heated with lemon juice', 'Warm water', '5-6 soaked almonds (skip if badminton first, have after)'], 135, 5, 14, 9),
+      M('On waking (fasted)', '5:15 AM', true, ['Overnight soaked chia seeds heated with lemon juice', 'Warm water', '5-6 soaked almonds (if you do play badminton first, have these after instead)'], 135, 5, 14, 9),
       M('Post-workout breakfast', '7:30 AM', true, ['Overnight oats in almond milk', '1.5 scoops whey', 'Chia + flax seeds', 'Mixed berries'], 520, 48, 52, 14),
       M('Lunch', '12:30 PM', false, ['Grilled chicken or fish', 'Brown rice or quinoa', 'Dal', 'Large salad with olive oil'], 620, 52, 58, 18),
       M('Snack', '4:00 PM', true, ['Greek yogurt', 'Berries', '5-6 soaked almonds (measured)'], 300, 30, 22, 10),
@@ -403,7 +434,7 @@ export const NUTRITION = {
       M('Optional bedtime (if protein low)', '9:30 PM', true, ['Low-fat paneer or a casein / Greek yogurt bowl'], 180, 25, 6, 5),
     ],
     rest: [
-      M('On waking (fasted)', '6:00 AM', true, ['Overnight soaked chia seeds heated with lemon juice', 'Warm water', '5-6 soaked almonds (skip if badminton first, have after)'], 135, 5, 14, 9),
+      M('On waking (fasted)', '6:00 AM', true, ['Overnight soaked chia seeds heated with lemon juice', 'Warm water', '5-6 soaked almonds (if you do play badminton first, have these after instead)'], 135, 5, 14, 9),
       M('Breakfast', '8:00 AM', true, ['3-4 egg whites + 1 whole egg or tofu scramble', 'Oats or 2 small idli', 'Berries'], 380, 34, 30, 12),
       M('Lunch', '12:30 PM', false, ['Grilled chicken or fish', 'Small brown rice', 'Dal', 'Large salad'], 560, 50, 42, 18),
       M('Snack', '4:00 PM', true, ['Whey shake in water or almond milk', 'Apple'], 240, 28, 20, 4),
@@ -417,7 +448,7 @@ export const NUTRITION = {
       M('Protein before bed (if low)', '9:30 PM', true, ['Whey in almond milk or a Greek yogurt bowl'], 220, 30, 8, 6),
     ],
     vegSat: [
-      M('On waking (fasted)', '6:00 AM', true, ['Overnight soaked chia seeds heated with lemon juice', 'Warm water', '5-6 soaked almonds (skip if badminton first, have after)'], 135, 5, 14, 9),
+      M('On waking (fasted)', '6:00 AM', true, ['Overnight soaked chia seeds heated with lemon juice', 'Warm water', '5-6 soaked almonds (if you do play badminton first, have these after instead)'], 135, 5, 14, 9),
       M('Breakfast', '8:00 AM', true, ['Overnight oats in almond milk', '1.5 scoops whey', 'Chia + flax', 'Berries'], 520, 48, 52, 14),
       M('Lunch', '1:00 PM', true, ['Paneer or tofu bhurji', 'Chana or rajma', 'Brown rice or millet', 'Large salad'], 620, 44, 62, 20),
       M('Snack', '4:30 PM', true, ['Greek yogurt', 'Berries', 'Pumpkin seeds'], 280, 26, 20, 10),
@@ -490,6 +521,7 @@ export const HABITS = [
   { key: 'protein_hit', label: 'Protein goal reached', group: 'Nutrition' },
   { key: 'calories_ok', label: 'Calories within target', group: 'Nutrition' },
   { key: 'steps_10k', label: '10,000 steps', group: 'Activity' },
+  { key: 'zone2_walk', label: "Zone 2 walk (today's scheduled minutes)", group: 'Activity' },
   { key: 'water_hit', label: '3.5-4 L water', group: 'Nutrition' },
   { key: 'sleep_75', label: 'Sleep 7.5 hours', group: 'Recovery' },
   { key: 'creatine', label: 'Creatine', group: 'Supplements' },
@@ -511,12 +543,13 @@ export const HABITS = [
 ];
 
 // ============================================================
-// SEED BODY SCANS (your three real Evolt 360 result sheets)
+// SEED BODY SCANS (your four real Evolt 360 result sheets)
 // ============================================================
 export const SEED_SCANS = [
   { id: 'seed-2025-10-29', date: '2025-10-29', weight: 182.3, bodyFatPct: 23.1, fatMass: 42.1, leanMass: 140.2, skeletalMuscle: 77.8, protein: 28.7, mineral: 10.6, bodyWater: 101.0, subcutFat: 36.6, visceralFatLevel: 8, visceralFatArea: 76, waist: 36.1, waistHip: 0.82, bmr: 1743, tee: 2684, bioAge: 35, bwi: 7.2 },
   { id: 'seed-2026-04-20', date: '2026-04-20', weight: 189.4, bodyFatPct: 24.8, fatMass: 47.0, leanMass: 142.4, skeletalMuscle: 78.9, protein: 28.9, mineral: 11.0, bodyWater: 102.5, subcutFat: 40.6, visceralFatLevel: 9, visceralFatArea: 80, waist: 37.3, waistHip: 0.83, bmr: 1765, tee: 2718, bioAge: 36, bwi: 6.9 },
   { id: 'seed-2026-07-08', date: '2026-07-08', weight: 191.1, bodyFatPct: 24.3, fatMass: 46.5, leanMass: 144.6, skeletalMuscle: 80.2, protein: 29.5, mineral: 10.8, bodyWater: 104.3, subcutFat: 40.1, visceralFatLevel: 9, visceralFatArea: 78, waist: 37.2, waistHip: 0.83, bmr: 1786, tee: 2750, bioAge: 36, bwi: 6.9 },
+  { id: 'seed-2026-08-13', date: '2026-08-13', weight: 187.8, bodyFatPct: 24.0, fatMass: 45.0, leanMass: 142.9, skeletalMuscle: 79.1, protein: 29.1, mineral: 11.0, bodyWater: 102.7, subcutFat: 38.8, visceralFatLevel: 9, visceralFatArea: 77, waist: 36.8, waistHip: 0.83, bmr: 1769, tee: 2724, bioAge: 35, bwi: 7.2 },
 ];
 
 export const SCAN_FIELDS = [
@@ -641,7 +674,9 @@ export const SWIMMING_FUEL = {
 // day-type -> short human reason the diet differs that day
 export const DAY_VARIANTS = {
   training: { label: 'Training day', tone: 'cyan', why: 'Highest carbs and calories to fuel lifting and refill glycogen.' },
+  trainingVeg: { label: 'Puratasi training day', tone: 'green', why: 'Same calories and same protein as any training day, vegetarian only. Lead every plate with soya chunks, whey and paneer — dal and rice alone will not reach the target.' },
   rest:     { label: 'Rest day', tone: 'violet', why: 'Lower carbs, protein held high to keep recovery and muscle up.' },
+  restVeg:  { label: 'Puratasi rest day', tone: 'green', why: 'Same calories and same protein as any rest day, vegetarian only. Protein is the hard part today, so front-load it.' },
   fastThu:  { label: 'Fast plus swim', tone: 'amber', why: 'Fasted until 6 PM, then a gentle break and a high-protein veg dinner around the swim.' },
   noMoonFast1: { label: 'No-moon fast · 1 PM', tone: 'amber', why: 'Fasted until 1 PM, followed by a fully vegetarian high-protein plan.' },
   noMoonFast2: { label: 'No-moon fast · 2 PM', tone: 'amber', why: 'Fasted until 2 PM, followed by a fully vegetarian high-protein plan.' },
