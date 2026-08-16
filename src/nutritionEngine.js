@@ -37,13 +37,22 @@ export function nutritionProfile(state) {
   const bfPct = scan?.bodyFatPct ?? profile.startBodyFatPct ?? 24;
   const leanMass = scan?.leanMass || Math.round(bw * (1 - bfPct / 100) * 10) / 10; // lb
   const bmr = scan?.bmr || Math.round(370 + 21.6 * (leanMass / LB_PER_KG));
-  // Maintenance: prefer the scan's measured total energy expenditure,
-  // otherwise estimate from BMR and a light-active multiplier.
-  const tdee = scan?.tee || Math.round(bmr * 1.55);
+  // ---- maintenance ----
+  // The Evolt TEE is BMR times an activity level the device GUESSES. When that
+  // guess is wrong every downstream target is wrong, and it was: the 08-13-2026
+  // scan assumed factor 1.54 (badminton included) while the observed weight
+  // change implies 1.37. So an explicit activityFactor, checked against real
+  // scale movement, wins over the device's number whenever it is set.
+  const activityFactor = Number(settings.activityFactor) > 0 ? Number(settings.activityFactor) : 0;
+  const tdee = activityFactor > 0
+    ? Math.round(bmr * activityFactor)
+    : (scan?.tee || Math.round(bmr * 1.55));
 
   // ---- deficit sized for steady, hair-safe fat loss ----
-  // Default 15% below maintenance = ~0.4-0.5% bodyweight per week. Was 20%,
-  // which aimed at 1.09 lb/week and cost lean mass on the 08-13-2026 scan.
+  // 15% below a TRUTHFUL maintenance. The lean-mass loss on 08-13-2026 happened
+  // at a real deficit of only ~166 kcal/day, so the deficit was never the
+  // problem and cutting it further only pushes the goal out of reach. Protein
+  // and training stimulus are the levers that protect muscle here.
   const deficitPct = Number(settings.deficitPercent) > 0 ? Number(settings.deficitPercent) : 15;
   const calFloor = Math.max(1500, Math.round(bmr * 1.1)); // never diet below this
   const baseCals = Math.max(Math.round((tdee * (100 - deficitPct)) / 100), calFloor);
@@ -80,7 +89,9 @@ export function nutritionProfile(state) {
     goalWaistIn: profile.goalWaistIn || null,
     // human-readable rationale lines for the "targets from your scan" card
     explain: [
-      `Maintenance ${tdee} kcal comes from your ${scan?.date || 'latest'} scan (TEE${scan?.tee ? '' : ' est.'}).`,
+      activityFactor > 0
+        ? `Maintenance ${tdee} kcal is your ${bmr} BMR x ${activityFactor} activity, checked against real scale movement (the scan's own TEE assumes badminton you are not playing).`
+        : `Maintenance ${tdee} kcal comes from your ${scan?.date || 'latest'} scan (TEE${scan?.tee ? '' : ' est.'}).`,
       `A ${deficitPct}% cut sets ${baseCals} kcal/day — about ${lbPerWeek} lb/week, a hair-safe pace.`,
       `Protein ${protein} g is 1.45 g per lb of your ${leanMass} lb lean mass, to hold muscle and hair.`,
       `Fat ${fat} g (~0.35 g/lb) supports hormones while staying LDL-friendly; carbs fill the rest.`,
