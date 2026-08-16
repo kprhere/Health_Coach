@@ -294,12 +294,29 @@ export function download(filename, text, type = 'application/json') {
 }
 
 // ---------- day flags ----------
+// Puratasi (Tamil month) is observed pure vegetarian end to end. It is a food
+// rule, not a calorie rule, so it maps training -> trainingVeg and rest ->
+// restVeg, which carry identical calories and identical protein. Thursday and
+// Saturday are already vegetarian and need no mapping. Workouts never change.
+export function inPuratasi(key, state) {
+  const s = (state && state.settings) || {};
+  const start = s.puratasiStartDate;
+  const end = s.puratasiEndDate;
+  if (!start || !end || typeof key !== 'string') return false;
+  return key >= start && key <= end;
+}
+
 export function nutritionDayType(key, state) {
   const override = state && state.dayOverrides && state.dayOverrides[key];
   if (override === 'fast1') return 'noMoonFast1';
   if (override === 'fast2' || override === 'fast') return 'noMoonFast2'; // migrate the original manual fast
   if (override === 'veg') return 'vegSat';
-  return PROGRAM.days[dowOf(key)].dayType;
+  const scheduled = PROGRAM.days[dowOf(key)].dayType;
+  if (inPuratasi(key, state)) {
+    if (scheduled === 'training') return 'trainingVeg';
+    if (scheduled === 'rest') return 'restVeg';
+  }
+  return scheduled;
 }
 
 export function fastEndTime(key, state) {
@@ -317,7 +334,8 @@ export function dayFlags(key, state) {
     dow,
     swimDay: dow === 2 || dow === 4,
     fastDay: dayType === 'fastThu' || dayType === 'noMoonFast1' || dayType === 'noMoonFast2',
-    vegDay: dayType === 'fastThu' || dayType === 'noMoonFast1' || dayType === 'noMoonFast2' || dayType === 'vegSat',
+    vegDay: dayType === 'fastThu' || dayType === 'noMoonFast1' || dayType === 'noMoonFast2' || dayType === 'vegSat'
+      || dayType === 'trainingVeg' || dayType === 'restVeg',
     badmintonAvailable: dow >= 1 && dow <= 5,
     classDay: dow === 6,
   };

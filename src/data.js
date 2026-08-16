@@ -35,6 +35,13 @@ export const SETTINGS_DEFAULT = {
   // reworked week (4 lifts + 2 swims + 5 scheduled walks + BodyBalance).
   // If the walks stop happening, drop this toward 1.37 or the targets lie.
   activityFactor: 1.44,
+  // ---- Puratasi: pure vegetarian for the whole Tamil month ----
+  // Calories and the 15% deficit are UNCHANGED across it, and protein stays at
+  // the full target — going veg is a food restriction, not a reason to eat less
+  // or accept less protein. Dates are approximate (the month turns when the sun
+  // enters Kanya, around Sept 17); confirm against your almanac and edit here.
+  puratasiStartDate: '2026-09-17',
+  puratasiEndDate: '2026-10-17',
   // ---- program calendar (all editable in More, week/day recalculate from these) ----
   programStartDate: '2026-07-14',      // program day 1
   restartPhaseStartDate: '2026-07-14', // restart phase day 1
@@ -58,7 +65,8 @@ export const PROGRAM_RATIONALE =
   'Chosen split: 4-day Upper / Lower hybrid around swimming and one mobility class. ' +
   'After a 40-day layoff and while eating in a fat-loss deficit, recovery is the limiter, so a 6-day PPL is too much. ' +
   'Upper / Lower hits every muscle about 2x per week at moderate volume, which is the sweet spot for holding muscle while losing fat. ' +
-  'Conditioning is now SCHEDULED, not assumed: five zone 2 walks (20 min after Mon and Fri lifts, 35 min Wed, 25 min Sat, 15 min Sun) plus the Tuesday and Thursday swims. ' +
+  'Conditioning is now SCHEDULED, not assumed: five zone 2 walks (20 min after Mon and Fri lifts, 20 min Wed, 25 min Sat, 15 min Sun) plus the Tuesday and Thursday swims. ' +
+  'Wednesday also carries the single hard cardio session of the week, 8 x 1 min bike intervals. It is there because Wednesday has no lifting and Thursday is a fast plus easy swim, so it costs the least recovery, and because zone 2 walking alone does not move VO2 max — which this app tracks but nothing else addresses. Bike over sprints keeps it non-impact. Cut this first if recovery slips. ' +
   'The earlier version leaned on optional morning badminton to cover conditioning. That badminton never happened, so the real activity level came in far below what the Evolt scan assumed and the plan quietly stopped working. ' +
   'Badminton is still welcome as a bonus and simply replaces that day\'s walk when it happens, but nothing in the plan depends on it any more. ' +
   'Thursday stays a true recovery day (fast + no heavy lifting + swim). Saturday is the BodyBalance mobility slot with a lifting fallback.';
@@ -290,14 +298,17 @@ export const PROGRAM = {
           { name: 'Plank', targetReps: '30-45s', targetRpe: 6 },
         ], 'Move station to station, rest 60s after the full round'),
       ],
-      conditioning: [{ name: 'Incline Walk', detail: '35 min zone 2, incline 8-12%. Longest walk of the week — this is a rest day, so it carries the conditioning load.' }],
+      conditioning: [
+        { name: 'Incline Walk', detail: '20 min zone 2, incline 8-12%. Do this first as the warm-up for the intervals.' },
+        { name: 'Bike', detail: 'Intervals: 8 x (1 min hard / 1 min easy), ~16 min. The only hard cardio of the week. Bike, not sprints — no impact, no next-day soreness, so it will not touch Sunday legs. This is the one session to cut first if sleep or recovery slips.' },
+      ],
       mobility: [
         { name: 'Hip Flexor Stretch', detail: '2 x 30s per side' },
         { name: 'Thoracic Rotation', detail: '2 x 8 per side' },
         { name: 'Foam Rolling', detail: 'Quads, back, calves' },
       ],
       sport: [{ name: 'Badminton', detail: 'Bonus, not required. If played, shorten the walk to 15 min so this stays a recovery day.' }],
-      notes: 'Deliberately easy. Recover from Mon and Tue, keep steps and water up.',
+      notes: 'No lifting today, which is exactly why the week\'s one hard cardio session sits here — Thursday is a fast and swim, so there are two easy days before Sunday legs. Everything else stays deliberately easy: keep steps and water up.',
     },
     4: {
       key: 'fastRest', title: 'Fast + Recovery', focus: 'Rest + Swim', dayType: 'fastThu', intensity: 'Recovery',
@@ -402,8 +413,13 @@ export const NUTRITION = {
   // BMR 1769 x 1.44, 15% cut, 205 g protein) so the two cannot contradict.
   targets: {
     training: { kcal: 2360, protein: 205, carbs: 240, fat: 65, fiber: 35, waterL: 3.25 },
+    trainingVeg: { kcal: 2360, protein: 205, carbs: 240, fat: 65, fiber: 35, waterL: 3.25 },
     rest: { kcal: 2070, protein: 205, carbs: 165, fat: 65, fiber: 31, waterL: 3.0 },
-    fastThu: { kcal: 1970, protein: 205, carbs: 155, fat: 60, fiber: 30, waterL: 3.25 },
+    restVeg: { kcal: 2070, protein: 205, carbs: 165, fat: 65, fiber: 31, waterL: 3.0 },
+    // Protein is 165 here, not 205: a 6 PM to 10 PM eating window physically
+    // cannot hold the full target. The other six days stay at 205 and the
+    // weekly average still lands at 199 g/day (1.06 g per lb bodyweight).
+    fastThu: { kcal: 1970, protein: 165, carbs: 195, fat: 60, fiber: 30, waterL: 3.25 },
     noMoonFast1: { kcal: 2070, protein: 205, carbs: 180, fat: 60, fiber: 31, waterL: 3.25 },
     noMoonFast2: { kcal: 2010, protein: 205, carbs: 165, fat: 60, fiber: 30, waterL: 3.25 },
     vegSat: { kcal: 2120, protein: 205, carbs: 190, fat: 60, fiber: 32, waterL: 3.0 },
@@ -658,7 +674,9 @@ export const SWIMMING_FUEL = {
 // day-type -> short human reason the diet differs that day
 export const DAY_VARIANTS = {
   training: { label: 'Training day', tone: 'cyan', why: 'Highest carbs and calories to fuel lifting and refill glycogen.' },
+  trainingVeg: { label: 'Puratasi training day', tone: 'green', why: 'Same calories and same protein as any training day, vegetarian only. Lead every plate with soya chunks, whey and paneer — dal and rice alone will not reach the target.' },
   rest:     { label: 'Rest day', tone: 'violet', why: 'Lower carbs, protein held high to keep recovery and muscle up.' },
+  restVeg:  { label: 'Puratasi rest day', tone: 'green', why: 'Same calories and same protein as any rest day, vegetarian only. Protein is the hard part today, so front-load it.' },
   fastThu:  { label: 'Fast plus swim', tone: 'amber', why: 'Fasted until 6 PM, then a gentle break and a high-protein veg dinner around the swim.' },
   noMoonFast1: { label: 'No-moon fast · 1 PM', tone: 'amber', why: 'Fasted until 1 PM, followed by a fully vegetarian high-protein plan.' },
   noMoonFast2: { label: 'No-moon fast · 2 PM', tone: 'amber', why: 'Fasted until 2 PM, followed by a fully vegetarian high-protein plan.' },
