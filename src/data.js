@@ -24,11 +24,13 @@ export const PROFILE_DEFAULT = {
 
 export const SETTINGS_DEFAULT = {
   units: 'imperial',
-  proteinTarget: 190,
+  proteinTarget: 205,
   waterTargetL: 3.75,
   stepsTarget: 10000,
   sleepTargetH: 7.5,
-  deficitPercent: 20,                  // fat-loss deficit vs maintenance (drives all calorie + food targets)
+  // 08-13-2026 scan: lean mass fell 1.7 lb vs fat 1.5 lb over 36 days, so the
+  // cut was eating muscle. Eased 20% -> 15% to slow the pace and protect lean.
+  deficitPercent: 15,                  // fat-loss deficit vs maintenance (drives all calorie + food targets)
   // ---- program calendar (all editable in More, week/day recalculate from these) ----
   programStartDate: '2026-07-14',      // program day 1
   restartPhaseStartDate: '2026-07-14', // restart phase day 1
@@ -385,13 +387,16 @@ export const PROGRAM = {
 const M = (name, time, veg, items, kcal, p, c, f) => ({ name, time, veg, items, kcal, p, c, f });
 
 export const NUTRITION = {
+  // Fallback only — used when no body scan exists. The live numbers come from
+  // nutritionEngine.personalTargets(), driven by the latest scan + deficitPercent.
+  // Kept in step with that engine (15% deficit, 205 g protein) so the two agree.
   targets: {
-    training: { kcal: 2400, protein: 195, carbs: 235, fat: 70, fiber: 35, waterL: 3.75 },
-    rest: { kcal: 2100, protein: 190, carbs: 165, fat: 68, fiber: 35, waterL: 3.5 },
-    fastThu: { kcal: 2000, protein: 185, carbs: 150, fat: 62, fiber: 32, waterL: 3.75 },
-    noMoonFast1: { kcal: 2100, protein: 190, carbs: 165, fat: 62, fiber: 32, waterL: 3.75 },
-    noMoonFast2: { kcal: 2050, protein: 190, carbs: 150, fat: 62, fiber: 32, waterL: 3.75 },
-    vegSat: { kcal: 2150, protein: 180, carbs: 190, fat: 65, fiber: 40, waterL: 3.5 },
+    training: { kcal: 2520, protein: 205, carbs: 280, fat: 65, fiber: 38, waterL: 3.25 },
+    rest: { kcal: 2210, protein: 205, carbs: 200, fat: 65, fiber: 33, waterL: 3.0 },
+    fastThu: { kcal: 2110, protein: 205, carbs: 190, fat: 60, fiber: 32, waterL: 3.25 },
+    noMoonFast1: { kcal: 2210, protein: 205, carbs: 215, fat: 60, fiber: 33, waterL: 3.25 },
+    noMoonFast2: { kcal: 2150, protein: 205, carbs: 200, fat: 60, fiber: 32, waterL: 3.25 },
+    vegSat: { kcal: 2260, protein: 205, carbs: 225, fat: 60, fiber: 34, waterL: 3.0 },
   },
   plans: {
     training: [
@@ -511,12 +516,13 @@ export const HABITS = [
 ];
 
 // ============================================================
-// SEED BODY SCANS (your three real Evolt 360 result sheets)
+// SEED BODY SCANS (your four real Evolt 360 result sheets)
 // ============================================================
 export const SEED_SCANS = [
   { id: 'seed-2025-10-29', date: '2025-10-29', weight: 182.3, bodyFatPct: 23.1, fatMass: 42.1, leanMass: 140.2, skeletalMuscle: 77.8, protein: 28.7, mineral: 10.6, bodyWater: 101.0, subcutFat: 36.6, visceralFatLevel: 8, visceralFatArea: 76, waist: 36.1, waistHip: 0.82, bmr: 1743, tee: 2684, bioAge: 35, bwi: 7.2 },
   { id: 'seed-2026-04-20', date: '2026-04-20', weight: 189.4, bodyFatPct: 24.8, fatMass: 47.0, leanMass: 142.4, skeletalMuscle: 78.9, protein: 28.9, mineral: 11.0, bodyWater: 102.5, subcutFat: 40.6, visceralFatLevel: 9, visceralFatArea: 80, waist: 37.3, waistHip: 0.83, bmr: 1765, tee: 2718, bioAge: 36, bwi: 6.9 },
   { id: 'seed-2026-07-08', date: '2026-07-08', weight: 191.1, bodyFatPct: 24.3, fatMass: 46.5, leanMass: 144.6, skeletalMuscle: 80.2, protein: 29.5, mineral: 10.8, bodyWater: 104.3, subcutFat: 40.1, visceralFatLevel: 9, visceralFatArea: 78, waist: 37.2, waistHip: 0.83, bmr: 1786, tee: 2750, bioAge: 36, bwi: 6.9 },
+  { id: 'seed-2026-08-13', date: '2026-08-13', weight: 187.8, bodyFatPct: 24.0, fatMass: 45.0, leanMass: 142.9, skeletalMuscle: 79.1, protein: 29.1, mineral: 11.0, bodyWater: 102.7, subcutFat: 38.8, visceralFatLevel: 9, visceralFatArea: 77, waist: 36.8, waistHip: 0.83, bmr: 1769, tee: 2724, bioAge: 35, bwi: 7.2 },
 ];
 
 export const SCAN_FIELDS = [

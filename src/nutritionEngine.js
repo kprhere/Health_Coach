@@ -42,16 +42,19 @@ export function nutritionProfile(state) {
   const tdee = scan?.tee || Math.round(bmr * 1.55);
 
   // ---- deficit sized for steady, hair-safe fat loss ----
-  // Default 20% below maintenance = a moderate cut (~0.5-0.7% bodyweight
-  // per week), which the app's own hair guidance calls the safe ceiling.
-  const deficitPct = Number(settings.deficitPercent) > 0 ? Number(settings.deficitPercent) : 20;
+  // Default 15% below maintenance = ~0.4-0.5% bodyweight per week. Was 20%,
+  // which aimed at 1.09 lb/week and cost lean mass on the 08-13-2026 scan.
+  const deficitPct = Number(settings.deficitPercent) > 0 ? Number(settings.deficitPercent) : 15;
   const calFloor = Math.max(1500, Math.round(bmr * 1.1)); // never diet below this
   const baseCals = Math.max(Math.round((tdee * (100 - deficitPct)) / 100), calFloor);
 
   // ---- protein: anchored to LEAN MASS, held high to keep muscle + hair ----
-  // 1.3 g per lb of lean mass, clamped to 1.6-2.4 g/kg bodyweight.
+  // 1.45 g per lb of lean mass, clamped to 1.7-2.6 g/kg bodyweight.
+  // Raised from 1.3 after the 08-13-2026 scan: at 1.3 (190 g) more than half
+  // the weight lost came off lean mass, so the anchor was too low to protect
+  // muscle at this training load. 1.45 also matches Evolt's own 204-212 g call.
   const bwKg = bw / LB_PER_KG;
-  const protein = Math.round(clamp(leanMass * 1.3, bwKg * 1.6, bwKg * 2.4) / 5) * 5;
+  const protein = Math.round(clamp(leanMass * 1.45, bwKg * 1.7, bwKg * 2.6) / 5) * 5;
 
   // ---- fat: 0.35 g/lb bodyweight (hormones), kept moderate for LDL 123 ----
   const fat = Math.round((bw * 0.35) / 5) * 5;
@@ -79,7 +82,7 @@ export function nutritionProfile(state) {
     explain: [
       `Maintenance ${tdee} kcal comes from your ${scan?.date || 'latest'} scan (TEE${scan?.tee ? '' : ' est.'}).`,
       `A ${deficitPct}% cut sets ${baseCals} kcal/day — about ${lbPerWeek} lb/week, a hair-safe pace.`,
-      `Protein ${protein} g is 1.3 g per lb of your ${leanMass} lb lean mass, to hold muscle and hair.`,
+      `Protein ${protein} g is 1.45 g per lb of your ${leanMass} lb lean mass, to hold muscle and hair.`,
       `Fat ${fat} g (~0.35 g/lb) supports hormones while staying LDL-friendly; carbs fill the rest.`,
     ],
   };
