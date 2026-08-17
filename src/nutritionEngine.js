@@ -147,6 +147,7 @@ export const FOODS = {
   chicken:   F('Grilled chicken breast', '150 g', 46, 0, 6, 250, false, ['lean', 'ldl', 'gi']),
   chickenEgg:F('105 g chicken + 4 egg whites (or 115 g chicken + 3 whites)', '', 46, 1, 4, 243, false, ['lean', 'gi']),
   fish:      F('Grilled fish (rohu / tilapia)', '150 g', 34, 0, 9, 220, false, ['lean', 'omega', 'ldl', 'gi']),
+  salmon:    F('Grilled or baked salmon', '180 g', 42, 0, 15, 305, false, ['lean', 'omega', 'gi']),
   eggmix:    F('4 egg whites + 1 whole egg', '', 20, 1, 5, 120, false, ['lean', 'gi']),
   whey15:    F('Whey', '1.5 scoops', 36, 5, 2, 180, true, ['lean', 'gi']),
   whey1:     F('Whey', '1 scoop', 24, 3, 1, 120, true, ['lean', 'gi']),
@@ -179,6 +180,8 @@ export const FOODS = {
   chiaflax:  F('Chia + flax', '1 tbsp', 3, 6, 5, 90, true, ['omega', 'ldl']),
   salad:     F('Large salad + olive oil', '', 2, 8, 6, 90, true, ['ldl']),
   sabzi:     F('Mixed veg sabzi', '', 3, 10, 5, 90, true, ['ldl']),
+  broccoli:  F('Steamed broccoli', '150 g', 4, 10, 0, 50, true, ['ldl', 'gi']),
+  asparagus: F('Roasted asparagus', '150 g', 3, 6, 2, 50, true, ['ldl', 'gi']),
   buttermilk:F('Buttermilk', '1 glass', 4, 6, 2, 70, true, ['gi']),
   fastDrinks:F('Water, black coffee or green tea', '', 0, 0, 0, 0, true, []),
 };
@@ -298,10 +301,13 @@ export function mealPlanFor(dayType, state) {
       isVegDay
         ? [['whey1', 'banana'], ['gyog250', 'berries'], ['whey1', 'milk']]
         : [['whey1', 'banana'], ['gyog', 'berries', 'almonds'], ['buttermilk', 'almonds']]);
+    // The salmon + broccoli + asparagus option is the one thing worth adapting
+    // from a friend's plan: her single most-repeated meal, no starch, two
+    // distinct rotating vegetables instead of a catch-all sabzi.
     const dinner = slot('Dinner', '7:30 PM',
       isVegDay
         ? [['soya', 'paneer', 'sabzi', 'salad'], ['paneer150', 'dal', 'roti2', 'salad'], ['soya', 'sabzi', 'salad']]
-        : [['chickenEgg', 'millet2', 'sabzi', 'salad'], ['fish', 'sabzi', 'quinoa', 'salad'], ['chicken', 'sabzi', 'salad']]);
+        : [['chickenEgg', 'millet2', 'sabzi', 'salad'], ['fish', 'sabzi', 'quinoa', 'salad'], ['chicken', 'sabzi', 'salad'], ['salmon', 'broccoli', 'asparagus']]);
     const bed = { ...slot('Optional bedtime (if protein low)', '9:30 PM', [['whey1'], ['gyog']]), optional: true };
     // Flex meal: a genuine extra meal, not a top-up, for a day that ran hungrier
     // or harder than planned. Scoped to training days on purpose — a rest day
