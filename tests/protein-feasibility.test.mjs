@@ -111,6 +111,19 @@ test('the existing whey serving is split around training instead of stacked', ()
   assert.equal(pre.options[0].kcal + FOODS.whey05.kcal, FOODS.whey15.kcal);
 });
 
+test('lunch portions use cooked gram weights and keep whey as a snack option', () => {
+  const state = baseState();
+  const training = mealPlanFor('training', state);
+  const lunchItems = training.find((slot) => slot.name === 'Lunch').options[0].items;
+  const snack = training.find((slot) => slot.name === 'Snack');
+
+  assert.ok(lunchItems.includes('Dal (250 g cooked)'));
+  assert.ok(lunchItems.includes('Brown rice (200 g cooked)'));
+  assert.ok(lunchItems.includes('Steamed broccoli + carrots (200 g cooked)'));
+  assert.ok(snack.options.some((option) => option.keys.includes('whey1')));
+  assert.equal(Object.hasOwn(FOODS, 'salad'), false);
+});
+
 test('Puratasi keeps calories, deficit and protein identical to a normal day', () => {
   const state = baseState();
   const normalTraining = personalTargets('training', state);
