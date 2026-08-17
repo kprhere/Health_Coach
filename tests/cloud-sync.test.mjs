@@ -95,7 +95,7 @@ test('custom machines remain first-class data through encrypted cloud sync', asy
       p: 'Glutes', s: 'Hamstrings', eq: 'Plate loaded', use: 'Stable hip extension',
       defaultSets: 4, repLow: 8, repHigh: 12, rpe: 8, restSec: 120, custom: true,
     };
-    state.dayOverrides['2026-08-03'] = 'fast2';
+    state.dayOverrides['2026-08-03'] = 'noMoon';
     state.workoutSwaps['2026-08-03'] = '2026-08-05';
     state.workoutSwaps['2026-08-05'] = '2026-08-03';
     state.beverageLogs['2026-08-03'] = { greenTeaAm: true, greenTeaPm: true, coconutWater: false };
@@ -270,6 +270,25 @@ test('state migration is additive, idempotent, and preserves old workout history
   assert.ok(migrated.version > old.version);
   assert.equal(migrated.settings.nextBodyScanDate, '2026-08-31');
   assert.equal(migrated.settings.scanFrequencyDays, 14);
+});
+
+test('state migration converts every legacy manual fast to the 1 PM no-moon rule', () => {
+  const migrated = migrateState({
+    version: 2,
+    dayOverrides: {
+      '2026-08-01': 'fast1',
+      '2026-08-02': 'fast2',
+      '2026-08-03': 'fast',
+      '2026-08-04': 'veg',
+    },
+  });
+
+  assert.deepEqual(migrated.dayOverrides, {
+    '2026-08-01': 'noMoon',
+    '2026-08-02': 'noMoon',
+    '2026-08-03': 'noMoon',
+    '2026-08-04': 'veg',
+  });
 });
 
 test('PR and previous-session results survive migration and cloud round-trip merge', () => {

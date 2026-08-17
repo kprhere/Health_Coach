@@ -67,7 +67,7 @@ function findFeasible(slots, targetP, budgetKcal) {
   return found;
 }
 
-const DAY_TYPES = ['training', 'trainingVeg', 'rest', 'restVeg', 'fastThu', 'noMoonFast1', 'noMoonFast2', 'vegSat'];
+const DAY_TYPES = ['training', 'trainingVeg', 'rest', 'restVeg', 'fastThu', 'noMoonFast', 'vegSat'];
 
 test('every day type can actually reach its protein target', () => {
   const state = baseState();
@@ -165,7 +165,7 @@ test('the flex meal is optional, training-only, and food-rule-aware', () => {
   assert.equal(flexOf('training').optional, true, 'the flex meal must not silently inflate the core target');
   assert.equal(flexOf('trainingVeg').options.every((o) => o.veg), true, 'trainingVeg flex options must stay vegetarian');
 
-  for (const dayType of ['rest', 'restVeg', 'vegSat', 'fastThu', 'noMoonFast1', 'noMoonFast2']) {
+  for (const dayType of ['rest', 'restVeg', 'vegSat', 'fastThu', 'noMoonFast']) {
     assert.equal(flexOf(dayType), undefined, `${dayType} should not offer a flex meal — no extra demand to fuel there`);
   }
 
@@ -181,7 +181,7 @@ test('the flex meal is optional, training-only, and food-rule-aware', () => {
 
 test('no vegetarian day ever offers meat or eggs', () => {
   const state = baseState();
-  for (const dayType of ['trainingVeg', 'restVeg', 'fastThu', 'noMoonFast1', 'noMoonFast2', 'vegSat']) {
+  for (const dayType of ['trainingVeg', 'restVeg', 'fastThu', 'noMoonFast', 'vegSat']) {
     for (const s of mealPlanFor(dayType, state)) {
       for (const o of s.options) {
         assert.ok(o.veg, `${dayType} / ${s.name} offers a non-vegetarian option: ${o.items.join(', ')}`);

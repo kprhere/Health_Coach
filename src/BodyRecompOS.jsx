@@ -28,7 +28,7 @@ import {
   nutritionProfile, volumeTrend, muscleBalance, fmtVol, parseHealthParams, muscleWeekTrend,
   recompSignal, consistencyStreak, energyBalance, proteinPerLbLean, trainingLoadSummary,
   customExercisePlanFits, workoutSwapPartner, workoutSessionHasData,
-  observedActivityFactor, plannedWalkingMinutes, progressWindowSummary, postScanCoaching,
+  observedActivityFactor, plannedWalkingMinutes, progressWindowSummary, postScanCoaching, nextNoMoonReminder,
 } from './helpers.js';
 import {
   Sidebar, BottomNav, Card, Chip, SectionTitle, MetricRing, ScoreRing, ProgressBar,
@@ -123,8 +123,7 @@ function DayNutritionMode({ date, ctx }) {
       <div className="pill-toggle">
         <button className={mode === '' ? 'active' : ''} onClick={() => ctx.setDayOverride(date, '')}>Scheduled</button>
         <button className={mode === 'veg' ? 'active' : ''} onClick={() => ctx.setDayOverride(date, 'veg')}>Vegetarian</button>
-        <button className={mode === 'fast1' ? 'active' : ''} onClick={() => ctx.setDayOverride(date, 'fast1')}>Fast to 1 PM</button>
-        <button className={mode === 'fast2' || mode === 'fast' ? 'active' : ''} onClick={() => ctx.setDayOverride(date, 'fast2')}>Fast to 2 PM</button>
+        <button className={mode === 'noMoon' || mode === 'fast1' || mode === 'fast2' || mode === 'fast' ? 'active' : ''} onClick={() => ctx.setDayOverride(date, 'noMoon')}>No-moon day</button>
       </div>
       <div className="hint" style={{ marginTop: 8 }}>Scheduled is {scheduled.label}. An override changes meals, targets and nutrition totals for this date only. The workout and existing logs stay in place.</div>
     </Card>
@@ -1807,6 +1806,10 @@ export default function BodyRecompOS() {
   const [tab, setTab] = useState('home');
   const [selDate, setSelDate] = useState(todayKey());
   const [healthNotice, setHealthNotice] = useState(null);
+  const [noMoonReminder, setNoMoonReminder] = useState(() => {
+    try { return nextNoMoonReminder(todayKey(), localStorage.getItem('recomp-no-moon-reminder-dismissed') || ''); }
+    catch { return nextNoMoonReminder(todayKey()); }
+  });
 
   useEffect(() => { saveState(state); }, [state]);
   useEffect(() => { window.scrollTo(0, 0); }, [tab]);
@@ -1887,9 +1890,16 @@ export default function BodyRecompOS() {
   const setSatMode = (date, mode) => setState((prev) => ({ ...prev, saturdayMode: { ...prev.saturdayMode, [date]: mode } }));
   const setDayOverride = (date, mode) => mutate((d) => {
     if (!d.dayOverrides) d.dayOverrides = {};
-    if (mode === 'veg' || mode === 'fast1' || mode === 'fast2') d.dayOverrides[date] = mode;
+    if (mode === 'veg' || mode === 'noMoon') d.dayOverrides[date] = mode;
     else delete d.dayOverrides[date];
   });
+
+  const acknowledgeNoMoonReminder = (openPlan = false) => {
+    if (!noMoonReminder) return;
+    try { localStorage.setItem('recomp-no-moon-reminder-dismissed', noMoonReminder.date); } catch { /* ignore */ }
+    if (openPlan) { setSelDate(noMoonReminder.date); setTab('fuel'); }
+    setNoMoonReminder(null);
+  };
   const swapWorkoutDates = (firstDate, secondDate) => setState((prev) => {
     if (!firstDate || !secondDate || firstDate === secondDate) return prev;
     if (workoutSessionHasData(prev.workoutSessions && prev.workoutSessions[firstDate])) return prev;
@@ -2142,6 +2152,20 @@ export default function BodyRecompOS() {
         </main>
       </div>
       <BottomNav tab={tab} setTab={setTab} />
+      {noMoonReminder ? (
+        <Sheet title="No-moon fast coming up" onClose={() => setNoMoonReminder(null)}>
+          <Banner tone="amber" icon={Moon}>
+            {prettyDate(noMoonReminder.date)} is a Chicago Panchang no-moon day. Your plan will fast until 1 PM, then switch to vegetarian meals.
+          </Banner>
+          <div className="hint" style={{ margin: '10px 0 14px' }}>
+            {noMoonReminder.daysAway === 0 ? 'The fast is today.' : `${noMoonReminder.daysAway} day${noMoonReminder.daysAway === 1 ? '' : 's'} remaining. This reminder begins one week before the fast.`}
+          </div>
+          <div className="btn-row">
+            <button className="btn primary" onClick={() => acknowledgeNoMoonReminder(true)}>View 1 PM plan</button>
+            <button className="btn ghost" onClick={() => acknowledgeNoMoonReminder(false)}>Got it</button>
+          </div>
+        </Sheet>
+      ) : null}
     </div>
   );
 }

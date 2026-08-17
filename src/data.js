@@ -60,6 +60,22 @@ export const SETTINGS_DEFAULT = {
   syncAuto: false,                     // pull on open + push on change
 };
 
+// Amavasya observance dates for Chicago, Illinois. Panchang dates are
+// location-specific, so this list intentionally uses the user's local city
+// rather than a generic astronomical new-moon timestamp. Review and extend
+// the list when the next annual Chicago Panchang is published.
+export const NO_MOON_DATES = [
+  '2026-08-12',
+  '2026-09-10',
+  '2026-10-10',
+  '2026-11-08',
+  '2026-12-08',
+  '2027-01-07',
+  '2027-02-06',
+  '2027-03-07',
+  '2027-04-06',
+];
+
 // shown on Home + README
 export const PROGRAM_RATIONALE =
   'Chosen split: 4-day Upper / Lower hybrid around swimming and one mobility class. ' +
@@ -420,8 +436,7 @@ export const NUTRITION = {
     // cannot hold the full target. The other six days stay at 205 and the
     // weekly average still lands at 199 g/day (1.06 g per lb bodyweight).
     fastThu: { kcal: 1970, protein: 165, carbs: 195, fat: 60, fiber: 30, waterL: 3.25 },
-    noMoonFast1: { kcal: 2070, protein: 205, carbs: 180, fat: 60, fiber: 31, waterL: 3.25 },
-    noMoonFast2: { kcal: 2010, protein: 205, carbs: 165, fat: 60, fiber: 30, waterL: 3.25 },
+    noMoonFast: { kcal: 2070, protein: 205, carbs: 180, fat: 60, fiber: 31, waterL: 3.25 },
     vegSat: { kcal: 2120, protein: 205, carbs: 190, fat: 60, fiber: 32, waterL: 3.0 },
   },
   plans: {
@@ -678,7 +693,6 @@ export const DAY_VARIANTS = {
   rest:     { label: 'Rest day', tone: 'violet', why: 'Lower carbs, protein held high to keep recovery and muscle up.' },
   restVeg:  { label: 'Puratasi rest day', tone: 'green', why: 'Same calories and same protein as any rest day, vegetarian only. Protein is the hard part today, so front-load it.' },
   fastThu:  { label: 'Fast plus swim', tone: 'amber', why: 'Fasted until 6 PM, then a gentle break and a high-protein veg dinner around the swim.' },
-  noMoonFast1: { label: 'No-moon fast · 1 PM', tone: 'amber', why: 'Fasted until 1 PM, followed by a fully vegetarian high-protein plan.' },
-  noMoonFast2: { label: 'No-moon fast · 2 PM', tone: 'amber', why: 'Fasted until 2 PM, followed by a fully vegetarian high-protein plan.' },
+  noMoonFast: { label: 'No-moon day · fast to 1 PM', tone: 'amber', why: 'Chicago Panchang no-moon day. Fast until 1 PM, followed by a fully vegetarian high-protein plan.' },
   vegSat:   { label: 'Vegetarian day', tone: 'green', why: 'No chicken, fish or eggs. Protein anchored on whey, paneer, tofu, dal and Greek yogurt.' },
 };
