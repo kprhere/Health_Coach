@@ -1954,7 +1954,6 @@ export default function BodyRecompOS() {
 
   return (
     <div className="app">
-      <a className="skip-link" href="#main-content">Skip to main content</a>
       {healthNotice ? (
         <div className={`sync-toast ${healthNotice.error ? 'error' : ''}`} role={healthNotice.error ? 'alert' : 'status'}>
           {healthNotice.error ? <AlertTriangle size={15} /> : <Watch size={15} />} {healthNotice.message}
@@ -1976,7 +1975,7 @@ export default function BodyRecompOS() {
           </div>
         </header>
 
-        <main className="app-main" id="main-content" tabIndex="-1">
+        <main className="app-main">
           {tab === 'home' && <HomeTab ctx={ctx} />}
           {tab === 'plan' && <PlanTab ctx={ctx} />}
           {tab === 'train' && <TrainTab ctx={ctx} />}
