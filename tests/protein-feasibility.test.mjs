@@ -15,7 +15,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 
-import { mealPlanFor, personalTargets } from '../src/nutritionEngine.js';
+import { FOODS, mealPlanFor, personalTargets } from '../src/nutritionEngine.js';
 import { nutritionDayType, inPuratasi, observedActivityFactor } from '../src/helpers.js';
 import { SEED_SCANS, SETTINGS_DEFAULT, PROFILE_DEFAULT } from '../src/data.js';
 
@@ -95,6 +95,33 @@ test('protein target is reachable inside the calorie budget', () => {
       `${dayType}: no combination of the offered meals reaches ${target.protein} g protein within ${budget} kcal`,
     );
   }
+});
+
+test('the existing whey serving is split around training instead of stacked', () => {
+  const state = baseState();
+  const training = mealPlanFor('training', state);
+  const pre = training.find((slot) => slot.name.startsWith('Pre-workout'));
+  const breakfast = training.find((slot) => slot.name === 'Post-workout breakfast');
+
+  assert.deepEqual(pre.options[0].keys, ['whey1']);
+  assert.equal(pre.time, '7:00-7:15 AM');
+  assert.equal(breakfast.time, '9:00-9:30 AM');
+  assert.ok(breakfast.options[0].keys.includes('whey05'));
+  assert.equal(pre.options[0].p + FOODS.whey05.p, FOODS.whey15.p);
+  assert.equal(pre.options[0].kcal + FOODS.whey05.kcal, FOODS.whey15.kcal);
+});
+
+test('lunch portions use cooked gram weights and keep whey as a snack option', () => {
+  const state = baseState();
+  const training = mealPlanFor('training', state);
+  const lunchItems = training.find((slot) => slot.name === 'Lunch').options[0].items;
+  const snack = training.find((slot) => slot.name === 'Snack');
+
+  assert.ok(lunchItems.includes('Dal (250 g cooked)'));
+  assert.ok(lunchItems.includes('Brown rice (200 g cooked)'));
+  assert.ok(lunchItems.includes('Steamed broccoli + carrots (200 g cooked)'));
+  assert.ok(snack.options.some((option) => option.keys.includes('whey1')));
+  assert.equal(Object.hasOwn(FOODS, 'salad'), false);
 });
 
 test('Puratasi keeps calories, deficit and protein identical to a normal day', () => {

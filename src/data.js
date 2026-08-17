@@ -45,8 +45,8 @@ export const SETTINGS_DEFAULT = {
   // ---- program calendar (all editable in More, week/day recalculate from these) ----
   programStartDate: '2026-07-14',      // program day 1
   restartPhaseStartDate: '2026-07-14', // restart phase day 1
-  nextBodyScanDate: '',                // blank = auto (last scan or start + scanFrequencyDays)
-  scanFrequencyDays: 30,               // monthly scan cadence
+  nextBodyScanDate: '2026-08-31',      // current two-week measurement checkpoint
+  scanFrequencyDays: 14,               // short controlled measurement window, editable after the scan
   defaultRestartLoadPercent: 70,       // restart load % of old working weight
   // ---- supplement + lab settings (editable in More) ----
   d3Dose: '2000 IU',                   // total daily D3 (track total across products)
@@ -428,31 +428,31 @@ export const NUTRITION = {
     training: [
       M('On waking (fasted)', '5:15 AM', true, ['Overnight soaked chia seeds heated with lemon juice', 'Warm water', '5-6 soaked almonds (if you do play badminton first, have these after instead)'], 135, 5, 14, 9),
       M('Post-workout breakfast', '7:30 AM', true, ['Overnight oats in almond milk', '1.5 scoops whey', 'Chia + flax seeds', 'Mixed berries'], 520, 48, 52, 14),
-      M('Lunch', '12:30 PM', false, ['Grilled chicken or fish', 'Brown rice or quinoa', 'Dal', 'Large salad with olive oil'], 620, 52, 58, 18),
+      M('Lunch', '12:30 PM', false, ['Grilled chicken or fish', 'Brown rice (200 g cooked) or quinoa', 'Dal (250 g cooked)', 'Steamed broccoli + carrots (200 g cooked)'], 620, 52, 58, 18),
       M('Snack', '4:00 PM', true, ['Greek yogurt', 'Berries', '5-6 soaked almonds (measured)'], 300, 30, 22, 10),
-      M('Dinner', '7:30 PM', false, ['Chicken, fish or paneer', 'Roti or millet', 'Sabzi', 'Salad'], 600, 50, 45, 22),
+      M('Dinner', '7:30 PM', false, ['Chicken, fish or paneer', 'Roti or millet', 'Sabzi', 'Steamed broccoli + carrots (200 g cooked)'], 600, 50, 45, 22),
       M('Optional bedtime (if protein low)', '9:30 PM', true, ['Low-fat paneer or a casein / Greek yogurt bowl'], 180, 25, 6, 5),
     ],
     rest: [
       M('On waking (fasted)', '6:00 AM', true, ['Overnight soaked chia seeds heated with lemon juice', 'Warm water', '5-6 soaked almonds (if you do play badminton first, have these after instead)'], 135, 5, 14, 9),
       M('Breakfast', '8:00 AM', true, ['3-4 egg whites + 1 whole egg or tofu scramble', 'Oats or 2 small idli', 'Berries'], 380, 34, 30, 12),
-      M('Lunch', '12:30 PM', false, ['Grilled chicken or fish', 'Small brown rice', 'Dal', 'Large salad'], 560, 50, 42, 18),
+      M('Lunch', '12:30 PM', false, ['Grilled chicken or fish', 'Brown rice (200 g cooked)', 'Dal (250 g cooked)', 'Steamed broccoli + carrots (200 g cooked)'], 560, 50, 42, 18),
       M('Snack', '4:00 PM', true, ['Whey shake in water or almond milk', 'Apple'], 240, 28, 20, 4),
-      M('Dinner', '7:30 PM', false, ['Chicken or paneer', 'Sabzi', '1-2 roti', 'Salad'], 560, 48, 38, 22),
+      M('Dinner', '7:30 PM', false, ['Chicken or paneer', 'Sabzi', '1-2 roti', 'Steamed broccoli + carrots (200 g cooked)'], 560, 48, 38, 22),
       M('Optional bedtime (if protein low)', '9:30 PM', true, ['Greek yogurt bowl'], 160, 22, 6, 4),
     ],
     fastThu: [
       M('Fasting window until 6 PM', '5 AM - 6 PM', true, ['Water', 'Black coffee', 'Green tea', 'Emergency only: one fruit OR one glass of milk'], 40, 2, 6, 1),
       M('Break the fast (gentle)', '6:00 PM', true, ['1 fruit or 2 dates', 'Small handful soaked nuts', 'Warm water'], 200, 5, 28, 8),
-      M('High-protein veg dinner', '7:30 PM', true, ['Paneer or tofu', 'Dal or rajma', 'Sabzi', 'Millet or 1-2 roti', 'Salad'], 700, 52, 55, 24),
+      M('High-protein veg dinner', '7:30 PM', true, ['Paneer or tofu', 'Dal (250 g cooked) or rajma', 'Sabzi', 'Millet or 1-2 roti', 'Steamed broccoli + carrots (200 g cooked)'], 700, 52, 55, 24),
       M('Protein before bed (if low)', '9:30 PM', true, ['Whey in almond milk or a Greek yogurt bowl'], 220, 30, 8, 6),
     ],
     vegSat: [
       M('On waking (fasted)', '6:00 AM', true, ['Overnight soaked chia seeds heated with lemon juice', 'Warm water', '5-6 soaked almonds (if you do play badminton first, have these after instead)'], 135, 5, 14, 9),
       M('Breakfast', '8:00 AM', true, ['Overnight oats in almond milk', '1.5 scoops whey', 'Chia + flax', 'Berries'], 520, 48, 52, 14),
-      M('Lunch', '1:00 PM', true, ['Paneer or tofu bhurji', 'Chana or rajma', 'Brown rice or millet', 'Large salad'], 620, 44, 62, 20),
+      M('Lunch', '1:00 PM', true, ['Paneer or tofu bhurji', 'Chana or rajma', 'Brown rice (200 g cooked) or millet', 'Steamed broccoli + carrots (200 g cooked)'], 620, 44, 62, 20),
       M('Snack', '4:30 PM', true, ['Greek yogurt', 'Berries', 'Pumpkin seeds'], 280, 26, 20, 10),
-      M('Dinner', '7:30 PM', true, ['Dal + paneer', 'Sabzi', '1-2 roti', 'Salad'], 580, 42, 50, 20),
+      M('Dinner', '7:30 PM', true, ['Dal (250 g cooked) + paneer', 'Sabzi', '1-2 roti', 'Steamed broccoli + carrots (200 g cooked)'], 580, 42, 50, 20),
     ],
   },
   // quick add buttons. meat:true items dim on Thu / Sat.
@@ -464,11 +464,11 @@ export const NUTRITION = {
     { label: 'Egg', p: 6, c: 1, f: 5, kcal: 78, meat: false, egg: true },
     { label: 'Chicken 150g', p: 46, c: 0, f: 6, kcal: 250, meat: true },
     { label: 'Fish 150g', p: 34, c: 0, f: 9, kcal: 220, meat: true },
-    { label: 'Dal 1 bowl', p: 12, c: 30, f: 4, kcal: 200, meat: false },
+    { label: 'Dal 250g cooked', p: 12, c: 30, f: 4, kcal: 200, meat: false },
     { label: 'Tofu 150g', p: 17, c: 3, f: 9, kcal: 170, meat: false },
     { label: 'Paneer 100g', p: 18, c: 4, f: 20, kcal: 265, meat: false },
     { label: 'Fruit', p: 1, c: 25, f: 0, kcal: 100, meat: false },
-    { label: 'Rice 1 cup', p: 4, c: 45, f: 0, kcal: 200, meat: false },
+    { label: 'Brown rice 200g cooked', p: 5, c: 45, f: 2, kcal: 215, meat: false },
     { label: 'Roti', p: 3, c: 18, f: 3, kcal: 110, meat: false },
     { label: 'Water 500 ml', water: 0.5, meat: false },
   ],
@@ -487,7 +487,7 @@ export const DAILY_BEVERAGES = [
 // ============================================================
 export const SUPPLEMENTS = [
   { key: 'creatine', name: 'Creatine monohydrate', dose: '5 g', timing: 'Anytime, daily', withFood: 'Either', purpose: 'Strength, lean mass, muscle retention in a deficit', caution: 'Stay hydrated. Timing does not matter, consistency does.', tag: 'daily' },
-  { key: 'whey', name: 'Whey protein', dose: '1.5 scoops', timing: 'Post-workout breakfast', withFood: 'With oats', purpose: 'Hits the daily protein target for muscle and hair', caution: 'A food-first tool, not a meal replacement.', tag: 'daily' },
+  { key: 'whey', name: 'Whey protein', dose: '1 scoop before strength training', timing: '7:00-7:15 AM before the 7:45 AM gym session', withFood: 'Water; remaining planned whey stays with breakfast if shown', purpose: 'Makes the current pre-workout habit explicit while preserving daily protein', caution: 'Already counted in the meal plan. Do not add another scoop unless you deliberately choose a logged protein top-up.', tag: 'daily' },
   { key: 'vitd', name: 'Vitamin D3 + K2', dose: 'Per label', timing: 'Morning', withFood: 'With a fatty meal', purpose: 'Maintenance. Your level is 50 ng/mL, already optimal', caution: 'Maintenance only unless a doctor says otherwise. Do not stack multiple D products, track total daily IU. Recheck periodically.', tag: 'maintenance' },
   { key: 'magnesium', name: 'Magnesium glycinate', dose: 'Per label (track elemental Mg)', timing: 'Evening, 30-60 min before bed', withFood: 'Either', purpose: 'Sleep quality, relaxation, recovery', caution: 'Track elemental magnesium, not capsule weight. Loose stool means reduce or stop. Caution with kidney disease.', tag: 'daily' },
   { key: 'biotin', name: 'Hair, Skin & Nails (Biotin)', dose: '50,000 mcg', timing: 'With a meal', withFood: 'With food', purpose: 'Hair/skin/nails support', caution: 'HIGH-DOSE. High-dose biotin can skew lab tests (thyroid, troponin, vitamin D, hormones). Tell your doctor and lab before blood work, and pause if they advise. Biotin only helps hair if you are deficient, it is not a guaranteed hair-loss fix.', tag: 'high-dose' },

@@ -42,6 +42,16 @@ export default {
       try {
         const parsed = JSON.parse(body);
         if (!parsed || typeof parsed.cipher !== 'string') return json({ error: 'bad body' }, 400);
+        if (parsed.expectedUpdatedAt !== null && parsed.expectedUpdatedAt !== undefined) {
+          const currentRaw = await env.ACP_SYNC.get(id);
+          let currentUpdatedAt = 0;
+          if (currentRaw) {
+            try { currentUpdatedAt = Number(JSON.parse(currentRaw).updatedAt) || 0; } catch { return json({ error: 'stored payload is invalid' }, 500); }
+          }
+          if (Number(parsed.expectedUpdatedAt) !== currentUpdatedAt) {
+            return json({ error: 'conflict', currentUpdatedAt }, 409);
+          }
+        }
       } catch {
         return json({ error: 'bad json' }, 400);
       }

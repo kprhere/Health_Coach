@@ -32,7 +32,7 @@ function ReplaceSelect({ value, onChange, state, targetName }) {
   const recommendedNames = new Set(recommended.map((item) => item.name));
   const remaining = exerciseNames(state).filter((name) => !recommendedNames.has(name));
   return (
-    <select className="select" value={value || ''} onChange={(e) => onChange(e.target.value)} style={{ maxWidth: 200 }}>
+    <select aria-label="Replacement exercise" className="select" value={value || ''} onChange={(e) => onChange(e.target.value)} style={{ maxWidth: 200 }}>
       <option value="">Replace with...</option>
       {recommended.length ? (
         <optgroup label="Recommended custom equipment">
@@ -53,17 +53,17 @@ function Detail({ data, patch, onDelete, skipReplace, onSkipToggle, onReplace, s
       <div className="field-row cols-3">
         <div className="field" style={{ margin: 0 }}>
           <label>Rest used (s)</label>
-          <input className="input mono" inputMode="numeric" value={data.restSec} onChange={(e) => patch('restSec', e.target.value)} />
+          <input aria-label="Rest used (s)" className="input mono" inputMode="numeric" value={data.restSec} onChange={(e) => patch('restSec', e.target.value)} />
         </div>
         <div className="field" style={{ margin: 0 }}>
           <label>Form</label>
-          <select className="select" value={data.form} onChange={(e) => patch('form', e.target.value)}>
+          <select aria-label="Form" className="select" value={data.form} onChange={(e) => patch('form', e.target.value)}>
             {FORM_OPTS.map((f) => <option key={f} value={f}>{f || '-'}</option>)}
           </select>
         </div>
         <div className="field" style={{ margin: 0 }}>
           <label>Tempo done</label>
-          <input className="input mono" value={data.tempo || ''} onChange={(e) => patch('tempo', e.target.value)} placeholder="3-1-1" />
+          <input aria-label="Tempo done" className="input mono" value={data.tempo || ''} onChange={(e) => patch('tempo', e.target.value)} placeholder="3-1-1" />
         </div>
       </div>
       <div className="field" style={{ marginTop: 10 }}>
@@ -72,7 +72,7 @@ function Detail({ data, patch, onDelete, skipReplace, onSkipToggle, onReplace, s
       </div>
       <div className="field" style={{ marginTop: 10, marginBottom: skipReplace ? 10 : 0 }}>
         <label>Notes</label>
-        <textarea className="textarea" value={data.notes} onChange={(e) => patch('notes', e.target.value)} placeholder="Felt strong, add weight next time" />
+        <textarea aria-label="Notes" className="textarea" value={data.notes} onChange={(e) => patch('notes', e.target.value)} placeholder="Felt strong, add weight next time" />
       </div>
       {skipReplace ? (
         <div className="btn-row">
@@ -110,14 +110,14 @@ function HistoryGrid({ name, state, rx }) {
   return (
     <div className="hist-block">
       <div className="hb">
-        <div className="hb-k">Last session</div>
+        <div className="hb-k">Last workout{last ? ` · ${last.date}` : ''}</div>
         <div className="hb-v">
-          {last ? last.sets.map((s, i) => <span key={i}>{s.weight} x {s.reps}{i < last.sets.length - 1 ? ', ' : ''}</span>) : <span className="faint">No history</span>}
+          {last ? last.sets.map((s, i) => <span key={i}>{s.weight} x {s.reps}{s.rpe != null ? ` @ ${s.rpe}` : ''}{i < last.sets.length - 1 ? ', ' : ''}</span>) : <span className="faint">No history</span>}
         </div>
       </div>
       <div className="hb">
-        <div className="hb-k">Best</div>
-        <div className="hb-v">{best ? <>{best.maxWeight} lb PR<br />e1RM {Math.round(best.e1rm)} lb</> : <span className="faint">-</span>}</div>
+        <div className="hb-k">Personal best</div>
+        <div className="hb-v">{best ? <>Max {best.maxWeight} lb · e1RM {Math.round(best.e1rm)} lb<br />{best.maxReps} reps · volume {Math.round(best.bestVolume).toLocaleString()}</> : <span className="faint">-</span>}</div>
       </div>
       <div className="hb target" style={{ gridColumn: '1 / -1' }}>
         <div className="hb-k">Coach target today</div>
@@ -206,9 +206,9 @@ export function SingleLogger({ block, entry, plan, state, onMutate, setRestart }
         <div key={i}>
           <div className="set-row">
             <span className="set-n">{s.isWarmup ? <span className="tag-drop" style={{ color: 'var(--cyan)', background: 'rgba(52,208,222,0.12)' }}>W</span> : s.isDrop ? <span className="tag-drop">DROP</span> : i + 1}</span>
-            <input inputMode="decimal" value={s.weight} placeholder="lb" onChange={(e) => setField(i, 'weight', e.target.value)} />
-            <input inputMode="numeric" value={s.reps} placeholder="reps" onChange={(e) => setField(i, 'reps', e.target.value)} />
-            <input inputMode="decimal" value={s.rpe} placeholder="rpe" onChange={(e) => setField(i, 'rpe', e.target.value)} />
+            <input aria-label={`Set ${i + 1} weight`} inputMode="decimal" value={s.weight} placeholder="lb" onChange={(e) => setField(i, 'weight', e.target.value)} />
+            <input aria-label={`Set ${i + 1} reps`} inputMode="numeric" value={s.reps} placeholder="reps" onChange={(e) => setField(i, 'reps', e.target.value)} />
+            <input aria-label={`Set ${i + 1} RPE`} inputMode="decimal" value={s.rpe} placeholder="rpe" onChange={(e) => setField(i, 'rpe', e.target.value)} />
             <button className="set-del" onClick={() => setOpenIdx(openIdx === i ? -1 : i)} aria-label={`Set ${i + 1} details`} aria-expanded={openIdx === i}><MoreHorizontal size={16} /></button>
           </div>
           {s.rpe !== '' && !isNaN(parseFloat(s.rpe)) ? <div className="rir-hint">Auto RIR {Math.max(0, 10 - parseFloat(s.rpe))}{s.isWarmup ? ' · warm-up, excluded from history' : ''}</div> : null}
@@ -312,9 +312,9 @@ export function RoundsLogger({ block, entry, state, onMutate }) {
                     </div>
                   </div>
                   <div className="cell-inputs">
-                    <input inputMode="decimal" value={c.weight} placeholder="lb" onChange={(e) => cellField(ri, nm, 'weight', e.target.value)} />
-                    <input inputMode="numeric" value={c.reps} placeholder="reps" onChange={(e) => cellField(ri, nm, 'reps', e.target.value)} />
-                    <input inputMode="decimal" value={c.rpe} placeholder="rpe" onChange={(e) => cellField(ri, nm, 'rpe', e.target.value)} />
+                    <input aria-label={`Round ${ri + 1} ${shown} weight`} inputMode="decimal" value={c.weight} placeholder="lb" onChange={(e) => cellField(ri, nm, 'weight', e.target.value)} />
+                    <input aria-label={`Round ${ri + 1} ${shown} reps`} inputMode="numeric" value={c.reps} placeholder="reps" onChange={(e) => cellField(ri, nm, 'reps', e.target.value)} />
+                    <input aria-label={`Round ${ri + 1} ${shown} RPE`} inputMode="decimal" value={c.rpe} placeholder="rpe" onChange={(e) => cellField(ri, nm, 'rpe', e.target.value)} />
                     <button className="cell-more" onClick={() => setOpen((o) => ({ ...o, [key]: !o[key] }))} aria-label={`${shown} details`} aria-expanded={!!open[key]}><MoreHorizontal size={15} /></button>
                   </div>
                   {last ? <div className="hint" style={{ marginTop: 4 }}>Last: {last.sets.map((s) => `${s.weight}x${s.reps}`).join(', ')}</div> : null}

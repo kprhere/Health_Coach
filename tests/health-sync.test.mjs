@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { NUTRITION } from '../src/data.js';
+import { HABITS, NUTRITION } from '../src/data.js';
 import { FOODS, mealPlanFor } from '../src/nutritionEngine.js';
 
 import {
@@ -10,11 +10,16 @@ import {
   nutritionDayType,
   nutritionActuals,
   parseHealthParams,
+  plannedWalkingMinutes,
+  progressWindowSummary,
+  postScanCoaching,
   recoveryScore,
   resolveNutrition,
   resolveWorkout,
   workoutSessionHasData,
   workoutSwapPartner,
+  addDays,
+  initSession,
 } from '../src/helpers.js';
 
 const eightValues = 'date=2026-07-31&steps=9412&sleep=7.3&rhr=58&hrv=64&sleepScore=88&vo2max=44&spo2=98&active=540';
@@ -30,6 +35,56 @@ test('parses the privacy-safe Health fragment and legacy query format', () => {
     steps: '9412', activeCal: '540', restingHR: '58', sleepH: '7.3',
     sleepScore: '88', hrv: '64', vo2max: '44', spo2: '98',
   });
+});
+
+test('a completed 40-minute evening walk satisfies but does not double-count the scheduled walk', () => {
+  const state = defaultState();
+  const date = '2026-08-17';
+  const target = plannedWalkingMinutes(date, state);
+  assert.equal(target, 20);
+  state.activity[date] = { eveningWalk: true, eveningWalkMin: '40', eveningWalkHR: '108' };
+  state.watchLogs[date] = { exerciseMin: '25', steps: '9000', sleepH: '7.5' };
+
+  assert.equal(progressWindowSummary(state, date).walkingMinutes, 40);
+  assert.equal(progressWindowSummary(state, date).strengthWorkouts, 0);
+});
+
+const scanState = (currentPatch = {}, tracked = true) => {
+  const state = defaultState();
+  state.bodyScans = [
+    { id: 'before', date: '2026-08-01', weight: 190, fatMass: 45, leanMass: 145, bodyFatPct: 23.7 },
+    { id: 'after', date: '2026-08-11', weight: 188, fatMass: 43, leanMass: 145, bodyFatPct: 22.9, ...currentPatch },
+  ];
+  if (tracked) {
+    for (let i = 1; i <= 10; i++) state.activity[addDays('2026-08-01', i)] = { eveningWalk: true, eveningWalkMin: '40' };
+  }
+  return state;
+};
+
+test('post-scan coaching covers keep-plan, muscle-warning and insufficient-data outcomes', () => {
+  assert.equal(postScanCoaching(scanState()).code, 'keep');
+  assert.equal(postScanCoaching(scanState({ leanMass: 141 })).code, 'warning');
+  assert.equal(postScanCoaching(scanState({}, false)).code, 'insufficient');
+});
+
+test('post-scan coaching requests calibration after strong adherence without fat loss', () => {
+  const state = scanState({ weight: 190, fatMass: 45, leanMass: 145 });
+  for (let i = 1; i <= 10; i++) {
+    const date = addDays('2026-08-01', i);
+    const nutrition = resolveNutrition(date, state).targets;
+    state.mealLogs[date] = { eaten: {}, extras: [{ p: nutrition.protein, c: nutrition.carbs, f: nutrition.fat, kcal: nutrition.kcal }], water: nutrition.waterL, flags: {}, choices: {} };
+    state.watchLogs[date] = { steps: '10000', sleepH: '8', restingHR: '58' };
+    state.habitLogs[date] = Object.fromEntries(HABITS.map((habit) => [habit.key, true]));
+    const plan = resolveWorkout(date, state);
+    if (plan.blocks.length) {
+      const session = initSession(plan);
+      Object.values(session.entries).forEach((entry) => { entry.completed = true; });
+      state.workoutSessions[date] = session;
+    }
+  }
+  const result = postScanCoaching(state);
+  assert.ok(result.adherencePct >= 80);
+  assert.equal(result.code, 'calibrate');
 });
 
 test('rejects lists, unit text, unresolved placeholders, ranges, and invalid dates', () => {

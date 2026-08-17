@@ -150,12 +150,13 @@ export const FOODS = {
   salmon:    F('Grilled or baked salmon', '180 g', 42, 0, 15, 305, false, ['lean', 'omega', 'gi']),
   eggmix:    F('4 egg whites + 1 whole egg', '', 20, 1, 5, 120, false, ['lean', 'gi']),
   whey15:    F('Whey', '1.5 scoops', 36, 5, 2, 180, true, ['lean', 'gi']),
+  whey05:    F('Whey', '0.5 scoop', 12, 1.5, 0.5, 60, true, ['lean', 'gi']),
   whey1:     F('Whey', '1 scoop', 24, 3, 1, 120, true, ['lean', 'gi']),
   gyog:      F('Greek yogurt', '200 g', 20, 9, 5, 165, true, ['lean', 'gi']),
   paneer:    F('Low-fat paneer', '100 g', 18, 4, 8, 160, true, ['ldl', 'gi']),
   paneer150: F('Low-fat paneer', '150 g', 27, 6, 12, 240, true, ['ldl', 'gi']),
   tofu:      F('Tofu', '150 g', 17, 3, 9, 170, true, ['ldl', 'gi', 'omega']),
-  dal:       F('Dal', '1 bowl', 12, 30, 4, 200, true, ['gi', 'ldl']),
+  dal:       F('Dal', '250 g cooked', 12, 30, 4, 200, true, ['gi', 'ldl']),
   rajma:     F('Rajma / chana', '1 bowl', 13, 32, 3, 210, true, ['gi', 'ldl']),
   // ---- Puratasi workhorses: the only veg foods dense enough to replace meat ----
   // Soya chunks carry 0.15 g protein per kcal, within reach of chicken's 0.18,
@@ -168,7 +169,7 @@ export const FOODS = {
   whey2:     F('Whey', '2 scoops', 48, 6, 2, 240, true, ['lean', 'gi']),
   // carbs
   oats:      F('Oats (in almond milk)', '50 g', 6, 30, 3, 170, true, ['gi']),
-  brownrice: F('Brown rice', '1 cup', 5, 45, 2, 215, true, ['gi']),
+  brownrice: F('Brown rice', '200 g cooked', 5, 45, 2, 215, true, ['gi']),
   quinoa:    F('Quinoa', '1 cup', 8, 39, 4, 220, true, ['gi']),
   roti2:     F('Roti', '2', 6, 36, 6, 220, true, ['gi']),
   millet2:   F('Millet / bajra roti', '2', 6, 40, 4, 220, true, ['gi']),
@@ -178,7 +179,7 @@ export const FOODS = {
   berries:   F('Mixed berries', '1 cup', 1, 15, 0, 60, true, ['gi']),
   almonds:   F('Soaked almonds', '10', 3, 3, 6, 70, true, ['ldl']),
   chiaflax:  F('Chia + flax', '1 tbsp', 3, 6, 5, 90, true, ['omega', 'ldl']),
-  salad:     F('Large salad + olive oil', '', 2, 8, 6, 90, true, ['ldl']),
+  steamedVeg:F('Steamed broccoli + carrots', '200 g cooked', 4, 16, 1, 80, true, ['ldl', 'gi']),
   sabzi:     F('Mixed veg sabzi', '', 3, 10, 5, 90, true, ['ldl']),
   broccoli:  F('Steamed broccoli', '150 g', 4, 10, 0, 50, true, ['ldl', 'gi']),
   asparagus: F('Roasted asparagus', '150 g', 3, 6, 2, 50, true, ['ldl', 'gi']),
@@ -252,9 +253,9 @@ export function mealPlanFor(dayType, state) {
       // the day is impossible to eat, which is what this used to be.
       slot('After the swim', '8:15 PM', [['whey2'], ['gyog250'], ['whey1', 'milk']]),
       slot('High-protein veg dinner', '8:45 PM', [
-        ['soya90', 'paneer', 'millet2', 'salad'],
-        ['soya', 'dal', 'sabzi', 'salad'],
-        ['tofu', 'rajma', 'quinoa', 'salad'],
+        ['soya90', 'paneer', 'millet2', 'steamedVeg'],
+        ['soya', 'dal', 'sabzi', 'steamedVeg'],
+        ['tofu', 'rajma', 'quinoa', 'steamedVeg'],
       ]),
       slot('Protein before bed', '9:45 PM', [['whey1', 'milk'], ['gyog250'], ['curd']]),
     ];
@@ -266,37 +267,39 @@ export function mealPlanFor(dayType, state) {
         note: `Fast until ${end}. Water, black coffee and green tea only.` },
       slot('Break the fast (gentle)', end, [['whey1', 'banana'], ['banana', 'almonds'], ['berries', 'buttermilk']]),
       slot('High-protein vegetarian lunch', lunch, [
-        ['soya', 'brownrice', 'dal', 'salad'],
-        ['soya', 'paneer', 'millet2', 'salad'],
-        ['tofu', 'rajma', 'quinoa', 'salad'],
+        ['soya', 'brownrice', 'dal', 'steamedVeg'],
+        ['soya', 'paneer', 'millet2', 'steamedVeg'],
+        ['tofu', 'rajma', 'quinoa', 'steamedVeg'],
       ]),
       slot('Protein snack', '5:00 PM', [['whey2', 'berries'], ['gyog250', 'berries'], ['whey1', 'milk']]),
       slot('Vegetarian dinner', '8:00 PM', [
-        ['soya', 'paneer', 'sabzi', 'salad'],
-        ['paneer150', 'dal', 'roti2', 'salad'],
-        ['tofu', 'rajma', 'millet2', 'salad'],
+        ['soya', 'paneer', 'sabzi', 'steamedVeg'],
+        ['paneer150', 'dal', 'roti2', 'steamedVeg'],
+        ['tofu', 'rajma', 'millet2', 'steamedVeg'],
       ]),
       { ...slot('Optional bedtime (if protein low)', '9:30 PM', [['whey1'], ['gyog250'], ['milk']]), optional: true },
     ];
   } else {
-    const wake = slot('On waking (fasted)', isTraining ? '5:15 AM' : '6:00 AM', [
-      ['chiaflax', 'almonds'], ['banana', 'almonds'], ['buttermilk'],
-    ]);
+    const wake = isTraining
+      ? slot('Pre-workout (existing whey serving)', '7:00-7:15 AM', [['whey1'], ['whey1', 'banana']])
+      : slot('On waking', '6:00 AM', [['chiaflax', 'almonds'], ['banana', 'almonds'], ['buttermilk']]);
     const breakfast = slot(isTraining ? 'Post-workout breakfast' : 'Breakfast',
-      isTraining ? '7:30 AM' : '8:00 AM', [
-        isVegDay ? ['oats', 'whey2', 'chiaflax', 'berries'] : ['oats', 'whey15', 'chiaflax', 'berries'],
+      isTraining ? '9:00-9:30 AM' : '8:00 AM', [
+        isVegDay
+          ? ['oats', isTraining ? 'whey1' : 'whey2', 'chiaflax', 'berries']
+          : ['oats', isTraining ? 'whey05' : 'whey15', 'chiaflax', 'berries'],
         isVegDay ? ['gyog250', 'idli2', 'berries', 'whey1'] : ['eggmix', 'idli2', 'berries'],
         ['gyog', 'oats', 'berries', 'almonds'],
       ]);
     // Veg lunch and dinner lead with soya chunks. Paneer- and dal-only plates
     // top out near 40 g protein, which cannot reach 205 g across the day.
     // The last option in each list is the low-carb plate: protein, sabzi and
-    // salad with the starch dropped. Rest days only budget 165 g carbs, so
+    // steamed vegetables with the starch dropped. Rest days only budget 165 g carbs, so
     // without it no combination of full-starch plates fits the calories.
     const lunch = slot('Lunch', dayType === 'vegSat' ? '1:00 PM' : '12:30 PM',
       isVegDay
-        ? [['soya', 'brownrice', 'dal', 'salad'], ['soya', 'paneer', 'millet2', 'salad'], ['soya', 'paneer', 'salad']]
-        : [['chickenEgg', 'brownrice', 'dal', 'salad'], ['fish', 'quinoa', 'salad'], ['chicken', 'sabzi', 'salad']]);
+        ? [['soya', 'brownrice', 'dal', 'steamedVeg'], ['soya', 'paneer', 'millet2', 'steamedVeg'], ['soya', 'paneer', 'steamedVeg']]
+        : [['chickenEgg', 'brownrice', 'dal', 'steamedVeg'], ['fish', 'quinoa', 'steamedVeg'], ['chicken', 'sabzi', 'steamedVeg']]);
     const snack = slot('Snack', '4:00 PM',
       isVegDay
         ? [['whey1', 'banana'], ['gyog250', 'berries'], ['whey1', 'milk']]
@@ -306,8 +309,8 @@ export function mealPlanFor(dayType, state) {
     // distinct rotating vegetables instead of a catch-all sabzi.
     const dinner = slot('Dinner', '7:30 PM',
       isVegDay
-        ? [['soya', 'paneer', 'sabzi', 'salad'], ['paneer150', 'dal', 'roti2', 'salad'], ['soya', 'sabzi', 'salad']]
-        : [['chickenEgg', 'millet2', 'sabzi', 'salad'], ['fish', 'sabzi', 'quinoa', 'salad'], ['chicken', 'sabzi', 'salad'], ['salmon', 'broccoli', 'asparagus']]);
+        ? [['soya', 'paneer', 'sabzi', 'steamedVeg'], ['paneer150', 'dal', 'roti2', 'steamedVeg'], ['soya', 'sabzi', 'steamedVeg']]
+        : [['chickenEgg', 'millet2', 'sabzi', 'steamedVeg'], ['fish', 'sabzi', 'quinoa', 'steamedVeg'], ['chicken', 'sabzi', 'steamedVeg'], ['salmon', 'broccoli', 'asparagus']]);
     const bed = { ...slot('Optional bedtime (if protein low)', '9:30 PM', [['whey1'], ['gyog']]), optional: true };
     // Flex meal: a genuine extra meal, not a top-up, for a day that ran hungrier
     // or harder than planned. Scoped to training days on purpose — a rest day
@@ -318,8 +321,8 @@ export function mealPlanFor(dayType, state) {
     const flex = isTraining
       ? { ...slot('Flex meal (optional — high hunger or a harder session)', 'As needed',
           isVegDay
-            ? [['soya', 'sabzi', 'salad'], ['paneer150', 'salad'], ['tofu', 'sabzi', 'salad']]
-            : [['chicken', 'sabzi', 'salad'], ['fish', 'salad'], ['chickenEgg', 'salad']]), optional: true }
+            ? [['soya', 'sabzi', 'steamedVeg'], ['paneer150', 'steamedVeg'], ['tofu', 'sabzi', 'steamedVeg']]
+            : [['chicken', 'sabzi', 'steamedVeg'], ['fish', 'steamedVeg'], ['chickenEgg', 'steamedVeg']]), optional: true }
       : null;
     slots = [wake, breakfast, lunch, snack, dinner, ...(flex ? [flex] : []), bed];
   }
