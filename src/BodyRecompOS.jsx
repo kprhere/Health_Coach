@@ -2,7 +2,7 @@
 // BodyRecompOS.jsx - the whole app: state + eight tabs
 // Mobile: bottom nav, single column. Desktop: sidebar + multi-column splits.
 // ============================================================
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
 import {
   ChevronLeft, ChevronRight, ChevronDown, Plus, Check, Download, Upload, RotateCcw,
   Droplets, Footprints, Moon, Flame, Activity, Waves, TrendingUp, Trophy, Target,
@@ -23,12 +23,12 @@ import {
   phaseInfo, programCalendar, sortedScans, latestScan, baselineScan, nextScanCountdown, monthlyTargetProgress,
   volumeByMuscle, volumeByExercise, supersetStats, finisherStats, weeklyVolumeSeries,
   allSetRecords, getBestPerformance, exportJSON, workoutCSV, download, validateImport,
-  defaultState, loadState, saveState, mergeSyncedState,
+  defaultState, loadState, saveState, mergeSyncedState, migrateState,
   supplementAdherence, hairHealthChecks, daysToLab,
   nutritionProfile, volumeTrend, muscleBalance, fmtVol, parseHealthParams, muscleWeekTrend,
   recompSignal, consistencyStreak, energyBalance, proteinPerLbLean, trainingLoadSummary,
   customExercisePlanFits, workoutSwapPartner, workoutSessionHasData,
-  observedActivityFactor,
+  observedActivityFactor, plannedWalkingMinutes, progressWindowSummary, postScanCoaching,
 } from './helpers.js';
 import {
   Sidebar, BottomNav, Card, Chip, SectionTitle, MetricRing, ScoreRing, ProgressBar,
@@ -38,7 +38,7 @@ import {
 } from './components.jsx';
 import { BlockLogger, AddExercisePicker, makeUnplannedEntry } from './loggers.jsx';
 import { generateDemoData } from './demo.js';
-import { deriveSync, pullRemote, pushRemote } from './sync.js';
+import { canAutoPush, deriveSync, pullRemote, pushRemote } from './sync.js';
 
 // the sync passphrase lives on-device only, in its own key, so it never
 // ends up inside an exported JSON backup.
@@ -46,6 +46,37 @@ const SYNC_SECRET_KEY = 'recomp-sync-secret';
 const SYNC_UPDATED_KEY = 'recomp-sync-updated';
 const getSyncSecret = () => { try { return localStorage.getItem(SYNC_SECRET_KEY) || ''; } catch { return ''; } };
 const setSyncSecret = (v) => { try { if (v) localStorage.setItem(SYNC_SECRET_KEY, v); else localStorage.removeItem(SYNC_SECRET_KEY); } catch { /* ignore */ } };
+
+const relativeBackupTime = (timestamp) => {
+  if (!timestamp) return '';
+  const minutes = Math.max(0, Math.round((Date.now() - timestamp) / 60000));
+  if (minutes < 1) return 'just now';
+  if (minutes < 60) return `${minutes} min ago`;
+  const hours = Math.round(minutes / 60);
+  return hours < 24 ? `${hours} hr ago` : new Date(timestamp).toLocaleDateString();
+};
+
+function CloudBackupStatus({ ctx, compact = false }) {
+  const configured = !!(ctx.state.settings.syncUrl && ctx.getSyncSecret());
+  const labels = {
+    disabled: configured ? 'Not automatic' : 'Not configured',
+    connecting: 'Connecting', restoring: 'Restoring', hydrated: 'Ready',
+    saving: 'Saving', synced: 'Synced ✓', offline: 'Offline', failed: 'Failed',
+  };
+  const label = labels[ctx.syncPhase] || 'Not configured';
+  const detail = ctx.syncLastAt
+    ? `Last backup: ${relativeBackupTime(ctx.syncLastAt)}`
+    : ctx.syncPhase === 'offline' || ctx.syncPhase === 'failed' ? 'Local copy is safe' : 'No cloud backup yet';
+  return (
+    <Card className={compact ? 'pad-sm' : ''}>
+      <div className="row" style={{ padding: compact ? 0 : '4px 0' }}>
+        <div className="row-main"><div className="row-title">Cloud backup</div><div className="row-sub">{detail}</div></div>
+        <Chip tone={ctx.syncPhase === 'synced' ? 'green' : ctx.syncPhase === 'failed' || ctx.syncPhase === 'offline' ? 'amber' : 'cyan'}>{label}</Chip>
+      </div>
+      {(ctx.syncPhase === 'failed' || ctx.syncPhase === 'offline') && !compact ? <button className="btn xs" onClick={ctx.doPull}>Retry</button> : null}
+    </Card>
+  );
+}
 
 // ---------- small shared pieces ----------
 function DateNav({ date, setDate }) {
@@ -118,6 +149,30 @@ function ActivityRows({ items, icon }) {
   );
 }
 
+function EveningWalkCard({ date, ctx }) {
+  const activity = (ctx.state.activity && ctx.state.activity[date]) || {};
+  const target = plannedWalkingMinutes(date, ctx.state);
+  const minutes = activity.eveningWalkMin ?? '40';
+  const satisfies = !!activity.eveningWalk && (Number(minutes) || 0) >= target && target > 0;
+  return (
+    <Card className="pad-sm">
+      <div className="card-head">
+        <div className="lead"><Footprints size={17} color="var(--cyan)" /><h3>Evening walk</h3></div>
+        <button className={`toggle-chip ${activity.eveningWalk ? 'on' : ''}`} onClick={() => ctx.setActivityField(date, 'eveningWalk', !activity.eveningWalk)}>
+          <Check size={14} /> {activity.eveningWalk ? 'Completed' : 'Mark complete'}
+        </button>
+      </div>
+      <div className="field-row cols-2">
+        <div className="field" style={{ margin: 0 }}><label>Minutes</label><input aria-label="Evening walk minutes" className="input mono" inputMode="numeric" value={minutes} onChange={(e) => ctx.setActivityField(date, 'eveningWalkMin', e.target.value)} /></div>
+        <div className="field" style={{ margin: 0 }}><label>Average HR (optional)</label><input aria-label="Evening walk average HR" className="input mono" inputMode="numeric" value={activity.eveningWalkHR || ''} placeholder="bpm" onChange={(e) => ctx.setActivityField(date, 'eveningWalkHR', e.target.value)} /></div>
+      </div>
+      <div className="hint" style={{ marginTop: 8 }}>
+        {target ? (satisfies ? `This satisfies today's ${target}-minute planned walk and is counted once.` : `Today's planned walking target is ${target} minutes.`) : 'Logged as actual activity. No separate scheduled walk is added.'}
+      </div>
+    </Card>
+  );
+}
+
 // =====================================================================
 // HOME
 // =====================================================================
@@ -183,6 +238,8 @@ function HomeTab({ ctx }) {
               ))}
             </div>
           </Card>
+
+          <EveningWalkCard date={date} ctx={ctx} />
 
           <div className="mnum-grid">
             <div className="mnum"><div className="mnum-k">Energy balance</div><div className="mnum-v amber">{eb.hasData ? `${eb.net > 0 ? '+' : ''}${eb.net}` : '—'} <small>kcal</small></div></div>
@@ -277,6 +334,9 @@ function HomeTab({ ctx }) {
         </div>
 
         <div className="split-aside">
+          <SectionTitle>Data safety</SectionTitle>
+          <CloudBackupStatus ctx={ctx} compact />
+
           <SectionTitle>Coach insights</SectionTitle>
           <Card><CoachInsights items={insights} /></Card>
 
@@ -881,6 +941,9 @@ function BodyTab({ ctx }) {
   const base = baselineScan(s);
   const prev = scans.length >= 2 ? scans[scans.length - 2] : null;
   const target = monthlyTargetProgress(s);
+  const progress = progressWindowSummary(s);
+  const scanCountdown = nextScanCountdown(s);
+  const scanVerdict = latest && scanCountdown.next && latest.date >= scanCountdown.next ? postScanCoaching(s) : null;
   const [editing, setEditing] = useState(null); // scan object or null
   const [draft, setDraft] = useState(BLANK_SCAN());
 
@@ -899,9 +962,10 @@ function BodyTab({ ctx }) {
   };
 
   const cmpRow = (f) => {
-    if (!latest || !base) return null;
-    const cur = latest[f.key], b0 = base[f.key];
+    if (!latest || !prev) return null;
+    const cur = latest[f.key], b0 = prev[f.key];
     const d = Math.round((cur - b0) * 100) / 100;
+    const pct = Number(b0) ? Math.round((d / b0) * 1000) / 10 : null;
     const improved = (f.good === 'down' && d < 0) || (f.good === 'up' && d > 0);
     const worse = (f.good === 'down' && d > 0) || (f.good === 'up' && d < 0);
     return (
@@ -909,7 +973,7 @@ function BodyTab({ ctx }) {
         <div className="cmp-lab">{f.label}</div>
         <div className="cmp-v">{b0}{f.unit ? ` ${f.unit}` : ''}</div>
         <div className="cmp-v">{cur}{f.unit ? ` ${f.unit}` : ''}</div>
-        <div className={`cmp-d ${improved ? 'delta up' : worse ? 'delta down' : 'faint'}`}>{d > 0 ? '+' : ''}{d}</div>
+        <div className={`cmp-d ${improved ? 'delta up' : worse ? 'delta down' : 'faint'}`}>{d > 0 ? '+' : ''}{d}{pct != null ? ` (${pct > 0 ? '+' : ''}${pct}%)` : ''}</div>
       </div>
     );
   };
@@ -917,7 +981,27 @@ function BodyTab({ ctx }) {
   return (
     <div>
       <div className="page-title">Body</div>
-      <p className="page-sub">Your Evolt 360 scans. Three seeded from your result sheets. Add a new scan each month.</p>
+      <p className="page-sub">Your Evolt 360 scans. Four are seeded from your result sheets. Add the next comparison scan around August 31.</p>
+
+      <SectionTitle right={<Chip tone="cyan">{Math.max(0, progress.daysUntilScan)} days</Chip>}>Next Scan / 14-Day Progress</SectionTitle>
+      <Card>
+        <div className="stat-grid cols-3">
+          <StatCell k="Current weight" v={progress.currentWeight ?? '-'} unit={progress.currentWeight ? 'lb' : ''} />
+          <StatCell k="Waist" v={progress.waist ?? '-'} unit={progress.waist ? 'in' : ''} />
+          <StatCell k="Avg calories" v={progress.averageCalories ?? '-'} unit={progress.averageCalories ? 'kcal' : ''} />
+          <StatCell k="Avg protein" v={progress.averageProtein ?? '-'} unit={progress.averageProtein ? 'g' : ''} />
+          <StatCell k="Avg steps" v={progress.averageSteps == null ? '-' : Math.round(progress.averageSteps).toLocaleString()} />
+          <StatCell k="Strength workouts" v={progress.strengthWorkouts} />
+          <StatCell k="Walking/cardio" v={progress.walkingMinutes} unit="min" />
+          <StatCell k="Volume trend" v={progress.volumeChangePct == null ? '-' : `${progress.volumeChangePct > 0 ? '+' : ''}${progress.volumeChangePct}%`} />
+          <StatCell k="PRs since scan" v={progress.prs} />
+          <StatCell k="Avg sleep" v={progress.averageSleep ?? '-'} unit={progress.averageSleep ? 'hr' : ''} />
+          <StatCell k="Adherence" v={progress.adherencePct ?? '-'} unit={progress.adherencePct != null ? '%' : ''} />
+          <StatCell k="Data complete" v={progress.dataCompletenessPct} unit="%" />
+        </div>
+        <div className="hint" style={{ marginTop: 10 }}>Judge the scan as a system: fat, lean mass and strength together. Scale loss alone is not a win if lean mass and performance deteriorate.</div>
+      </Card>
+      {scanVerdict ? <Banner tone={scanVerdict.code === 'keep' ? 'green' : scanVerdict.code === 'warning' ? 'red' : 'amber'} icon={scanVerdict.code === 'keep' ? Check : AlertTriangle}><b>{scanVerdict.title}</b><br />{scanVerdict.detail}</Banner> : null}
 
       {latest ? (
         <Card>
@@ -948,11 +1032,11 @@ function BodyTab({ ctx }) {
         </div>
 
         <div>
-          <SectionTitle right={<button className="btn xs primary" onClick={openAdd}><Plus size={13} /> Scan</button>}>Baseline vs latest</SectionTitle>
+          <SectionTitle right={<button className="btn xs primary" onClick={openAdd}><Plus size={13} /> Scan</button>}>Previous vs latest</SectionTitle>
           <Card>
             <div className="cmp" style={{ color: 'var(--faint)' }}>
               <div className="cmp-lab" style={{ fontFamily: 'var(--mono)', fontSize: 10, textTransform: 'uppercase' }}>Metric</div>
-              <div className="cmp-v" style={{ fontSize: 10 }}>{base ? shortDate(base.date) : '-'}</div>
+              <div className="cmp-v" style={{ fontSize: 10 }}>{prev ? shortDate(prev.date) : '-'}</div>
               <div className="cmp-v" style={{ fontSize: 10 }}>{latest ? shortDate(latest.date) : '-'}</div>
               <div className="cmp-d" style={{ fontSize: 10 }}>Δ</div>
             </div>
@@ -1331,6 +1415,8 @@ function SyncCard({ ctx }) {
   const savePass = (v) => { setPass(v); ctx.setSyncSecret(v); };
   const st = ctx.syncStatus;
   return (
+    <>
+    <CloudBackupStatus ctx={ctx} />
     <Card>
       <div className="block-tag"><span className="bar" />Encrypted sync across your devices</div>
       <p style={{ margin: '0 0 10px', fontSize: 12.5, lineHeight: 1.55, color: 'var(--muted)' }}>
@@ -1356,6 +1442,7 @@ function SyncCard({ ctx }) {
       {st ? <Banner tone={st.type === 'err' ? 'red' : 'cyan'} icon={st.type === 'err' ? AlertTriangle : st.type === 'ok' ? Check : Info}>{st.msg}</Banner> : null}
       <div className="hint" style={{ marginTop: 8 }}>If you lose the passphrase, the cloud copy can't be decrypted — there is no recovery. Keep exporting a JSON backup too.</div>
     </Card>
+    </>
   );
 }
 
@@ -1796,6 +1883,7 @@ export default function BodyRecompOS() {
   const toggleSupplement = (date, key) => setState((prev) => { const cur = (prev.supplementLogs && prev.supplementLogs[date]) || {}; return { ...prev, supplementLogs: { ...(prev.supplementLogs || {}), [date]: { ...cur, [key]: !cur[key] } } }; });
   const toggleBeverage = (date, key) => setState((prev) => { const cur = (prev.beverageLogs && prev.beverageLogs[date]) || {}; return { ...prev, beverageLogs: { ...(prev.beverageLogs || {}), [date]: { ...cur, [key]: !cur[key] } } }; });
   const toggleActivity = (date, key) => setState((prev) => { const cur = (prev.activity[date] || {}); return { ...prev, activity: { ...prev.activity, [date]: { ...cur, [key]: !cur[key] } } }; });
+  const setActivityField = (date, key, value) => setState((prev) => { const cur = (prev.activity[date] || {}); return { ...prev, activity: { ...prev.activity, [date]: { ...cur, [key]: value } } }; });
   const setSatMode = (date, mode) => setState((prev) => ({ ...prev, saturdayMode: { ...prev.saturdayMode, [date]: mode } }));
   const setDayOverride = (date, mode) => mutate((d) => {
     if (!d.dayOverrides) d.dayOverrides = {};
@@ -1853,27 +1941,66 @@ export default function BodyRecompOS() {
   const restartCalendar = (dateStr) => mutate((d) => { d.settings.programStartDate = dateStr; d.settings.restartPhaseStartDate = dateStr; });
   const autoScanDate = () => mutate((d) => { const c = programCalendar(d); d.settings.nextBodyScanDate = c.autoNextScanDate; });
   const recalcNow = () => mutate((d) => { d.settings.lastRecalc = Date.now(); }); // forces a fresh derive + re-render
-  const replaceState = (obj) => setState(() => { const base = defaultState(); const merged = { ...base }; Object.keys(obj).forEach((k) => { merged[k] = obj[k]; }); if (!merged.bodyScans || !merged.bodyScans.length) merged.bodyScans = base.bodyScans; return merged; });
+  const replaceState = (obj) => setState(() => migrateState(obj));
   const resetAll = () => setState(defaultState());
   // Sample data fills only EMPTY days — any real log you already have
   // (today's workout, meals, watch numbers) is kept untouched.
   // ---------- encrypted cross-device sync ----------
   const [syncStatus, setSyncStatus] = useState(null);
   const [syncBusy, setSyncBusy] = useState(false);
+  const [syncPhase, setSyncPhase] = useState('disabled');
+  const [syncLastAt, setSyncLastAt] = useState(() => {
+    try { return parseInt(localStorage.getItem(SYNC_UPDATED_KEY) || '0', 10) || 0; } catch { return 0; }
+  });
+  const [syncCredentialVersion, setSyncCredentialVersion] = useState(0);
+  const [syncRetryTick, setSyncRetryTick] = useState(0);
+  const lastPushedState = useRef('');
+
+  const rememberCloudWrite = (at) => {
+    localStorage.setItem(SYNC_UPDATED_KEY, String(at));
+    setSyncLastAt(at);
+  };
+
+  // Pull immediately before every write, merge both snapshots, then use the
+  // Worker's revision precondition. A conflict retries once from fresh cloud
+  // state, so an old tab cannot blindly replace newer history.
+  const pushMergedSnapshot = async (candidate) => {
+    const pass = getSyncSecret();
+    const url = candidate.settings.syncUrl;
+    const { syncId, key } = await deriveSync(pass);
+    let next = candidate;
+    for (let attempt = 0; attempt < 2; attempt++) {
+      const remote = await pullRemote(url, syncId, key);
+      next = remote ? mergeSyncedState(next, remote.state) : next;
+      try {
+        const at = await pushRemote(url, syncId, key, next, remote ? remote.updatedAt : 0);
+        rememberCloudWrite(at);
+        const fingerprint = JSON.stringify(next);
+        lastPushedState.current = fingerprint;
+        if (fingerprint !== JSON.stringify(candidate)) setState(next);
+        return at;
+      } catch (error) {
+        if (error.code !== 'SYNC_CONFLICT' || attempt === 1) throw error;
+      }
+    }
+    throw new Error('cloud changed repeatedly; retry');
+  };
 
   const doPull = async () => {
     const pass = getSyncSecret();
     const url = state.settings.syncUrl;
     if (!pass || !url) { setSyncStatus({ type: 'err', msg: 'Add your sync URL and passphrase first.' }); return; }
-    setSyncBusy(true); setSyncStatus({ type: 'info', msg: 'Pulling from cloud…' });
+    setSyncBusy(true); setSyncPhase('restoring'); setSyncStatus({ type: 'info', msg: 'Pulling from cloud…' });
     try {
       const { syncId, key } = await deriveSync(pass);
       const remote = await pullRemote(url, syncId, key);
-      if (!remote) { setSyncStatus({ type: 'info', msg: 'No cloud data yet. Push from your main device first.' }); return; }
+      if (!remote) { setSyncPhase('hydrated'); setSyncStatus({ type: 'info', msg: 'No cloud data yet. Your local copy is ready to back up.' }); return; }
       setState((local) => mergeSyncedState(local, remote.state));
-      localStorage.setItem(SYNC_UPDATED_KEY, String(remote.updatedAt));
+      rememberCloudWrite(remote.updatedAt);
+      setSyncPhase('hydrated');
       setSyncStatus({ type: 'ok', msg: 'Merged cloud data. Logs already on this device were retained.' });
     } catch (e) {
+      setSyncPhase(navigator.onLine ? 'failed' : 'offline');
       setSyncStatus({ type: 'err', msg: `Pull failed (wrong passphrase or URL?): ${e.message}` });
     } finally { setSyncBusy(false); }
   };
@@ -1882,52 +2009,79 @@ export default function BodyRecompOS() {
     const pass = getSyncSecret();
     const url = state.settings.syncUrl;
     if (!pass || !url) { setSyncStatus({ type: 'err', msg: 'Add your sync URL and passphrase first.' }); return; }
-    setSyncBusy(true); setSyncStatus({ type: 'info', msg: 'Pushing to cloud…' });
+    setSyncBusy(true); setSyncPhase('saving'); setSyncStatus({ type: 'info', msg: 'Pushing merged data to cloud…' });
     try {
-      const { syncId, key } = await deriveSync(pass);
-      const at = await pushRemote(url, syncId, key, state);
-      localStorage.setItem(SYNC_UPDATED_KEY, String(at));
-      setSyncStatus({ type: 'ok', msg: 'Backed up to cloud. Pull it on your other device.' });
+      await pushMergedSnapshot(state);
+      setSyncPhase('synced');
+      setSyncStatus({ type: 'ok', msg: 'Backed up the merged local and cloud history.' });
     } catch (e) {
+      setSyncPhase(navigator.onLine ? 'failed' : 'offline');
       setSyncStatus({ type: 'err', msg: `Push failed: ${e.message}` });
     } finally { setSyncBusy(false); }
   };
 
-  // auto-sync: pull once on open if the remote copy is newer
+  // Startup gate: local state is usable immediately, but no automatic write is
+  // allowed until the first cloud pull and merge have completed successfully.
   useEffect(() => {
-    if (!state.settings.syncAuto) return;
+    if (!state.settings.syncAuto) { setSyncPhase('disabled'); return undefined; }
     const pass = getSyncSecret();
     const url = state.settings.syncUrl;
-    if (!pass || !url) return;
-    (async () => {
+    if (!pass || !url) { setSyncPhase('disabled'); return undefined; }
+    let active = true;
+    let retryTimer;
+    const hydrate = async () => {
+      setSyncPhase('connecting');
+      setSyncStatus({ type: 'info', msg: 'Connecting to encrypted cloud backup…' });
       try {
         const { syncId, key } = await deriveSync(pass);
+        if (!active) return;
+        setSyncPhase('restoring');
+        setSyncStatus({ type: 'info', msg: 'Restoring and merging cloud history…' });
         const remote = await pullRemote(url, syncId, key);
-        const localAt = parseInt(localStorage.getItem(SYNC_UPDATED_KEY) || '0', 10);
-        if (remote && remote.updatedAt > localAt) {
+        if (!active) return;
+        if (remote) {
           setState((local) => mergeSyncedState(local, remote.state));
-          localStorage.setItem(SYNC_UPDATED_KEY, String(remote.updatedAt));
+          rememberCloudWrite(remote.updatedAt);
         }
-      } catch { /* silent on open */ }
-    })();
+        setSyncPhase('hydrated');
+        setSyncStatus({ type: 'ok', msg: remote ? 'Cloud history restored and merged.' : 'Connected. No cloud snapshot exists yet.' });
+      } catch (error) {
+        if (!active) return;
+        setSyncPhase(navigator.onLine ? 'failed' : 'offline');
+        setSyncStatus({ type: 'err', msg: `Cloud restore failed. Local copy is safe: ${error.message}` });
+        retryTimer = setTimeout(() => setSyncRetryTick((value) => value + 1), 30000);
+      }
+    };
+    hydrate();
+    return () => { active = false; clearTimeout(retryTimer); };
+    // state is intentionally excluded: hydration reruns only when configuration or retry changes.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [state.settings.syncAuto, state.settings.syncUrl, syncCredentialVersion, syncRetryTick]);
 
   // auto-sync: debounced push a couple seconds after any change
   useEffect(() => {
-    if (!state.settings.syncAuto) return;
+    if (!canAutoPush(state.settings, syncPhase)) return undefined;
     const pass = getSyncSecret();
     const url = state.settings.syncUrl;
-    if (!pass || !url) return;
+    if (!pass || !url) return undefined;
+    const fingerprint = JSON.stringify(state);
+    if (fingerprint === lastPushedState.current) return undefined;
     const t = setTimeout(async () => {
+      setSyncStatus({ type: 'info', msg: 'Saving encrypted cloud backup…' });
       try {
-        const { syncId, key } = await deriveSync(pass);
-        const at = await pushRemote(url, syncId, key, state);
-        localStorage.setItem(SYNC_UPDATED_KEY, String(at));
-      } catch { /* silent; manual buttons surface errors */ }
+        await pushMergedSnapshot(state);
+        setSyncPhase('synced');
+        setSyncStatus({ type: 'ok', msg: 'Cloud backup synced.' });
+      } catch (error) {
+        setSyncPhase(navigator.onLine ? 'failed' : 'offline');
+        setSyncStatus({ type: 'err', msg: `Cloud save failed. Local copy is safe: ${error.message}` });
+        setTimeout(() => setSyncRetryTick((value) => value + 1), 30000);
+      }
     }, 2500);
     return () => clearTimeout(t);
-  }, [state]);
+    // pushMergedSnapshot is deliberately bound to the current state render.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [state, syncPhase]);
 
   const loadDemo = () => setState((prev) => {
     const gen = generateDemoData(prev);
@@ -1944,9 +2098,10 @@ export default function BodyRecompOS() {
 
   const ctx = {
     state, setState, mutate, patchSession, mutateEntry, getSession,
-    setMeal, setWatch, toggleHabit, setHabits, toggleSupplement, toggleBeverage, toggleActivity, setSatMode, setDayOverride, swapWorkoutDates, clearWorkoutSwap,
+    setMeal, setWatch, toggleHabit, setHabits, toggleSupplement, toggleBeverage, toggleActivity, setActivityField, setSatMode, setDayOverride, swapWorkoutDates, clearWorkoutSwap,
     addScan, updateScan, deleteScan, setProfile, setSetting, setRestart, saveCustomExercise, deleteCustomExercise, restartCalendar, autoScanDate, recalcNow, replaceState, resetAll, loadDemo,
-    doPull, doPush, syncStatus, syncBusy, getSyncSecret, setSyncSecret,
+    doPull, doPush, syncStatus, syncBusy, syncPhase, syncLastAt, getSyncSecret,
+    setSyncSecret: (value) => { setSyncSecret(value); setSyncCredentialVersion((version) => version + 1); },
     selDate, setSelDate, goto: setTab,
   };
 

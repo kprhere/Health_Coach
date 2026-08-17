@@ -150,6 +150,7 @@ export const FOODS = {
   salmon:    F('Grilled or baked salmon', '180 g', 42, 0, 15, 305, false, ['lean', 'omega', 'gi']),
   eggmix:    F('4 egg whites + 1 whole egg', '', 20, 1, 5, 120, false, ['lean', 'gi']),
   whey15:    F('Whey', '1.5 scoops', 36, 5, 2, 180, true, ['lean', 'gi']),
+  whey05:    F('Whey', '0.5 scoop', 12, 1.5, 0.5, 60, true, ['lean', 'gi']),
   whey1:     F('Whey', '1 scoop', 24, 3, 1, 120, true, ['lean', 'gi']),
   gyog:      F('Greek yogurt', '200 g', 20, 9, 5, 165, true, ['lean', 'gi']),
   paneer:    F('Low-fat paneer', '100 g', 18, 4, 8, 160, true, ['ldl', 'gi']),
@@ -279,12 +280,14 @@ export function mealPlanFor(dayType, state) {
       { ...slot('Optional bedtime (if protein low)', '9:30 PM', [['whey1'], ['gyog250'], ['milk']]), optional: true },
     ];
   } else {
-    const wake = slot('On waking (fasted)', isTraining ? '5:15 AM' : '6:00 AM', [
-      ['chiaflax', 'almonds'], ['banana', 'almonds'], ['buttermilk'],
-    ]);
+    const wake = isTraining
+      ? slot('Pre-workout (existing whey serving)', '7:00-7:15 AM', [['whey1'], ['whey1', 'banana']])
+      : slot('On waking', '6:00 AM', [['chiaflax', 'almonds'], ['banana', 'almonds'], ['buttermilk']]);
     const breakfast = slot(isTraining ? 'Post-workout breakfast' : 'Breakfast',
-      isTraining ? '7:30 AM' : '8:00 AM', [
-        isVegDay ? ['oats', 'whey2', 'chiaflax', 'berries'] : ['oats', 'whey15', 'chiaflax', 'berries'],
+      isTraining ? '9:00-9:30 AM' : '8:00 AM', [
+        isVegDay
+          ? ['oats', isTraining ? 'whey1' : 'whey2', 'chiaflax', 'berries']
+          : ['oats', isTraining ? 'whey05' : 'whey15', 'chiaflax', 'berries'],
         isVegDay ? ['gyog250', 'idli2', 'berries', 'whey1'] : ['eggmix', 'idli2', 'berries'],
         ['gyog', 'oats', 'berries', 'almonds'],
       ]);

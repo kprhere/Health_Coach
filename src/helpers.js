@@ -12,6 +12,7 @@ export { nutritionProfile };
 
 export const PROGRAM_START = '2026-07-08'; // start of the current fat-loss phase (latest scan)
 export const PHASE_NAME = 'Fat Loss Phase 1';
+export const STATE_VERSION = 2;
 
 // ---------- date utils ----------
 export const pad = (n) => String(n).padStart(2, '0');
@@ -28,7 +29,7 @@ export const clone = (o) => JSON.parse(JSON.stringify(o));
 // ---------- storage ----------
 export function defaultState() {
   return {
-    version: 1,
+    version: STATE_VERSION,
     profile: { ...PROFILE_DEFAULT },
     settings: { ...SETTINGS_DEFAULT },
     workoutSessions: {}, // key -> session
@@ -55,7 +56,7 @@ export function loadState() {
     if (!raw) return defaultState();
     const parsed = JSON.parse(raw);
     if (!parsed || typeof parsed !== 'object') return defaultState();
-    return mergeState(defaultState(), parsed);
+    return migrateState(parsed);
   } catch (e) {
     console.warn('Recomp OS: could not read saved data, starting fresh.', e);
     return defaultState();
@@ -80,14 +81,153 @@ function mergeState(base, incoming) {
   return out;
 }
 
+// State migrations are deliberately additive. Application defaults may gain
+// fields, but user-owned logs are never reset or regenerated during an upgrade.
+const MIGRATIONS = {
+  2: (state) => {
+    const migrated = mergeState(defaultState(), state);
+    if (!migrated.settings.nextBodyScanDate) migrated.settings.nextBodyScanDate = '2026-08-31';
+    if (!state.settings || state.settings.scanFrequencyDays === undefined || state.settings.scanFrequencyDays === 30) {
+      migrated.settings.scanFrequencyDays = 14;
+    }
+    return { ...migrated, version: 2 };
+  },
+};
+
+export function migrateState(input) {
+  let state = input && typeof input === 'object' ? clone(input) : {};
+  let version = Number.isInteger(state.version) ? state.version : 1;
+  while (version < STATE_VERSION) {
+    const nextVersion = version + 1;
+    state = MIGRATIONS[nextVersion](state);
+    version = nextVersion;
+  }
+  return mergeState(defaultState(), { ...state, version: Math.max(version, STATE_VERSION) });
+}
+
+const sameRecord = (a, b) => JSON.stringify(a || {}) === JSON.stringify(b || {});
+
+function mergeWorkoutSets(localSets = [], cloudSets = []) {
+  const merged = [];
+  const conflicts = [];
+  const count = Math.max(localSets.length, cloudSets.length);
+  for (let i = 0; i < count; i++) {
+    const local = localSets[i];
+    const cloud = cloudSets[i];
+    if (local === undefined) { merged.push(clone(cloud)); continue; }
+    if (cloud === undefined) { merged.push(clone(local)); continue; }
+    const localHasData = setHasWorkoutData(local);
+    const cloudHasData = setHasWorkoutData(cloud);
+    if (!localHasData && cloudHasData) { merged.push(clone(cloud)); continue; }
+    if (localHasData && !cloudHasData) { merged.push(clone(local)); continue; }
+    if (!localHasData && !cloudHasData) { merged.push({ ...cloud, ...local }); continue; }
+    if (sameRecord(local, cloud)) { merged.push(clone(local)); continue; }
+
+    const conflictKeys = ['weight', 'reps', 'rpe', 'restSec', 'form', 'pain', 'notes', 'isWarmup', 'isDrop']
+      .filter((key) => local[key] !== undefined && cloud[key] !== undefined && local[key] !== cloud[key]);
+    if (conflictKeys.length === 0) merged.push({ ...cloud, ...local });
+    else {
+      merged.push(clone(local));
+      conflicts.push(clone(cloud));
+    }
+  }
+  conflicts.forEach((record) => {
+    if (!merged.some((existing) => sameRecord(existing, record))) merged.push(record);
+  });
+  return merged;
+}
+
+function mergeWorkoutEntry(localEntry, cloudEntry) {
+  if (!localEntry) return clone(cloudEntry);
+  if (!cloudEntry) return clone(localEntry);
+  const out = { ...cloudEntry, ...localEntry };
+  if (Array.isArray(localEntry.sets) || Array.isArray(cloudEntry.sets)) {
+    out.sets = mergeWorkoutSets(localEntry.sets || [], cloudEntry.sets || []);
+  }
+  if (Array.isArray(localEntry.rounds) || Array.isArray(cloudEntry.rounds)) {
+    const localRounds = localEntry.rounds || [];
+    const cloudRounds = cloudEntry.rounds || [];
+    const count = Math.max(localRounds.length, cloudRounds.length);
+    out.rounds = Array.from({ length: count }, (_, index) => {
+      const localRound = localRounds[index];
+      const cloudRound = cloudRounds[index];
+      if (!localRound) return clone(cloudRound);
+      if (!cloudRound) return clone(localRound);
+      const names = new Set([
+        ...Object.keys(cloudRound.byExercise || {}),
+        ...Object.keys(localRound.byExercise || {}),
+      ]);
+      const byExercise = {};
+      names.forEach((name) => {
+        const localCell = localRound.byExercise && localRound.byExercise[name];
+        const cloudCell = cloudRound.byExercise && cloudRound.byExercise[name];
+        if (!localCell) byExercise[name] = clone(cloudCell);
+        else if (!cloudCell) byExercise[name] = clone(localCell);
+        else if (!setHasWorkoutData(localCell) && setHasWorkoutData(cloudCell)) byExercise[name] = clone(cloudCell);
+        else byExercise[name] = { ...cloudCell, ...localCell };
+      });
+      return { ...cloudRound, ...localRound, done: !!(localRound.done || cloudRound.done), byExercise };
+    });
+  }
+  return out;
+}
+
+function mergeWorkoutSession(localSession, cloudSession) {
+  if (!localSession) return clone(cloudSession);
+  if (!cloudSession) return clone(localSession);
+  const localHasData = workoutSessionHasData(localSession);
+  const cloudHasData = workoutSessionHasData(cloudSession);
+  if (!localHasData && cloudHasData) return clone(cloudSession);
+  if (localHasData && !cloudHasData) return clone(localSession);
+  if (!localHasData && !cloudHasData) return { ...cloudSession, ...localSession };
+
+  const entries = {};
+  const ids = new Set([
+    ...Object.keys(cloudSession.entries || {}),
+    ...Object.keys(localSession.entries || {}),
+  ]);
+  ids.forEach((id) => {
+    entries[id] = mergeWorkoutEntry(localSession.entries && localSession.entries[id], cloudSession.entries && cloudSession.entries[id]);
+  });
+  return {
+    ...cloudSession,
+    ...localSession,
+    completed: !!(localSession.completed || cloudSession.completed),
+    notes: [cloudSession.notes, localSession.notes].filter(Boolean).filter((v, i, a) => a.indexOf(v) === i).join('\n'),
+    entries,
+  };
+}
+
+const mergeBooleanSafeRecord = (cloud = {}, local = {}) => {
+  return { ...cloud, ...local };
+};
+
+function mergeMealLog(localDay, cloudDay) {
+  if (!localDay) return clone(cloudDay);
+  if (!cloudDay) return clone(localDay);
+  const extras = [];
+  [...(cloudDay.extras || []), ...(localDay.extras || [])].forEach((extra) => {
+    if (!extras.some((existing) => sameRecord(existing, extra))) extras.push(clone(extra));
+  });
+  return {
+    ...cloudDay,
+    ...localDay,
+    eaten: mergeBooleanSafeRecord(cloudDay.eaten, localDay.eaten),
+    flags: mergeBooleanSafeRecord(cloudDay.flags, localDay.flags),
+    choices: { ...(cloudDay.choices || {}), ...(localDay.choices || {}) },
+    extras,
+    water: Math.max(Number(cloudDay.water) || 0, Number(localDay.water) || 0),
+  };
+}
+
 // Merge a newer encrypted cloud snapshot into this device without treating the
 // snapshot as a replacement. Local dated logs always survive; cloud-only dates
 // and fields are added. This protects a device that has offline work which was
 // never pushed, while still letting a fresh device recover everything stored in
 // the cloud. The next auto-push writes the combined state back to the Worker.
 export function mergeSyncedState(localState, remoteState) {
-  const local = mergeState(defaultState(), localState && typeof localState === 'object' ? localState : {});
-  const remote = remoteState && typeof remoteState === 'object' ? remoteState : {};
+  const local = migrateState(localState && typeof localState === 'object' ? localState : {});
+  const remote = migrateState(remoteState && typeof remoteState === 'object' ? remoteState : {});
   const out = { ...local };
 
   if (remote.profile && typeof remote.profile === 'object') out.profile = { ...local.profile, ...remote.profile };
@@ -100,13 +240,19 @@ export function mergeSyncedState(localState, remoteState) {
   }
   if (typeof remote.version === 'number') out.version = Math.max(local.version || 0, remote.version);
 
-  // Complex entries contain arrays of sets/meals. If both devices edited the
-  // same date, preserve this device's complete entry instead of partially
-  // combining arrays and risking corrupted or lost logs.
-  for (const key of ['workoutSessions', 'mealLogs']) {
-    const cloudMap = remote[key] && typeof remote[key] === 'object' ? remote[key] : {};
-    out[key] = { ...cloudMap, ...(local[key] || {}) };
-  }
+  const cloudWorkouts = remote.workoutSessions || {};
+  const localWorkouts = local.workoutSessions || {};
+  out.workoutSessions = {};
+  new Set([...Object.keys(cloudWorkouts), ...Object.keys(localWorkouts)]).forEach((date) => {
+    out.workoutSessions[date] = mergeWorkoutSession(localWorkouts[date], cloudWorkouts[date]);
+  });
+
+  const cloudMeals = remote.mealLogs || {};
+  const localMeals = local.mealLogs || {};
+  out.mealLogs = {};
+  new Set([...Object.keys(cloudMeals), ...Object.keys(localMeals)]).forEach((date) => {
+    out.mealLogs[date] = mergeMealLog(localMeals[date], cloudMeals[date]);
+  });
 
   // These per-date maps are safe to merge one field at a time. Local values
   // win conflicts, including intentional false values.
@@ -118,7 +264,7 @@ export function mergeSyncedState(localState, remoteState) {
     dates.forEach((date) => {
       const cloudDay = cloudMap[date];
       const localDay = localMap[date];
-      if (cloudDay && typeof cloudDay === 'object' && localDay && typeof localDay === 'object') out[key][date] = { ...cloudDay, ...localDay };
+      if (cloudDay && typeof cloudDay === 'object' && localDay && typeof localDay === 'object') out[key][date] = mergeBooleanSafeRecord(cloudDay, localDay);
       else out[key][date] = localDay !== undefined ? localDay : cloudDay;
     });
   }
@@ -407,18 +553,42 @@ export function getDayPlan(key, state) {
 export const makeSet = () => ({ weight: '', reps: '', rpe: '', restSec: '', form: '', pain: 0, notes: '', isDrop: false, isWarmup: false });
 export const makeCell = () => ({ weight: '', reps: '', rpe: '', restSec: '', form: '', pain: 0, notes: '', done: false, skipped: false, skipReason: '', replacedWith: '' });
 
+const hasEnteredValue = (value) => value !== undefined && value !== null && String(value).trim() !== '';
+
+// Performance data is the safe, repeatable part of a set. Observations such as
+// pain, form and notes make a set user-owned but are intentionally not copied.
+export const setHasPerformanceData = (set) => ['weight', 'reps', 'rpe'].some((key) => hasEnteredValue(set && set[key]));
+const setHasEnteredWorkoutData = (set) => setHasPerformanceData(set)
+  || ['restSec', 'form', 'notes', 'skipReason', 'replacedWith'].some((key) => hasEnteredValue(set && set[key]))
+  || Number(set && set.pain) > 0;
+export const setHasWorkoutData = (set) => setHasEnteredWorkoutData(set)
+  || !!(set && (set.done || set.skipped || set.isDrop || set.isWarmup));
+
 export function duplicateLastSet(sets) {
   const current = Array.isArray(sets) ? sets : [];
-  if (!current.length) return current;
-  const previous = current[current.length - 1];
-  return [...current, {
+  if (!current.length) return [];
+  let sourceIndex = -1;
+  for (let i = current.length - 1; i >= 0; i--) {
+    if (setHasPerformanceData(current[i])) { sourceIndex = i; break; }
+  }
+  if (sourceIndex < 0) return [...current];
+
+  const source = current[sourceIndex];
+  const classificationMatches = (candidate) => !!candidate.isWarmup === !!source.isWarmup
+    && !!candidate.isDrop === !!source.isDrop;
+  const destinationIndex = current.findIndex((candidate, index) => (
+    index > sourceIndex && classificationMatches(candidate) && !setHasEnteredWorkoutData(candidate)
+  ));
+  const copied = {
     ...makeSet(),
-    weight: previous.weight,
-    reps: previous.reps,
-    rpe: previous.rpe,
-    isDrop: !!previous.isDrop,
-    isWarmup: !!previous.isWarmup,
-  }];
+    weight: source.weight ?? '',
+    reps: source.reps ?? '',
+    rpe: source.rpe ?? '',
+    isDrop: !!source.isDrop,
+    isWarmup: !!source.isWarmup,
+  };
+  if (destinationIndex < 0) return [...current, copied];
+  return current.map((candidate, index) => (index === destinationIndex ? copied : candidate));
 }
 
 export function initSession(plan) {
@@ -465,15 +635,13 @@ export function workoutSessionHasData(session) {
   if (session.completed || String(session.notes || '').trim()) return true;
 
   const valueEntered = (item) => ['weight', 'reps', 'rpe', 'restSec', 'form', 'notes', 'skipReason', 'replacedWith']
-    .some((key) => String((item && item[key]) || '').trim());
-  const setHasData = (set) => valueEntered(set) || Number(set && set.pain) > 0 || !!(set && (set.isDrop || set.isWarmup));
-  const cellHasData = (cell) => valueEntered(cell) || Number(cell && cell.pain) > 0 || !!(cell && (cell.done || cell.skipped));
+    .some((key) => hasEnteredValue(item && item[key]));
 
   return Object.values(session.entries || {}).some((entry) => {
     if (!entry || typeof entry !== 'object') return false;
     if (entry.unplanned || entry.completed || entry.skipped || valueEntered(entry)) return true;
-    if ((entry.sets || []).some(setHasData)) return true;
-    return (entry.rounds || []).some((round) => round.done || Object.values(round.byExercise || {}).some(cellHasData));
+    if ((entry.sets || []).some(setHasWorkoutData)) return true;
+    return (entry.rounds || []).some((round) => round.done || Object.values(round.byExercise || {}).some(setHasWorkoutData));
   });
 }
 
@@ -756,6 +924,8 @@ export function habitStatus(key, state) {
     calories_ok: a.kcal > 0 && Math.abs(a.kcal - t.kcal) <= t.kcal * 0.1,
     water_hit: a.water >= t.waterL * 0.9,
     steps_10k: parseFloat(w.steps) >= 10000,
+    zone2_walk: plannedWalkingMinutes(key, state) > 0 && !!act.eveningWalk
+      && (Number(act.eveningWalkMin) || 40) >= plannedWalkingMinutes(key, state),
     sleep_75: parseFloat(w.sleepH) >= 7.5,
     swim: !!act.swim,
     badminton: !!act.badminton,
@@ -1163,6 +1333,124 @@ export function baselineScan(state) { const a = sortedScans(state); return a[0] 
 export function nextScanCountdown(state) {
   const c = programCalendar(state);
   return { next: c.nextBodyScanDate, days: c.daysUntilNextScan, explicit: c.nextScanManual };
+}
+
+export function plannedWalkingMinutes(key, state) {
+  const plan = resolveWorkout(key, state);
+  const item = [...(plan.conditioning || []), ...(plan.sport || [])]
+    .find((entry) => /walk/i.test(`${entry.name || ''} ${entry.detail || ''}`));
+  const match = item && `${item.name || ''} ${item.detail || ''}`.match(/(\d+)\s*min/i);
+  return match ? Number(match[1]) : 0;
+}
+
+const dateHasTracking = (key, state) => !!(
+  workoutSessionHasData(state.workoutSessions && state.workoutSessions[key])
+  || Object.keys((state.mealLogs && state.mealLogs[key]) || {}).length
+  || Object.keys((state.watchLogs && state.watchLogs[key]) || {}).length
+  || Object.keys((state.habitLogs && state.habitLogs[key]) || {}).length
+  || Object.keys((state.activity && state.activity[key]) || {}).length
+);
+
+const average = (values) => values.length ? Math.round((values.reduce((sum, value) => sum + value, 0) / values.length) * 10) / 10 : null;
+
+export function progressWindowSummary(state, end = todayKey()) {
+  const scan = latestScan(state);
+  const start = scan ? scan.date : addDays(end, -13);
+  const totalDays = Math.max(1, daysBetween(start, end) + 1);
+  const calories = [], protein = [], steps = [], sleep = [];
+  let trackedDays = 0;
+  let strengthWorkouts = 0;
+  let walkingMinutes = 0;
+  for (let i = 0; i < totalDays; i++) {
+    const key = addDays(start, i);
+    if (dateHasTracking(key, state)) trackedDays += 1;
+    const nutrition = nutritionActuals(key, state);
+    if (nutrition.kcal > 0) { calories.push(nutrition.kcal); protein.push(nutrition.protein); }
+    const watch = watchFor(key, state);
+    const daySteps = Number(watch.steps);
+    const daySleep = Number(watch.sleepH);
+    if (Number.isFinite(daySteps) && daySteps > 0) steps.push(daySteps);
+    if (Number.isFinite(daySleep) && daySleep > 0) sleep.push(daySleep);
+    if (workoutSessionHasData(state.workoutSessions && state.workoutSessions[key])) strengthWorkouts += 1;
+    const activity = (state.activity && state.activity[key]) || {};
+    const evening = activity.eveningWalk ? Number(activity.eveningWalkMin) || 40 : 0;
+    const recordedCardio = Number(watch.exerciseMin) || Number(watch.workoutMin) || 0;
+    walkingMinutes += Math.max(evening, recordedCardio);
+  }
+
+  const records = allSetRecords(state);
+  const current = records.filter((record) => record.date >= start && record.date <= end);
+  const previous = records.filter((record) => record.date < start);
+  const currentByName = new Map();
+  const previousByName = new Map();
+  current.forEach((record) => currentByName.set(record.name, Math.max(currentByName.get(record.name) || 0, e1rm(record.weight, record.reps))));
+  previous.forEach((record) => previousByName.set(record.name, Math.max(previousByName.get(record.name) || 0, e1rm(record.weight, record.reps))));
+  const prs = [...currentByName].filter(([name, value]) => value > (previousByName.get(name) || 0)).length;
+
+  const currentVolume = current.reduce((sum, record) => sum + record.weight * record.reps, 0);
+  const priorStart = addDays(start, -totalDays);
+  const priorVolume = records.filter((record) => record.date >= priorStart && record.date < start)
+    .reduce((sum, record) => sum + record.weight * record.reps, 0);
+  const adherence = [];
+  for (let i = 0; i < totalDays; i++) {
+    const key = addDays(start, i);
+    if (dateHasTracking(key, state)) adherence.push(dailyScore(key, state).score);
+  }
+
+  return {
+    start, end, totalDays,
+    daysUntilScan: nextScanCountdown(state).days,
+    currentWeight: scan && scan.weight,
+    waist: scan && scan.waist,
+    averageCalories: average(calories),
+    averageProtein: average(protein),
+    nutritionLoggedDays: calories.length,
+    averageSteps: average(steps),
+    strengthWorkouts,
+    walkingMinutes: Math.round(walkingMinutes),
+    currentVolume: Math.round(currentVolume),
+    volumeChangePct: priorVolume ? Math.round(((currentVolume - priorVolume) / priorVolume) * 100) : null,
+    prs,
+    averageSleep: average(sleep),
+    adherencePct: average(adherence),
+    dataCompletenessPct: Math.round((trackedDays / totalDays) * 100),
+  };
+}
+
+export function postScanCoaching(state) {
+  const scans = sortedScans(state);
+  if (scans.length < 2) return { code: 'insufficient', title: 'INSUFFICIENT DATA', detail: 'Add a second scan before changing the plan.' };
+  const previous = scans[scans.length - 2];
+  const current = scans[scans.length - 1];
+  const days = Math.max(1, daysBetween(previous.date, current.date));
+  let tracked = 0;
+  const adherence = [];
+  for (let i = 1; i <= days; i++) {
+    const key = addDays(previous.date, i);
+    if (dateHasTracking(key, state)) { tracked += 1; adherence.push(dailyScore(key, state).score); }
+  }
+  const coverage = Math.round((tracked / days) * 100);
+  const adherencePct = average(adherence) || 0;
+  if (coverage < 60) return { code: 'insufficient', title: 'INSUFFICIENT DATA', detail: 'Improve logging consistency before changing the plan.', coverage, adherencePct };
+
+  const fatChange = Number(current.fatMass) - Number(previous.fatMass);
+  const leanChangePct = Number(previous.leanMass) ? ((Number(current.leanMass) - Number(previous.leanMass)) / Number(previous.leanMass)) * 100 : null;
+  const records = allSetRecords(state);
+  const before = new Map(), after = new Map();
+  records.forEach((record) => {
+    const target = record.date <= previous.date ? before : record.date <= current.date ? after : null;
+    if (target) target.set(record.name, Math.max(target.get(record.name) || 0, e1rm(record.weight, record.reps)));
+  });
+  const ratios = [...after].filter(([name]) => before.has(name)).map(([name, value]) => value / before.get(name));
+  const strengthRatio = ratios.length ? ratios.reduce((sum, ratio) => sum + ratio, 0) / ratios.length : null;
+  const fatDown = fatChange <= -0.5;
+  const leanDown = leanChangePct != null && leanChangePct < -1;
+  const strengthDown = strengthRatio != null && strengthRatio < 0.95;
+  const facts = { coverage, adherencePct, fatChange: Math.round(fatChange * 10) / 10, leanChangePct: leanChangePct == null ? null : Math.round(leanChangePct * 10) / 10, strengthRatio };
+  if (fatDown && (leanDown || strengthDown)) return { ...facts, code: 'warning', title: 'MUSCLE RETENTION WARNING', detail: 'Review calorie deficit, actual protein intake, sleep, recovery and resistance-training stimulus.' };
+  if (fatDown) return { ...facts, code: 'keep', title: 'KEEP PLAN', detail: 'Current nutrition and training approach is working.' };
+  if (adherencePct >= 80) return { ...facts, code: 'calibrate', title: 'CALIBRATION NEEDED', detail: 'Review real calorie intake and the observed activity factor before cutting food further.' };
+  return { ...facts, code: 'insufficient', title: 'INSUFFICIENT DATA', detail: 'Improve logging consistency before changing the plan.' };
 }
 
 // ---------- activity factor self-check ----------

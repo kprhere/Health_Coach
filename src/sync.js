@@ -61,14 +61,23 @@ export async function pullRemote(url, syncId, key) {
 }
 
 // encrypts + uploads the state, returns the updatedAt timestamp it wrote.
-export async function pushRemote(url, syncId, key, state) {
+export async function pushRemote(url, syncId, key, state, expectedUpdatedAt = null) {
   const cipher = await encryptJSON(key, state);
   const updatedAt = Date.now();
   const res = await fetch(`${base(url)}/sync/${syncId}`, {
     method: 'PUT',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ updatedAt, cipher }),
+    body: JSON.stringify({ updatedAt, cipher, expectedUpdatedAt }),
   });
+  if (res.status === 409) {
+    const error = new Error('cloud changed on another device');
+    error.code = 'SYNC_CONFLICT';
+    throw error;
+  }
   if (!res.ok) throw new Error(`server ${res.status}`);
   return updatedAt;
 }
+
+export const canAutoPush = (settings, phase) => !!(
+  settings && settings.syncAuto && settings.syncUrl && ['hydrated', 'synced'].includes(phase)
+);
