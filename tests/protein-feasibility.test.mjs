@@ -129,6 +129,29 @@ test('Puratasi dates switch food but never the workout', () => {
   assert.equal(nutritionDayType('2026-09-26', state), 'vegSat');
 });
 
+test('the flex meal is optional, training-only, and food-rule-aware', () => {
+  const state = baseState();
+  const flexOf = (dayType) => mealPlanFor(dayType, state).find((s) => s.name.startsWith('Flex meal'));
+
+  assert.ok(flexOf('training'), 'training days should offer a flex meal');
+  assert.ok(flexOf('trainingVeg'), 'Puratasi training days should offer a flex meal too');
+  assert.equal(flexOf('training').optional, true, 'the flex meal must not silently inflate the core target');
+  assert.equal(flexOf('trainingVeg').options.every((o) => o.veg), true, 'trainingVeg flex options must stay vegetarian');
+
+  for (const dayType of ['rest', 'restVeg', 'vegSat', 'fastThu', 'noMoonFast1', 'noMoonFast2']) {
+    assert.equal(flexOf(dayType), undefined, `${dayType} should not offer a flex meal — no extra demand to fuel there`);
+  }
+
+  // Skipping it must still leave the core protein target reachable — the whole
+  // point is that it is a bonus, not a requirement.
+  for (const dayType of ['training', 'trainingVeg']) {
+    const target = personalTargets(dayType, state);
+    const coreOnly = mealPlanFor(dayType, state).filter((s) => !s.name.startsWith('Flex meal'));
+    const hit = findFeasible(coreOnly, target.protein, Math.round(target.kcal * 1.03));
+    assert.ok(hit, `${dayType}: protein target must be reachable without ever touching the flex meal`);
+  }
+});
+
 test('no vegetarian day ever offers meat or eggs', () => {
   const state = baseState();
   for (const dayType of ['trainingVeg', 'restVeg', 'fastThu', 'noMoonFast1', 'noMoonFast2', 'vegSat']) {

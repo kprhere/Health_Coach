@@ -303,9 +303,19 @@ export function mealPlanFor(dayType, state) {
         ? [['soya', 'paneer', 'sabzi', 'salad'], ['paneer150', 'dal', 'roti2', 'salad'], ['soya', 'sabzi', 'salad']]
         : [['chickenEgg', 'millet2', 'sabzi', 'salad'], ['fish', 'sabzi', 'quinoa', 'salad'], ['chicken', 'sabzi', 'salad']]);
     const bed = { ...slot('Optional bedtime (if protein low)', '9:30 PM', [['whey1'], ['gyog']]), optional: true };
-    slots = dayType === 'rest'
-      ? [wake, breakfast, lunch, snack, dinner, bed]
-      : [wake, breakfast, lunch, snack, dinner, bed];
+    // Flex meal: a genuine extra meal, not a top-up, for a day that ran hungrier
+    // or harder than planned. Scoped to training days on purpose — a rest day
+    // has no extra demand to fuel and only 165 g carbs of room to spend it in.
+    // Logging it does push the day's actual kcal above target, same as the
+    // bedtime slot above; that is correct, not a compliance failure, because
+    // the day's real energy need was genuinely higher than the average target.
+    const flex = isTraining
+      ? { ...slot('Flex meal (optional — high hunger or a harder session)', 'As needed',
+          isVegDay
+            ? [['soya', 'sabzi', 'salad'], ['paneer150', 'salad'], ['tofu', 'sabzi', 'salad']]
+            : [['chicken', 'sabzi', 'salad'], ['fish', 'salad'], ['chickenEgg', 'salad']]), optional: true }
+      : null;
+    slots = [wake, breakfast, lunch, snack, dinner, ...(flex ? [flex] : []), bed];
   }
 
   // final safety filter: never show a non-veg option on a veg / fast day
