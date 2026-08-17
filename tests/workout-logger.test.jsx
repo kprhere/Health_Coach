@@ -4,7 +4,8 @@ import { cleanup, render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, describe, expect, test } from 'vitest';
 
-import { defaultState, makeCell, makeSet } from '../src/helpers.js';
+import { defaultState, initSession, makeCell, makeSet, resolveWorkout } from '../src/helpers.js';
+import { TrainTab } from '../src/BodyRecompOS.jsx';
 import { RoundsLogger, SingleLogger } from '../src/loggers.jsx';
 
 afterEach(cleanup);
@@ -33,6 +34,41 @@ function SingleHarness({ initialSets = [makeSet(), makeSet(), makeSet()] }) {
 }
 
 const readEntry = () => JSON.parse(screen.getByTestId('entry-state').textContent);
+
+test('Train workout blocks start folded and open when selected', async () => {
+  const user = userEvent.setup();
+  const date = '2026-08-17';
+  const state = defaultState();
+  const plan = resolveWorkout(date, state);
+  const session = { ...initSession(plan), date };
+  const ctx = {
+    state,
+    selDate: date,
+    getSession: () => session,
+    mutateEntry: () => {},
+    patchSession: () => {},
+    setRestart: () => {},
+    setSatMode: () => {},
+    toggleActivity: () => {},
+    swapWorkoutDates: () => {},
+    clearWorkoutSwap: () => {},
+  };
+
+  render(<TrainTab ctx={ctx} />);
+
+  const firstBlock = plan.blocks[0];
+  const header = screen.getByRole('button', { name: new RegExp(firstBlock.name, 'i') });
+  expect(header.getAttribute('aria-expanded')).toBe('false');
+  expect(document.getElementById(`block-body-${firstBlock.id}`)).toBeNull();
+
+  await user.click(header);
+  expect(header.getAttribute('aria-expanded')).toBe('true');
+  expect(document.getElementById(`block-body-${firstBlock.id}`)).not.toBeNull();
+
+  await user.click(header);
+  expect(header.getAttribute('aria-expanded')).toBe('false');
+  expect(document.getElementById(`block-body-${firstBlock.id}`)).toBeNull();
+});
 
 describe('single-set workout controls', () => {
   test('the real Copy last button fills the next planned row and keeps copies independent', async () => {

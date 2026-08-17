@@ -484,9 +484,9 @@ function PlanTab({ ctx }) {
 // =====================================================================
 // TRAIN
 // =====================================================================
-function TrainTab({ ctx }) {
+export function TrainTab({ ctx }) {
   const [date, setDate] = useState(ctx.selDate);
-  const [collapsed, setCollapsed] = useState({});
+  const [expanded, setExpanded] = useState({});
   const [adding, setAdding] = useState(false);
   const [swapping, setSwapping] = useState(false);
   const [swapDate, setSwapDate] = useState(addDays(ctx.selDate, 1));
@@ -559,8 +559,9 @@ function TrainTab({ ctx }) {
     const entry = session.entries[block.id];
     if (!entry) return null;
     const done = blockDone(entry);
-    const open = collapsed[block.id] !== true;
-    const toggleOpen = () => setCollapsed((c) => ({ ...c, [block.id]: !open ? false : true }));
+    const expansionKey = `${date}:${block.id}`;
+    const open = expanded[expansionKey] === true;
+    const toggleOpen = () => setExpanded((current) => ({ ...current, [expansionKey]: !open }));
     return (
       <div className={`block-card ${done ? 'done' : ''}`} key={block.id}>
         <div className="block-head" role="button" tabIndex={0} aria-expanded={open} aria-controls={`block-body-${block.id}`}
