@@ -170,6 +170,7 @@ export const FOODS = {
   // carbs
   oats:      F('Oats (in almond milk)', '50 g', 6, 30, 3, 170, true, ['gi']),
   brownrice: F('Brown rice', '200 g cooked', 5, 45, 2, 215, true, ['gi']),
+  sweetpotato:F('Sweet potato', '200 g cooked', 4, 41, 0, 180, true, ['ldl']),
   quinoa:    F('Quinoa', '1 cup', 8, 39, 4, 220, true, ['gi']),
   roti2:     F('Roti', '2', 6, 36, 6, 220, true, ['gi']),
   millet2:   F('Millet / bajra roti', '2', 6, 40, 4, 220, true, ['gi']),
@@ -268,6 +269,7 @@ export function mealPlanFor(dayType, state) {
       slot('Break the fast (gentle)', end, [['whey1', 'banana'], ['banana', 'almonds'], ['berries', 'buttermilk']]),
       slot('High-protein vegetarian lunch', lunch, [
         ['soya', 'brownrice', 'dal', 'steamedVeg'],
+        ['soya', 'sweetpotato', 'dal', 'steamedVeg'],
         ['soya', 'paneer', 'millet2', 'steamedVeg'],
         ['tofu', 'rajma', 'quinoa', 'steamedVeg'],
       ]),
@@ -298,8 +300,8 @@ export function mealPlanFor(dayType, state) {
     // without it no combination of full-starch plates fits the calories.
     const lunch = slot('Lunch', dayType === 'vegSat' ? '1:00 PM' : '12:30 PM',
       isVegDay
-        ? [['soya', 'brownrice', 'dal', 'steamedVeg'], ['soya', 'paneer', 'millet2', 'steamedVeg'], ['soya', 'paneer', 'steamedVeg']]
-        : [['chickenEgg', 'brownrice', 'dal', 'steamedVeg'], ['fish', 'quinoa', 'steamedVeg'], ['chicken', 'sabzi', 'steamedVeg']]);
+        ? [['soya', 'brownrice', 'dal', 'steamedVeg'], ['soya', 'sweetpotato', 'dal', 'steamedVeg'], ['soya', 'paneer', 'millet2', 'steamedVeg'], ['soya', 'paneer', 'steamedVeg']]
+        : [['chickenEgg', 'brownrice', 'dal', 'steamedVeg'], ['chickenEgg', 'sweetpotato', 'dal', 'steamedVeg'], ['fish', 'quinoa', 'steamedVeg'], ['chicken', 'sabzi', 'steamedVeg']]);
     const snack = slot('Snack', '4:00 PM',
       isVegDay
         ? [['whey1', 'banana'], ['gyog250', 'berries'], ['whey1', 'milk']]
