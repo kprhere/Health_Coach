@@ -4,7 +4,7 @@
 // ============================================================
 import {
   PROGRAM, NUTRITION, EXERCISES, SEED_SCANS, HABITS,
-  PROFILE_DEFAULT, SETTINGS_DEFAULT, STORAGE_KEY, HEALTH_PARAM_MAP, DAILY_BEVERAGES,
+  PROFILE_DEFAULT, SETTINGS_DEFAULT, STORAGE_KEY, HEALTH_PARAM_MAP, DAILY_BEVERAGES, NO_MOON_DATES,
 } from './data.js';
 import { targetsWithFallback, mealPlanFor, nutritionProfile } from './nutritionEngine.js';
 
@@ -12,7 +12,7 @@ export { nutritionProfile };
 
 export const PROGRAM_START = '2026-07-08'; // start of the current fat-loss phase (latest scan)
 export const PHASE_NAME = 'Fat Loss Phase 1';
-export const STATE_VERSION = 2;
+export const STATE_VERSION = 3;
 
 // ---------- date utils ----------
 export const pad = (n) => String(n).padStart(2, '0');
@@ -40,7 +40,7 @@ export function defaultState() {
     supplementLogs: {},  // key -> { suppKey:true }
     bodyScans: [...SEED_SCANS],
     saturdayMode: {},    // key -> 'class' | 'fallback'
-    dayOverrides: {},    // key -> 'veg' | 'fast1' | 'fast2' (nutrition only; workout stays scheduled)
+    dayOverrides: {},    // key -> 'veg' | 'noMoon' (nutrition only; workout stays scheduled)
     workoutSwaps: {},    // key -> paired date key (two-way workout-only swap)
     activity: {},        // key -> { badminton:bool, swim:bool }
     restartWeights: {},  // exerciseName -> { old:'', pct:70 }
@@ -91,6 +91,16 @@ const MIGRATIONS = {
       migrated.settings.scanFrequencyDays = 14;
     }
     return { ...migrated, version: 2 };
+  },
+  3: (state) => {
+    const migrated = mergeState(defaultState(), state);
+    migrated.dayOverrides = Object.fromEntries(
+      Object.entries(migrated.dayOverrides || {}).map(([date, mode]) => [
+        date,
+        mode === 'fast1' || mode === 'fast2' || mode === 'fast' ? 'noMoon' : mode,
+      ]),
+    );
+    return { ...migrated, version: 3 };
   },
 };
 
@@ -452,11 +462,22 @@ export function inPuratasi(key, state) {
   return key >= start && key <= end;
 }
 
+export function isNoMoonDay(key) {
+  return NO_MOON_DATES.includes(key);
+}
+
+export function nextNoMoonReminder(key, dismissedDate = '') {
+  const date = NO_MOON_DATES.find((candidate) => candidate >= key);
+  if (!date || date === dismissedDate) return null;
+  const daysAway = daysBetween(key, date);
+  return daysAway >= 0 && daysAway <= 7 ? { date, daysAway } : null;
+}
+
 export function nutritionDayType(key, state) {
   const override = state && state.dayOverrides && state.dayOverrides[key];
-  if (override === 'fast1') return 'noMoonFast1';
-  if (override === 'fast2' || override === 'fast') return 'noMoonFast2'; // migrate the original manual fast
+  if (override === 'noMoon' || override === 'fast1' || override === 'fast2' || override === 'fast') return 'noMoonFast';
   if (override === 'veg') return 'vegSat';
+  if (isNoMoonDay(key)) return 'noMoonFast';
   const scheduled = PROGRAM.days[dowOf(key)].dayType;
   if (inPuratasi(key, state)) {
     if (scheduled === 'training') return 'trainingVeg';
@@ -467,8 +488,7 @@ export function nutritionDayType(key, state) {
 
 export function fastEndTime(key, state) {
   const dayType = nutritionDayType(key, state);
-  if (dayType === 'noMoonFast1') return { hour: 13, label: '1 PM', noMoon: true };
-  if (dayType === 'noMoonFast2') return { hour: 14, label: '2 PM', noMoon: true };
+  if (dayType === 'noMoonFast') return { hour: 13, label: '1 PM', noMoon: true };
   if (dayType === 'fastThu') return { hour: 18, label: '6 PM', noMoon: false };
   return null;
 }
@@ -479,8 +499,8 @@ export function dayFlags(key, state) {
   return {
     dow,
     swimDay: dow === 2 || dow === 4,
-    fastDay: dayType === 'fastThu' || dayType === 'noMoonFast1' || dayType === 'noMoonFast2',
-    vegDay: dayType === 'fastThu' || dayType === 'noMoonFast1' || dayType === 'noMoonFast2' || dayType === 'vegSat'
+    fastDay: dayType === 'fastThu' || dayType === 'noMoonFast',
+    vegDay: dayType === 'fastThu' || dayType === 'noMoonFast' || dayType === 'vegSat'
       || dayType === 'trainingVeg' || dayType === 'restVeg',
     badmintonAvailable: dow >= 1 && dow <= 5,
     classDay: dow === 6,

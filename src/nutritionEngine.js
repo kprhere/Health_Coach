@@ -103,8 +103,8 @@ export function nutritionProfile(state) {
 // trainingVeg / restVeg are the Puratasi twins of training / rest: identical
 // calories and identical protein, vegetarian food only. Going pure veg must not
 // quietly become a calorie cut, and the deficit percentage stays where it is.
-const DAY_CAL_MULT = { training: 1.09, trainingVeg: 1.09, rest: 0.955, restVeg: 0.955, fastThu: 0.91, noMoonFast1: 0.955, noMoonFast2: 0.93, vegSat: 0.977 };
-const DAY_FAT_MULT = { training: 1.0, trainingVeg: 1.0, rest: 1.0, restVeg: 1.0, fastThu: 0.9, noMoonFast1: 0.9, noMoonFast2: 0.9, vegSat: 0.95 };
+const DAY_CAL_MULT = { training: 1.09, trainingVeg: 1.09, rest: 0.955, restVeg: 0.955, fastThu: 0.91, noMoonFast: 0.955, vegSat: 0.977 };
+const DAY_FAT_MULT = { training: 1.0, trainingVeg: 1.0, rest: 1.0, restVeg: 1.0, fastThu: 0.9, noMoonFast: 0.9, vegSat: 0.95 };
 // Protein normally never flexes with the day. The Thursday fast is the one
 // physical exception: a 6 PM to 10 PM eating window cannot hold 205 g without
 // stacking four whey servings, so it carries 80% (165 g) and the other six days
@@ -126,7 +126,7 @@ export function personalTargets(dayType, state) {
   const carbs = Math.max(60, Math.round((kcal - protein * 4 - fat * 9) / 4 / 5) * 5);
   const fiber = clamp(Math.round((kcal / 1000) * 15), 28, 45);
   const waterL = dayType === 'training' || dayType === 'trainingVeg' || dayType === 'fastThu'
-    || dayType === 'noMoonFast1' || dayType === 'noMoonFast2'
+    || dayType === 'noMoonFast'
     ? Math.round((p.waterL + 0.25) * 100) / 100
     : p.waterL;
 
@@ -236,7 +236,7 @@ function slot(name, time, optionKeyLists) {
 }
 
 export function mealPlanFor(dayType, state) {
-  const noMoonFast = dayType === 'noMoonFast1' || dayType === 'noMoonFast2';
+  const noMoonFast = dayType === 'noMoonFast';
   const isVegDay = dayType === 'vegSat' || dayType === 'fastThu' || noMoonFast
     || dayType === 'trainingVeg' || dayType === 'restVeg';
   const isTraining = dayType === 'training' || dayType === 'trainingVeg';
@@ -260,8 +260,8 @@ export function mealPlanFor(dayType, state) {
       slot('Protein before bed', '9:45 PM', [['whey1', 'milk'], ['gyog250'], ['curd']]),
     ];
   } else if (noMoonFast) {
-    const end = dayType === 'noMoonFast1' ? '1:00 PM' : '2:00 PM';
-    const lunch = dayType === 'noMoonFast1' ? '2:00 PM' : '3:00 PM';
+    const end = '1:00 PM';
+    const lunch = '2:00 PM';
     slots = [
       { name: 'No-moon fasting window', time: `On waking – ${end}`, options: [opt(['fastDrinks'])], fasting: true,
         note: `Fast until ${end}. Water, black coffee and green tea only.` },

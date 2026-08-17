@@ -7,6 +7,8 @@ import {
   defaultState,
   dayFlags,
   fastEndTime,
+  isNoMoonDay,
+  nextNoMoonReminder,
   nutritionDayType,
   nutritionActuals,
   parseHealthParams,
@@ -141,7 +143,7 @@ test('planned chicken meals trade chicken quantity for egg whites instead of sta
   }
 });
 
-test('any date can override its nutrition plan to vegetarian or fast without changing the workout', () => {
+test('any date can override its nutrition plan to vegetarian or a 1 PM no-moon fast without changing the workout', () => {
   const date = '2026-08-03';
   const state = defaultState();
   const scheduledWorkout = resolveWorkout(date, state);
@@ -154,19 +156,14 @@ test('any date can override its nutrition plan to vegetarian or fast without cha
   assert.ok(vegetarian.meals.flatMap((meal) => meal.options).flatMap((option) => option.items).every((item) => !/egg/i.test(item)));
   assert.deepEqual(resolveWorkout(date, state), scheduledWorkout);
 
-  state.dayOverrides[date] = 'fast1';
-  assert.equal(nutritionDayType(date, state), 'noMoonFast1');
+  state.dayOverrides[date] = 'noMoon';
+  assert.equal(nutritionDayType(date, state), 'noMoonFast');
   assert.equal(dayFlags(date, state).fastDay, true);
   assert.deepEqual(fastEndTime(date, state), { hour: 13, label: '1 PM', noMoon: true });
   assert.equal(resolveNutrition(date, state).meals[0].fasting, true);
   assert.ok(resolveNutrition(date, state).meals.flatMap((meal) => meal.options).every((option) => option.veg));
   assert.ok(resolveNutrition(date, state).meals.flatMap((meal) => meal.options).flatMap((option) => option.items).every((item) => !/egg/i.test(item)));
   assert.deepEqual(resolveWorkout(date, state), scheduledWorkout);
-
-  state.dayOverrides[date] = 'fast2';
-  assert.equal(nutritionDayType(date, state), 'noMoonFast2');
-  assert.deepEqual(fastEndTime(date, state), { hour: 14, label: '2 PM', noMoon: true });
-  assert.ok(resolveNutrition(date, state).meals[0].time.endsWith('2:00 PM'));
 
   delete state.dayOverrides[date];
   assert.equal(nutritionDayType(date, state), scheduledWorkout.dayType);
@@ -175,6 +172,20 @@ test('any date can override its nutrition plan to vegetarian or fast without cha
   assert.equal(nutritionDayType(scheduledThursday, state), 'fastThu');
   assert.deepEqual(fastEndTime(scheduledThursday, state), { hour: 18, label: '6 PM', noMoon: false });
   assert.ok(resolveNutrition(scheduledThursday, state).meals.flatMap((meal) => meal.options).flatMap((option) => option.items).every((item) => !/egg/i.test(item)));
+});
+
+test('Chicago Panchang no-moon days activate automatically and remind one week before', () => {
+  const state = defaultState();
+  const noMoonDate = '2026-09-10';
+
+  assert.equal(isNoMoonDay(noMoonDate), true);
+  assert.equal(nutritionDayType(noMoonDate, state), 'noMoonFast');
+  assert.deepEqual(fastEndTime(noMoonDate, state), { hour: 13, label: '1 PM', noMoon: true });
+  assert.deepEqual(nextNoMoonReminder('2026-09-03'), { date: noMoonDate, daysAway: 7 });
+  assert.deepEqual(nextNoMoonReminder('2026-09-10'), { date: noMoonDate, daysAway: 0 });
+  assert.equal(nextNoMoonReminder('2026-09-02'), null);
+  assert.equal(nextNoMoonReminder('2026-09-03', noMoonDate), null);
+  assert.deepEqual(nextNoMoonReminder('2026-12-31'), { date: '2027-01-07', daysAway: 7 });
 });
 
 test('workout dates swap in both directions without moving their nutrition plans', () => {
