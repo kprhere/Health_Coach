@@ -302,6 +302,18 @@ label.btn:focus-within { outline: 3px solid rgba(52, 208, 222, 0.72); outline-of
 .heatmap-foot { display: flex; justify-content: space-between; gap: 10px; margin-top: 8px; color: var(--muted); font: 10px/1.2 'IBM Plex Mono', monospace; }
 .heatmap-key { display: inline-flex; align-items: center; gap: 4px; }
 .heatmap-key .heat-cell { width: 10px; min-width: 10px; height: 10px; }
+.muscle-coverage { display: grid; grid-template-columns: repeat(auto-fit, minmax(105px, 1fr)); gap: 7px; }
+.muscle-chip { display: grid; gap: 2px; padding: 9px 10px; border: 1px solid var(--border); border-radius: 10px; color: var(--muted); background: var(--surface-2); font-size: 12px; }
+.muscle-chip small { font: 9.5px/1.2 'IBM Plex Mono', monospace; color: var(--faint); }
+.muscle-chip.trained { color: var(--cyan); border-color: rgba(52, 208, 222, 0.32); background: rgba(52, 208, 222, 0.08); }
+.muscle-chip.trained small { color: var(--text); }
+.exercise-note { margin: 12px 0; }
+.exercise-note textarea { min-height: 64px; }
+.plate-calculator { margin: 10px 0 12px; }
+.plate-panel { margin-top: 8px; padding: 11px; border: 1px solid var(--border); border-radius: 10px; background: var(--surface-2); }
+.plate-panel .field { margin: 0; }
+.plate-result { color: var(--green); font: 11px/1.5 'IBM Plex Mono', monospace; }
+.plate-result.warn { color: var(--amber); }
 .stat {
   background: var(--surface-2); border: 1px solid var(--line-soft);
   border-radius: var(--radius-sm); padding: 10px 11px;

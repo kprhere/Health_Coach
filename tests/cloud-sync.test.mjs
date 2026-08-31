@@ -133,13 +133,14 @@ test('encrypted backup round-trip includes every permanent health and configurat
     state.workoutSwaps[date] = '2026-08-16';
     state.restartWeights['Bench Press'] = { old: '185', pct: 70 };
     state.customExercises.Custom = { p: 'Chest', custom: true };
+    state.exerciseNotes['Bench Press'] = 'Rack pin 8, medium grip';
     state.dayOverrides[date] = 'veg';
     state.profile.name = 'Backup Test';
     state.settings.syncAuto = true;
     const keys = [
       'workoutSessions', 'mealLogs', 'watchLogs', 'habitLogs', 'beverageLogs',
       'supplementLogs', 'bodyScans', 'activity', 'workoutSwaps', 'restartWeights',
-      'customExercises', 'dayOverrides', 'profile', 'settings',
+      'customExercises', 'exerciseNotes', 'dayOverrides', 'profile', 'settings',
     ];
     const sync = await deriveSync('all-collections-regression-passphrase');
     await pushRemote('https://worker.test', sync.syncId, sync.key, state, 0);

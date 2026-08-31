@@ -8,6 +8,8 @@ The installable PWA caches its app shell and visited assets for offline use. On 
 
 Stats includes a 12-week activity heatmap, 30-day training consistency, per-exercise estimated one-rep-max and top-weight trends, recent personal records, volume, muscle balance, block completion and body-composition progress. These are calculated from existing workout logs.
 
+Train also supports persistent per-exercise setup notes, a barbell plate calculator, and seconds-based logging for timed holds such as planks. Stats shows seven-day muscle coverage so neglected groups are visible before the next week begins.
+
 ## Run and build
 
 ```

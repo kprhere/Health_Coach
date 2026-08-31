@@ -45,6 +45,7 @@ export function defaultState() {
     activity: {},        // key -> { badminton:bool, swim:bool }
     restartWeights: {},  // exerciseName -> { old:'', pct:70 }
     customExercises: {}, // exerciseName -> user-owned machine metadata (cloud-synced)
+    exerciseNotes: {},   // exerciseName -> persistent coaching/setup note
     lastHealthSync: { at: null, date: '', count: 0, fields: [] }, // device-visible Shortcut import receipt
     lastBackup: null,
   };
@@ -133,7 +134,7 @@ function mergeWorkoutSets(localSets = [], cloudSets = []) {
     if (!localHasData && !cloudHasData) { merged.push({ ...cloud, ...local }); continue; }
     if (sameRecord(local, cloud)) { merged.push(clone(local)); continue; }
 
-    const conflictKeys = ['weight', 'reps', 'rpe', 'restSec', 'form', 'pain', 'notes', 'isWarmup', 'isDrop']
+    const conflictKeys = ['weight', 'reps', 'seconds', 'rpe', 'restSec', 'form', 'pain', 'notes', 'isWarmup', 'isDrop']
       .filter((key) => local[key] !== undefined && cloud[key] !== undefined && local[key] !== cloud[key]);
     if (conflictKeys.length === 0) merged.push({ ...cloud, ...local });
     else {
@@ -281,7 +282,7 @@ export function mergeSyncedState(localState, remoteState) {
 
   // User-owned maps are additive. Never let a cloud snapshot remove something
   // that still exists on this device.
-  for (const key of ['saturdayMode', 'dayOverrides', 'workoutSwaps', 'restartWeights', 'customExercises']) {
+  for (const key of ['saturdayMode', 'dayOverrides', 'workoutSwaps', 'restartWeights', 'customExercises', 'exerciseNotes']) {
     const cloudMap = remote[key] && typeof remote[key] === 'object' ? remote[key] : {};
     out[key] = { ...cloudMap, ...(local[key] || {}) };
   }
@@ -313,6 +314,10 @@ export function exerciseLibrary(state) {
 
 export const exerciseNames = (state) => Object.keys(exerciseLibrary(state)).sort((a, b) => a.localeCompare(b));
 export const exerciseMeta = (name, state) => exerciseLibrary(state)[name] || {};
+
+export const isTimedExercise = (name, state, target = '') => (
+  !!exerciseMeta(name, state).timed || /\d\s*(?:s|sec)(?:onds?)?\b/i.test(String(target))
+);
 
 // Custom equipment should become useful immediately without silently adding
 // extra weekly volume. These helpers compare its muscle + movement pattern to
@@ -570,14 +575,14 @@ export function getDayPlan(key, state) {
 // entry (single/dropset): { blockType, name, exName, sets:[set], skipped, skipReason, replacedWith, completed }
 // entry (round-based):    { blockType, name, exNames:[], plannedRounds, restAfterRoundSec, durationSec, rounds:[{done, byExercise:{name:cell}}], completed }
 // ============================================================
-export const makeSet = () => ({ weight: '', reps: '', rpe: '', restSec: '', form: '', pain: 0, notes: '', isDrop: false, isWarmup: false });
-export const makeCell = () => ({ weight: '', reps: '', rpe: '', restSec: '', form: '', pain: 0, notes: '', done: false, skipped: false, skipReason: '', replacedWith: '' });
+export const makeSet = () => ({ weight: '', reps: '', seconds: '', rpe: '', restSec: '', form: '', pain: 0, notes: '', isDrop: false, isWarmup: false });
+export const makeCell = () => ({ weight: '', reps: '', seconds: '', rpe: '', restSec: '', form: '', pain: 0, notes: '', done: false, skipped: false, skipReason: '', replacedWith: '' });
 
 const hasEnteredValue = (value) => value !== undefined && value !== null && String(value).trim() !== '';
 
 // Performance data is the safe, repeatable part of a set. Observations such as
 // pain, form and notes make a set user-owned but are intentionally not copied.
-export const setHasPerformanceData = (set) => ['weight', 'reps', 'rpe'].some((key) => hasEnteredValue(set && set[key]));
+export const setHasPerformanceData = (set) => ['weight', 'reps', 'seconds', 'rpe'].some((key) => hasEnteredValue(set && set[key]));
 const setHasEnteredWorkoutData = (set) => setHasPerformanceData(set)
   || ['restSec', 'form', 'notes', 'skipReason', 'replacedWith'].some((key) => hasEnteredValue(set && set[key]))
   || Number(set && set.pain) > 0;
@@ -603,6 +608,7 @@ export function duplicateLastSet(sets) {
     ...makeSet(),
     weight: source.weight ?? '',
     reps: source.reps ?? '',
+    seconds: source.seconds ?? '',
     rpe: source.rpe ?? '',
     isDrop: !!source.isDrop,
     isWarmup: !!source.isWarmup,
@@ -654,7 +660,7 @@ export function workoutSessionHasData(session) {
   if (!session || typeof session !== 'object') return false;
   if (session.completed || String(session.notes || '').trim()) return true;
 
-  const valueEntered = (item) => ['weight', 'reps', 'rpe', 'restSec', 'form', 'notes', 'skipReason', 'replacedWith']
+  const valueEntered = (item) => ['weight', 'reps', 'seconds', 'rpe', 'restSec', 'form', 'notes', 'skipReason', 'replacedWith']
     .some((key) => hasEnteredValue(item && item[key]));
 
   return Object.values(session.entries || {}).some((entry) => {
@@ -666,7 +672,7 @@ export function workoutSessionHasData(session) {
 }
 
 // ---------- completion logic ----------
-export const cellDone = (c) => !!(c.done || c.skipped || (c.weight !== '' && c.reps !== ''));
+export const cellDone = (c) => !!(c.done || c.skipped || hasEnteredValue(c.seconds) || (c.weight !== '' && c.reps !== ''));
 export const roundDone = (rd) => rd.done || Object.values(rd.byExercise).every(cellDone);
 
 export function blockDone(entry) {
@@ -674,7 +680,7 @@ export function blockDone(entry) {
   if (entry.completed) return true;
   if (entry.sets) {
     const planned = entry.sets.filter((s) => !s.isDrop);
-    return planned.length > 0 && planned.every((s) => s.weight !== '' && s.reps !== '');
+    return planned.length > 0 && planned.every((s) => hasEnteredValue(s.seconds) || (s.weight !== '' && s.reps !== ''));
   }
   if (entry.rounds) return entry.rounds.length > 0 && entry.rounds.every(roundDone);
   return false;
@@ -725,6 +731,26 @@ export function allSetRecords(state) {
     });
   });
   return recs;
+}
+
+export function allTimedRecords(state) {
+  const records = [];
+  Object.entries(state.workoutSessions || {}).forEach(([date, session]) => {
+    Object.values((session && session.entries) || {}).forEach((entry) => {
+      if (!entry || entry.skipped) return;
+      (entry.sets || []).forEach((set) => {
+        const seconds = Number(set.seconds);
+        if (seconds > 0 && !set.isWarmup) records.push({ date, name: entry.replacedWith || entry.exName, seconds, weight: Number(set.weight) || 0, rpe: Number(set.rpe) || null, source: entry.blockType });
+      });
+      (entry.rounds || []).forEach((round) => {
+        Object.entries(round.byExercise || {}).forEach(([exerciseName, cell]) => {
+          const seconds = Number(cell.seconds);
+          if (seconds > 0 && !cell.skipped) records.push({ date, name: cell.replacedWith || exerciseName, seconds, weight: Number(cell.weight) || 0, rpe: Number(cell.rpe) || null, source: entry.blockType });
+        });
+      });
+    });
+  });
+  return records;
 }
 
 export function getExerciseHistory(name, state) {
@@ -800,6 +826,11 @@ export function trainingActivity(state, days = 84, endKey = todayKey()) {
     const day = byDate[record.date] || { sets: 0, volume: 0 };
     day.sets += 1;
     day.volume += record.weight * record.reps;
+    byDate[record.date] = day;
+  });
+  allTimedRecords(state).forEach((record) => {
+    const day = byDate[record.date] || { sets: 0, volume: 0 };
+    day.sets += 1;
     byDate[record.date] = day;
   });
 
@@ -1151,6 +1182,26 @@ function mondayOf(key) {
 }
 
 export const fmtVol = (v) => (v >= 1000 ? `${(v / 1000).toFixed(v >= 10000 ? 0 : 1)}k` : `${Math.round(v)}`);
+
+export function plateBreakdown(totalWeight, barWeight = 45, plates = [45, 35, 25, 10, 5, 2.5]) {
+  const total = Number(totalWeight);
+  const bar = Number(barWeight);
+  if (!Number.isFinite(total) || !Number.isFinite(bar) || total < bar || bar < 0) {
+    return { perSide: 0, plates: [], remainder: 0, exact: false };
+  }
+  let remaining = (total - bar) / 2;
+  const perSide = remaining;
+  const result = [];
+  plates.filter((plate) => plate > 0).sort((a, b) => b - a).forEach((plate) => {
+    const count = Math.floor((remaining + 1e-9) / plate);
+    if (count) {
+      result.push({ plate, count });
+      remaining -= plate * count;
+    }
+  });
+  const remainder = Math.round(remaining * 100) / 100;
+  return { perSide, plates: result, remainder, exact: Math.abs(remainder) < 0.01 };
+}
 
 // ---------- week-over-week training volume improvement ----------
 // The current week is usually mid-progress, so the headline compares the
@@ -1678,13 +1729,18 @@ export function monthlyTargetProgress(state) {
 
 // ---------- workout CSV ----------
 export function workoutCSV(state) {
-  const rows = [['date', 'exercise', 'block_source', 'set', 'weight', 'reps', 'rpe', 'volume']];
+  const rows = [['date', 'exercise', 'block_source', 'set', 'weight', 'reps', 'seconds', 'rpe', 'volume']];
   const recs = allSetRecords(state).sort((a, b) => a.date.localeCompare(b.date) || a.name.localeCompare(b.name));
   const counter = {};
   recs.forEach((r) => {
     const k = r.date + '|' + r.name;
     counter[k] = (counter[k] || 0) + 1;
-    rows.push([r.date, r.name, r.source, counter[k], r.weight, r.reps, r.rpe == null ? '' : r.rpe, r.weight * r.reps]);
+    rows.push([r.date, r.name, r.source, counter[k], r.weight, r.reps, '', r.rpe == null ? '' : r.rpe, r.weight * r.reps]);
+  });
+  allTimedRecords(state).sort((a, b) => a.date.localeCompare(b.date) || a.name.localeCompare(b.name)).forEach((record) => {
+    const key = `${record.date}|${record.name}`;
+    counter[key] = (counter[key] || 0) + 1;
+    rows.push([record.date, record.name, record.source, counter[key], record.weight || '', '', record.seconds, record.rpe == null ? '' : record.rpe, '']);
   });
   return rows.map((r) => r.join(',')).join('\n');
 }

@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 
 import {
-  defaultState, exerciseProgressSeries, recentPersonalRecords, trainingActivity, trainingConsistency,
+  allTimedRecords, defaultState, exerciseProgressSeries, recentPersonalRecords, trainingActivity, trainingConsistency, workoutCSV,
 } from '../src/helpers.js';
 
 const workout = (date, weight, reps) => ({
@@ -62,4 +62,16 @@ test('activity and consistency count only dates with logged working sets', () =>
   assert.deepEqual(trainingConsistency(state, 4, '2026-08-31'), {
     workouts: 2, sets: 2, volume: 1640, streak: 0,
   });
+});
+
+test('timed holds count as training and survive CSV export without fake reps', () => {
+  const state = defaultState();
+  state.workoutSessions['2026-08-31'] = {
+    date: '2026-08-31',
+    entries: { plank: { blockType: 'single', exName: 'Plank', sets: [{ seconds: '45', weight: '', reps: '', rpe: '7' }] } },
+  };
+
+  assert.equal(allTimedRecords(state)[0].seconds, 45);
+  assert.equal(trainingActivity(state, 1, '2026-08-31')[0].sets, 1);
+  assert.match(workoutCSV(state), /Plank,single,1,,,45,7,/);
 });

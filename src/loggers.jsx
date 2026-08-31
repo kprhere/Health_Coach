@@ -6,12 +6,13 @@
 // ============================================================
 import React, { useState } from 'react';
 import {
-  Plus, Copy, Trash2, MoreHorizontal, Repeat, Check, RefreshCw, Search, Sparkles,
+  Plus, Copy, Trash2, MoreHorizontal, Repeat, Check, RefreshCw, Search, Sparkles, Calculator,
 } from 'lucide-react';
 import {
   makeSet, makeCell, cellDone, roundDone, getLastSession, getBestPerformance,
   getNextTarget, rxForExercise, e1rm, restartSuggestion, exerciseMeta, exerciseNames,
   duplicateLastSet, recommendedCustomAlternates,
+  isTimedExercise, plateBreakdown,
 } from './helpers.js';
 import { RestTimer } from './components.jsx';
 
@@ -127,10 +128,41 @@ function HistoryGrid({ name, state, rx }) {
   );
 }
 
+function ExerciseNote({ name, state, setExerciseNote }) {
+  if (!setExerciseNote) return null;
+  return (
+    <div className="field exercise-note">
+      <label>Exercise note · saved for every workout</label>
+      <textarea className="textarea" aria-label={`${name} persistent note`} value={(state.exerciseNotes && state.exerciseNotes[name]) || ''} onChange={(event) => setExerciseNote(name, event.target.value)} placeholder="Rack height, machine setting, grip, or a cue to remember next time" />
+    </div>
+  );
+}
+
+function PlateCalculator({ initialWeight = '' }) {
+  const [open, setOpen] = useState(false);
+  const [target, setTarget] = useState(initialWeight);
+  const [bar, setBar] = useState('45');
+  const result = plateBreakdown(target, bar);
+  return (
+    <div className="plate-calculator">
+      <button className="btn xs ghost" onClick={() => setOpen((value) => !value)} aria-expanded={open}><Calculator size={13} /> Plate calculator</button>
+      {open ? (
+        <div className="plate-panel">
+          <div className="field-row cols-2">
+            <div className="field"><label>Target total (lb)</label><input aria-label="Plate calculator target" className="input mono" inputMode="decimal" value={target} onChange={(event) => setTarget(event.target.value)} placeholder="225" /></div>
+            <div className="field"><label>Bar weight (lb)</label><input aria-label="Bar weight" className="input mono" inputMode="decimal" value={bar} onChange={(event) => setBar(event.target.value)} /></div>
+          </div>
+          {target ? <div className={`plate-result ${result.exact ? '' : 'warn'}`}><b>Each side:</b> {result.plates.length ? result.plates.map(({ plate, count }) => `${count} × ${plate}`).join(' + ') : 'no plates'}{result.exact ? '' : ` · ${result.remainder} lb per side cannot be loaded with standard plates`}</div> : <div className="hint">Enter the total weight, including the bar.</div>}
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
 // ============================================================
 // SINGLE + DROPSET
 // ============================================================
-export function SingleLogger({ block, entry, plan, state, onMutate, setRestart }) {
+export function SingleLogger({ block, entry, plan, state, onMutate, setRestart, setExerciseNote }) {
   const [openIdx, setOpenIdx] = useState(-1);
   const ex = block.exercises[0];
   const name = entry.replacedWith || entry.exName || ex.name;
@@ -140,6 +172,8 @@ export function SingleLogger({ block, entry, plan, state, onMutate, setRestart }
   const rs = restartSuggestion(name, state);
   const rw = (state.restartWeights && state.restartWeights[name]) || { old: '', pct: '' };
   const smartAlternates = recommendedCustomAlternates(ex.name, state, 2);
+  const timed = isTimedExercise(name, state, `${ex.repLow || ''}-${ex.repHigh || ''}`);
+  const usesBarbell = /barbell|smith/i.test(`${meta.eq || ''} ${name}`);
   const addWarmup = () => onMutate((e) => { e.sets.unshift({ ...makeSet(), isWarmup: true }); });
 
   const setField = (i, f, v) => onMutate((e) => { e.sets[i][f] = v; });
@@ -151,7 +185,7 @@ export function SingleLogger({ block, entry, plan, state, onMutate, setRestart }
 
   const chips = [
     { k: 'Sets', v: ex.sets },
-    { k: 'Reps', v: `${ex.repLow}-${ex.repHigh}` },
+    { k: timed ? 'Hold' : 'Reps', v: `${ex.repLow}-${ex.repHigh}${timed ? 's' : ''}` },
     { k: 'RPE', v: ex.rpe },
     { k: 'Rest', v: `${ex.restSec}s`, rest: true },
     { k: 'Tempo', v: ex.tempo },
@@ -197,17 +231,19 @@ export function SingleLogger({ block, entry, plan, state, onMutate, setRestart }
         </div>
       ) : null}
 
-      <HistoryGrid name={name} state={state} rx={rx} />
+      <ExerciseNote name={name} state={state} setExerciseNote={setExerciseNote} />
+      {usesBarbell ? <PlateCalculator initialWeight={entry.sets.find((set) => set.weight)?.weight || ''} /> : null}
+      {!timed ? <HistoryGrid name={name} state={state} rx={rx} /> : <div className="hint">Timed hold: enter the completed seconds for each set. Weight is optional.</div>}
 
       <div className="set-head">
-        <span>#</span><span>Weight</span><span>Reps</span><span>RPE</span><span></span>
+        <span>#</span><span>Weight</span><span>{timed ? 'Seconds' : 'Reps'}</span><span>RPE</span><span></span>
       </div>
       {entry.sets.map((s, i) => (
         <div key={i}>
           <div className="set-row">
             <span className="set-n">{s.isWarmup ? <span className="tag-drop" style={{ color: 'var(--cyan)', background: 'rgba(52,208,222,0.12)' }}>W</span> : s.isDrop ? <span className="tag-drop">DROP</span> : i + 1}</span>
             <input aria-label={`Set ${i + 1} weight`} inputMode="decimal" value={s.weight} placeholder="lb" onChange={(e) => setField(i, 'weight', e.target.value)} />
-            <input aria-label={`Set ${i + 1} reps`} inputMode="numeric" value={s.reps} placeholder="reps" onChange={(e) => setField(i, 'reps', e.target.value)} />
+            <input aria-label={`Set ${i + 1} ${timed ? 'seconds' : 'reps'}`} inputMode="numeric" value={timed ? (s.seconds || '') : s.reps} placeholder={timed ? 'sec' : 'reps'} onChange={(e) => setField(i, timed ? 'seconds' : 'reps', e.target.value)} />
             <input aria-label={`Set ${i + 1} RPE`} inputMode="decimal" value={s.rpe} placeholder="rpe" onChange={(e) => setField(i, 'rpe', e.target.value)} />
             <button className="set-del" onClick={() => setOpenIdx(openIdx === i ? -1 : i)} aria-label={`Set ${i + 1} details`} aria-expanded={openIdx === i}><MoreHorizontal size={16} /></button>
           </div>
@@ -234,7 +270,7 @@ export function SingleLogger({ block, entry, plan, state, onMutate, setRestart }
 // ============================================================
 // SUPERSET / CIRCUIT / FINISHER  (round-based)
 // ============================================================
-export function RoundsLogger({ block, entry, state, onMutate }) {
+export function RoundsLogger({ block, entry, state, onMutate, setExerciseNote }) {
   const [open, setOpen] = useState({}); // `${ri}:${nm}` -> bool
   const kind = block.blockType;
 
@@ -253,7 +289,7 @@ export function RoundsLogger({ block, entry, state, onMutate }) {
     const prev = e.rounds[ri - 1].byExercise;
     Object.keys(e.rounds[ri].byExercise).forEach((nm) => {
       const p = prev[nm];
-      if (p) e.rounds[ri].byExercise[nm] = { ...e.rounds[ri].byExercise[nm], weight: p.weight, reps: p.reps, rpe: p.rpe };
+      if (p) e.rounds[ri].byExercise[nm] = { ...e.rounds[ri].byExercise[nm], weight: p.weight, reps: p.reps, seconds: p.seconds, rpe: p.rpe };
     });
   });
   const addRound = () => onMutate((e) => {
@@ -300,6 +336,7 @@ export function RoundsLogger({ block, entry, state, onMutate }) {
             {entry.exNames.map((nm) => {
               const c = rd.byExercise[nm];
               const shown = c.replacedWith || nm;
+              const timed = isTimedExercise(shown, state, targetReps(nm));
               const last = getLastSession(shown, state);
               const key = `${ri}:${nm}`;
               return (
@@ -313,13 +350,13 @@ export function RoundsLogger({ block, entry, state, onMutate }) {
                   </div>
                   <div className="cell-inputs">
                     <input aria-label={`Round ${ri + 1} ${shown} weight`} inputMode="decimal" value={c.weight} placeholder="lb" onChange={(e) => cellField(ri, nm, 'weight', e.target.value)} />
-                    <input aria-label={`Round ${ri + 1} ${shown} reps`} inputMode="numeric" value={c.reps} placeholder="reps" onChange={(e) => cellField(ri, nm, 'reps', e.target.value)} />
+                    <input aria-label={`Round ${ri + 1} ${shown} ${timed ? 'seconds' : 'reps'}`} inputMode="numeric" value={timed ? (c.seconds || '') : c.reps} placeholder={timed ? 'sec' : 'reps'} onChange={(e) => cellField(ri, nm, timed ? 'seconds' : 'reps', e.target.value)} />
                     <input aria-label={`Round ${ri + 1} ${shown} RPE`} inputMode="decimal" value={c.rpe} placeholder="rpe" onChange={(e) => cellField(ri, nm, 'rpe', e.target.value)} />
                     <button className="cell-more" onClick={() => setOpen((o) => ({ ...o, [key]: !o[key] }))} aria-label={`${shown} details`} aria-expanded={!!open[key]}><MoreHorizontal size={15} /></button>
                   </div>
                   {last ? <div className="hint" style={{ marginTop: 4 }}>Last: {last.sets.map((s) => `${s.weight}x${s.reps}`).join(', ')}</div> : null}
                   {open[key] ? (
-                    <Detail
+                    <><Detail
                       data={c}
                       patch={(f, v) => cellField(ri, nm, f, v)}
                       skipReplace
@@ -327,7 +364,7 @@ export function RoundsLogger({ block, entry, state, onMutate }) {
                       onReplace={(name) => cellReplace(ri, nm, name)}
                       state={state}
                       targetName={nm}
-                    />
+                    /><ExerciseNote name={shown} state={state} setExerciseNote={setExerciseNote} /></>
                   ) : null}
                 </div>
               );

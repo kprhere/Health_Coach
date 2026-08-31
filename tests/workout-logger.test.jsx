@@ -4,7 +4,7 @@ import { cleanup, render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, describe, expect, test } from 'vitest';
 
-import { defaultState, initSession, makeCell, makeSet, resolveWorkout } from '../src/helpers.js';
+import { cellDone, defaultState, initSession, makeCell, makeSet, plateBreakdown, resolveWorkout } from '../src/helpers.js';
 import { TrainTab } from '../src/BodyRecompOS.jsx';
 import { RoundsLogger, SingleLogger } from '../src/loggers.jsx';
 
@@ -53,6 +53,7 @@ test('Train workout blocks start folded and open when selected', async () => {
     swapWorkoutDates: () => {},
     clearWorkoutSwap: () => {},
     setSetting: () => {},
+    setExerciseNote: () => {},
   };
 
   render(<TrainTab ctx={ctx} />);
@@ -69,6 +70,18 @@ test('Train workout blocks start folded and open when selected', async () => {
   await user.click(header);
   expect(header.getAttribute('aria-expanded')).toBe('false');
   expect(document.getElementById(`block-body-${firstBlock.id}`)).toBeNull();
+});
+
+test('plate calculator returns the plates needed on each side', () => {
+  expect(plateBreakdown(225, 45)).toEqual({
+    perSide: 90, plates: [{ plate: 45, count: 2 }], remainder: 0, exact: true,
+  });
+  expect(plateBreakdown(47, 45).exact).toBe(false);
+});
+
+test('timed work completes with seconds and does not require fake reps', () => {
+  expect(cellDone({ ...makeCell(), seconds: '45' })).toBe(true);
+  expect(cellDone(makeCell())).toBe(false);
 });
 
 describe('single-set workout controls', () => {
@@ -159,6 +172,25 @@ function RoundsHarness() {
   });
   return <><RoundsLogger block={block} entry={entry} state={defaultState()} onMutate={onMutate} /><output data-testid="round-state">{JSON.stringify(entry)}</output></>;
 }
+
+function TimedHarness() {
+  const timedBlock = {
+    id: 'plank', blockType: 'single', name: 'Plank',
+    exercises: [{ name: 'Plank', sets: 1, repLow: 30, repHigh: 45, rpe: 7, restSec: 60, tempo: 'hold' }],
+  };
+  const [entry, setEntry] = useState({ blockType: 'single', name: 'Plank', exName: 'Plank', sets: [makeSet()], skipped: false, replacedWith: '' });
+  const onMutate = (producer) => setEntry((current) => { const next = structuredClone(current); producer(next); return next; });
+  return <><SingleLogger block={timedBlock} entry={entry} state={defaultState()} onMutate={onMutate} /><output data-testid="timed-state">{JSON.stringify(entry)}</output></>;
+}
+
+test('Plank logger stores a timed hold as seconds instead of fake reps', async () => {
+  const user = userEvent.setup();
+  render(<TimedHarness />);
+  await user.type(screen.getByLabelText('Set 1 seconds'), '45');
+  const entry = JSON.parse(screen.getByTestId('timed-state').textContent);
+  expect(entry.sets[0].seconds).toBe('45');
+  expect(entry.sets[0].reps).toBe('');
+});
 
 test('superset round copy, completion, and undo keep values with the correct exercise', async () => {
   const user = userEvent.setup();

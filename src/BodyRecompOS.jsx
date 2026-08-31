@@ -13,7 +13,7 @@ import {
 import {
   PROGRAM, NUTRITION, SUPPLEMENTS, HABITS, SCAN_FIELDS, WATCH_FIELDS, DAY_SHORT,
   EXERCISES, PROGRAM_RATIONALE, BADMINTON_FUEL, SWIMMING_FUEL, DAY_VARIANTS,
-  LABS, HAIR_HEALTH, DAILY_BEVERAGES,
+  LABS, HAIR_HEALTH, DAILY_BEVERAGES, MUSCLE_GROUPS,
 } from './data.js';
 import {
   todayKey, addDays, prettyDate, shortDate, dowOf, clone, fastEndTime,
@@ -29,7 +29,7 @@ import {
   recompSignal, consistencyStreak, energyBalance, proteinPerLbLean, trainingLoadSummary,
   customExercisePlanFits, workoutSwapPartner, workoutSessionHasData,
   observedActivityFactor, plannedWalkingMinutes, progressWindowSummary, postScanCoaching, nextNoMoonReminder,
-  exerciseProgressSeries, recentPersonalRecords, trainingActivity, trainingConsistency,
+  exerciseProgressSeries, recentPersonalRecords, trainingActivity, trainingConsistency, volumeByMuscleWindow,
 } from './helpers.js';
 import {
   Sidebar, BottomNav, Card, Chip, SectionTitle, MetricRing, ScoreRing, ProgressBar,
@@ -586,7 +586,7 @@ export function TrainTab({ ctx }) {
         </div>
         {open ? (
           <div className="block-body" id={`block-body-${block.id}`}>
-            <BlockLogger block={block} entry={entry} plan={plan} state={s} onMutate={(fn) => ctx.mutateEntry(date, block.id, fn)} setRestart={ctx.setRestart} />
+            <BlockLogger block={block} entry={entry} plan={plan} state={s} onMutate={(fn) => ctx.mutateEntry(date, block.id, fn)} setRestart={ctx.setRestart} setExerciseNote={ctx.setExerciseNote} />
           </div>
         ) : null}
       </div>
@@ -1253,6 +1253,10 @@ function StatsTab({ ctx }) {
   const recentPRs = recentPersonalRecords(s, 6);
   const activity = trainingActivity(s, 84);
   const consistency = trainingConsistency(s, 30);
+  const recentMuscles = volumeByMuscleWindow(s, 7);
+  const strengthGroups = MUSCLE_GROUPS.filter((group) => !['Cardio', 'Mobility'].includes(group));
+  const trainedMuscles = strengthGroups.filter((group) => (recentMuscles[group] || 0) > 0);
+  const missedMuscles = strengthGroups.filter((group) => !(recentMuscles[group] > 0));
 
   // week-over-week improvement + lagging-muscle intelligence
   const trend = volumeTrend(s);
@@ -1271,6 +1275,14 @@ function StatsTab({ ctx }) {
           <MetricRing pct={weekly} value={weekly} sub="/100" label="7-day" color="var(--amber)" size={80} />
           <MetricRing pct={monthly} value={monthly} sub="/100" label="30-day" color="var(--green)" size={80} />
         </div>
+      </Card>
+
+      <SectionTitle right={<Chip tone={missedMuscles.length <= 2 ? 'green' : 'amber'}>{trainedMuscles.length}/{strengthGroups.length} covered</Chip>}>Muscle coverage · last 7 days</SectionTitle>
+      <Card>
+        <div className="muscle-coverage">
+          {strengthGroups.map((group) => <span key={group} className={`muscle-chip ${(recentMuscles[group] || 0) > 0 ? 'trained' : ''}`}>{group}<small>{(recentMuscles[group] || 0) > 0 ? fmtVol(recentMuscles[group]) : 'not logged'}</small></span>)}
+        </div>
+        <div className="hint" style={{ marginTop: 10 }}>{missedMuscles.length ? `No working-set volume logged for: ${missedMuscles.join(', ')}.` : 'Every major muscle group has logged working-set volume this week.'}</div>
       </Card>
 
       {deload ? <Banner tone="amber" icon={AlertTriangle}>Last week's volume dropped {Math.abs(trend.pct)}% vs the week before. If that's unplanned, tighten consistency; if you're tired, take a real deload: same lifts, drop sets and load ~40%.</Banner> : null}
@@ -2022,6 +2034,7 @@ export default function BodyRecompOS() {
   const setProfile = (k, v) => mutate((d) => { d.profile[k] = v; });
   const setSetting = (k, v) => mutate((d) => { d.settings[k] = v; });
   const setRestart = (name, field, val) => mutate((d) => { if (!d.restartWeights) d.restartWeights = {}; const cur = d.restartWeights[name] || { old: '', pct: '' }; d.restartWeights[name] = { ...cur, [field]: val }; });
+  const setExerciseNote = (name, value) => mutate((d) => { if (!d.exerciseNotes) d.exerciseNotes = {}; if (value) d.exerciseNotes[name] = value; else delete d.exerciseNotes[name]; });
   const saveCustomExercise = (oldName, name, meta) => mutate((d) => {
     if (!d.customExercises) d.customExercises = {};
     if (oldName && oldName !== name) delete d.customExercises[oldName];
@@ -2190,7 +2203,7 @@ export default function BodyRecompOS() {
   const ctx = {
     state, setState, mutate, patchSession, mutateEntry, getSession,
     setMeal, setWatch, toggleHabit, setHabits, toggleSupplement, toggleBeverage, toggleActivity, setActivityField, setSatMode, setDayOverride, swapWorkoutDates, clearWorkoutSwap,
-    addScan, updateScan, deleteScan, setProfile, setSetting, setRestart, saveCustomExercise, deleteCustomExercise, restartCalendar, autoScanDate, recalcNow, replaceState, resetAll, loadDemo,
+    addScan, updateScan, deleteScan, setProfile, setSetting, setRestart, setExerciseNote, saveCustomExercise, deleteCustomExercise, restartCalendar, autoScanDate, recalcNow, replaceState, resetAll, loadDemo,
     doPull, doPush, syncStatus, syncBusy, syncPhase, syncLastAt, getSyncSecret,
     setSyncSecret: (value) => { setSyncSecret(value); setSyncCredentialVersion((version) => version + 1); },
     selDate, setSelDate, goto: setTab,
