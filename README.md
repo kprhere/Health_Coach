@@ -10,6 +10,8 @@ Stats includes a 12-week activity heatmap, 30-day training consistency, per-exer
 
 Train also supports persistent per-exercise setup notes, a barbell plate calculator, and seconds-based logging for timed holds such as planks. Stats shows seven-day muscle coverage so neglected groups are visible before the next week begins.
 
+Restart-load suggestions are feature-flagged off by default. Enable them under More → Program dates to show old-weight and restart-percentage controls in Train; disabling the flag hides the controls without deleting saved baselines.
+
 ## Run and build
 
 ```

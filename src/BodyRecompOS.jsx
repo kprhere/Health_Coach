@@ -586,7 +586,7 @@ export function TrainTab({ ctx }) {
         </div>
         {open ? (
           <div className="block-body" id={`block-body-${block.id}`}>
-            <BlockLogger block={block} entry={entry} plan={plan} state={s} onMutate={(fn) => ctx.mutateEntry(date, block.id, fn)} setRestart={ctx.setRestart} setExerciseNote={ctx.setExerciseNote} />
+            <BlockLogger block={block} entry={entry} plan={plan} state={s} onMutate={(fn) => ctx.mutateEntry(date, block.id, fn)} setRestart={s.settings.restartLoadEnabled ? ctx.setRestart : null} setExerciseNote={ctx.setExerciseNote} />
           </div>
         ) : null}
       </div>
@@ -1837,12 +1837,16 @@ function MoreTab({ ctx }) {
                 <StatCell k="Scan every" v={c.scanFrequencyDays} unit="days" />
               </div>
             ); })()}
+            <button type="button" className="row row-action" onClick={() => ctx.setSetting('restartLoadEnabled', !s.settings.restartLoadEnabled)} aria-pressed={!!s.settings.restartLoadEnabled}>
+              <span className={`check ${s.settings.restartLoadEnabled ? 'on' : ''}`} aria-hidden="true"><Check size={15} /></span>
+              <span className="row-main"><span className="row-title">Enable restart load suggestions</span><span className="row-sub">Shows old-weight and restart-percentage controls inside Train. Saved values are kept while disabled.</span></span>
+            </button>
             <div className="field"><label>Program start date</label><input className="input" type="date" value={s.settings.programStartDate || ''} onChange={(e) => ctx.setSetting('programStartDate', e.target.value)} /></div>
             <div className="field"><label>Restart phase start date</label><input className="input" type="date" value={s.settings.restartPhaseStartDate || ''} onChange={(e) => ctx.setSetting('restartPhaseStartDate', e.target.value)} /></div>
             <div className="field-row cols-3">
               <div className="field"><label>Next body scan date</label><input className="input" type="date" value={s.settings.nextBodyScanDate || ''} onChange={(e) => ctx.setSetting('nextBodyScanDate', e.target.value)} /></div>
               <div className="field"><label>Scan every (days)</label><input className="input mono" inputMode="numeric" value={s.settings.scanFrequencyDays} onChange={(e) => ctx.setSetting('scanFrequencyDays', parseInt(e.target.value, 10) || 30)} /></div>
-              <div className="field"><label>Restart load %</label><input className="input mono" inputMode="numeric" value={s.settings.defaultRestartLoadPercent} onChange={(e) => ctx.setSetting('defaultRestartLoadPercent', parseFloat(e.target.value) || 0)} /></div>
+              {s.settings.restartLoadEnabled ? <div className="field"><label>Restart load %</label><input className="input mono" inputMode="numeric" value={s.settings.defaultRestartLoadPercent} onChange={(e) => ctx.setSetting('defaultRestartLoadPercent', parseFloat(e.target.value) || 0)} /></div> : null}
             </div>
             <div className="hint" style={{ marginBottom: 8 }}>Leave scan date blank to auto-use last scan + {s.settings.scanFrequencyDays} days. Manual dates are kept until you tap Auto.</div>
             <div className="btn-row">

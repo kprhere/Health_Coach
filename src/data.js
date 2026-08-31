@@ -47,6 +47,7 @@ export const SETTINGS_DEFAULT = {
   restartPhaseStartDate: '2026-07-14', // restart phase day 1
   nextBodyScanDate: '2026-08-31',      // current two-week measurement checkpoint
   scanFrequencyDays: 14,               // short controlled measurement window, editable after the scan
+  restartLoadEnabled: false,           // feature flag: show restart-load suggestions in Train
   defaultRestartLoadPercent: 70,       // restart load % of old working weight
   // ---- supplement + lab settings (editable in More) ----
   d3Dose: '2000 IU',                   // total daily D3 (track total across products)

@@ -84,6 +84,16 @@ test('timed work completes with seconds and does not require fake reps', () => {
   expect(cellDone(makeCell())).toBe(false);
 });
 
+test('restart load controls render only when the feature flag supplies the updater', () => {
+  const state = defaultState();
+  const entry = { blockType: 'single', name: 'Bench Press', exName: 'Bench Press', sets: [makeSet()], skipped: false, replacedWith: '' };
+  const view = render(<SingleLogger block={singleBlock} entry={entry} state={state} onMutate={() => {}} />);
+  expect(screen.queryByText('Restart load')).toBeNull();
+
+  view.rerender(<SingleLogger block={singleBlock} entry={entry} state={state} onMutate={() => {}} setRestart={() => {}} />);
+  expect(screen.getByText('Restart load')).toBeTruthy();
+});
+
 describe('single-set workout controls', () => {
   test('the real Copy last button fills the next planned row and keeps copies independent', async () => {
     const user = userEvent.setup();
