@@ -4,6 +4,10 @@ A personal body-recomposition operating system. Mobile-first for iPhone Safari (
 
 Single user, local-first, no login. Data lives on the device in localStorage, with optional end-to-end encrypted Cloudflare KV sync. Export a JSON backup any time. Changing program dates never deletes logs.
 
+The installable PWA caches its app shell and visited assets for offline use. On supported browsers, the Train tab can also hold a screen wake lock so the phone does not sleep between sets. The preference is available in Train and More; browsers that do not support the API fall back safely.
+
+Stats includes a 12-week activity heatmap, 30-day training consistency, per-exercise estimated one-rep-max and top-weight trends, recent personal records, volume, muscle balance, block completion and body-composition progress. These are calculated from existing workout logs.
+
 ## Run and build
 
 ```

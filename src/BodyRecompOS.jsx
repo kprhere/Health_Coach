@@ -7,7 +7,7 @@ import {
   ChevronLeft, ChevronRight, ChevronDown, Plus, Check, Download, Upload, RotateCcw,
   Droplets, Footprints, Moon, Flame, Activity, Waves, TrendingUp, Trophy, Target,
   AlertTriangle, Watch, Pencil, Trash2, Info, Save, Beef, Leaf, Timer, Zap, Dumbbell,
-  Sparkles, ArrowLeftRight,
+  Sparkles, ArrowLeftRight, Sun,
 } from 'lucide-react';
 
 import {
@@ -29,6 +29,7 @@ import {
   recompSignal, consistencyStreak, energyBalance, proteinPerLbLean, trainingLoadSummary,
   customExercisePlanFits, workoutSwapPartner, workoutSessionHasData,
   observedActivityFactor, plannedWalkingMinutes, progressWindowSummary, postScanCoaching, nextNoMoonReminder,
+  exerciseProgressSeries, recentPersonalRecords, trainingActivity, trainingConsistency,
 } from './helpers.js';
 import {
   Sidebar, BottomNav, Card, Chip, SectionTitle, MetricRing, ScoreRing, ProgressBar,
@@ -39,6 +40,7 @@ import {
 import { BlockLogger, AddExercisePicker, makeUnplannedEntry } from './loggers.jsx';
 import { generateDemoData } from './demo.js';
 import { canAutoPush, deriveSync, pullRemote, pushRemote } from './sync.js';
+import { screenWakeLockSupported, useScreenWakeLock } from './wakeLock.js';
 
 // the sync passphrase lives on-device only, in its own key, so it never
 // ends up inside an exported JSON backup.
@@ -496,6 +498,10 @@ export function TrainTab({ ctx }) {
   const session = ctx.getSession(date);
   const flags = dayFlags(date, s);
   const prog = workoutProgress(session);
+  const wakeLockAvailable = screenWakeLockSupported();
+  const screenAwake = useScreenWakeLock(
+    plan.blocks.length > 0 && !session.completed && s.settings.keepScreenAwake !== false,
+  );
   const insights = coachInsights(date, s, new Date());
   const rec = recoveryScore(date, s);
   const balance = muscleBalance(s);
@@ -611,6 +617,13 @@ export function TrainTab({ ctx }) {
             <div className="lead"><h3 style={{ margin: 0 }}>{plan.title}</h3><Chip tone="cyan">{plan.focus}</Chip></div>
             <div className="workout-plan-actions">
               <Chip tone={prog.total && prog.done === prog.total ? 'green' : 'amber'}>{prog.done}/{prog.total} done</Chip>
+              <button
+                className={`btn xs ghost ${screenAwake ? 'active' : ''}`}
+                onClick={() => ctx.setSetting('keepScreenAwake', s.settings.keepScreenAwake === false)}
+                aria-pressed={s.settings.keepScreenAwake !== false}
+                disabled={!wakeLockAvailable}
+                title={wakeLockAvailable ? 'Keep the display on while this workout is open' : 'Screen wake lock is not supported by this browser'}
+              ><Sun size={14} /> {screenAwake ? 'Screen awake' : 'Keep awake'}</button>
               <button className="btn xs ghost" onClick={openSwap}><ArrowLeftRight size={14} /> Swap day</button>
             </div>
           </div>
@@ -1233,6 +1246,13 @@ function StatsTab({ ctx }) {
 
   const recs = allSetRecords(s);
   const hasData = recs.length > 0;
+  const exerciseNames = [...new Set(recs.map((record) => record.name))].sort();
+  const [selectedExercise, setSelectedExercise] = useState(() => exerciseNames[0] || '');
+  const activeExercise = exerciseNames.includes(selectedExercise) ? selectedExercise : exerciseNames[0] || '';
+  const exerciseSeries = activeExercise ? exerciseProgressSeries(activeExercise, s) : [];
+  const recentPRs = recentPersonalRecords(s, 6);
+  const activity = trainingActivity(s, 84);
+  const consistency = trainingConsistency(s, 30);
 
   // week-over-week improvement + lagging-muscle intelligence
   const trend = volumeTrend(s);
@@ -1254,6 +1274,25 @@ function StatsTab({ ctx }) {
       </Card>
 
       {deload ? <Banner tone="amber" icon={AlertTriangle}>Last week's volume dropped {Math.abs(trend.pct)}% vs the week before. If that's unplanned, tighten consistency; if you're tired, take a real deload: same lifts, drop sets and load ~40%.</Banner> : null}
+
+      <SectionTitle right={<Chip tone={consistency.workouts >= 12 ? 'green' : 'cyan'}>{consistency.workouts} sessions</Chip>}>Training activity · last 12 weeks</SectionTitle>
+      <Card>
+        {hasData ? (
+          <>
+            <div className="activity-heatmap" role="img" aria-label="Twelve-week training activity heatmap">
+              {activity.map((day) => (
+                <span key={day.date} className={`heat-cell level-${day.level}`} title={`${prettyDate(day.date)}: ${day.sets} sets, ${fmtVol(day.volume)} lb volume`} />
+              ))}
+            </div>
+            <div className="heatmap-foot"><span>12 weeks ago</span><span className="heatmap-key">Less <i className="heat-cell level-1" /><i className="heat-cell level-2" /><i className="heat-cell level-3" /><i className="heat-cell level-4" /> More</span><span>Today</span></div>
+            <div className="stat-grid cols-3" style={{ marginTop: 12 }}>
+              <StatCell k="Training days · 30d" v={consistency.workouts} />
+              <StatCell k="Working sets · 30d" v={consistency.sets} />
+              <StatCell k="Volume · 30d" v={fmtVol(consistency.volume)} unit="lb" />
+            </div>
+          </>
+        ) : <EmptyState icon={TrendingUp} title="No activity yet" sub="Logged working sets will fill this calendar." />}
+      </Card>
 
       <div className="grid-2">
         <div>
@@ -1338,6 +1377,38 @@ function StatsTab({ ctx }) {
                 </table>
               </div>
             ) : <EmptyState icon={Trophy} title="No PRs yet" sub="Your best lifts appear here after a few sessions." />}
+          </Card>
+
+          <SectionTitle>Exercise progression</SectionTitle>
+          <Card>
+            {exerciseNames.length ? (
+              <>
+                <div className="field" style={{ marginTop: 0 }}>
+                  <label htmlFor="stats-exercise">Exercise</label>
+                  <select id="stats-exercise" className="input" value={activeExercise} onChange={(event) => setSelectedExercise(event.target.value)}>
+                    {exerciseNames.map((name) => <option key={name} value={name}>{name}</option>)}
+                  </select>
+                </div>
+                <LineTrend data={exerciseSeries} lines={[
+                  { key: 'e1rm', name: 'Estimated 1RM', color: '#34d0de' },
+                  { key: 'weight', name: 'Top weight', color: '#f0ad4e' },
+                ]} />
+                <div className="hint">e1RM estimates one-rep strength from the best weight and reps logged that day. It is a training trend, not a recommendation to attempt a maximum lift.</div>
+                <div className="block-tag" style={{ marginTop: 14 }}><span className="bar" />Session volume</div>
+                <BarMini data={exerciseSeries} yKey="volume" color="#8b7bf0" />
+              </>
+            ) : <EmptyState icon={TrendingUp} title="No exercise history" sub="Log two or more sessions to see strength progression." />}
+          </Card>
+
+          <SectionTitle>Recent personal records</SectionTitle>
+          <Card className="pad-sm">
+            {recentPRs.length ? recentPRs.map((record) => (
+              <div className="row" key={`${record.date}:${record.name}:${record.weight}:${record.reps}`}>
+                <Trophy size={16} color="var(--amber)" />
+                <div className="row-main"><div className="row-title">{record.name}</div><div className="row-sub">{shortDate(record.date)} · {record.weight} lb × {record.reps} · e1RM {record.e1rm} lb</div></div>
+                <Chip tone="green">+{record.improvementPct}%</Chip>
+              </div>
+            )) : <EmptyState icon={Trophy} title="No new PRs yet" sub="The first session sets a baseline. Later improvements appear here." />}
           </Card>
         </div>
       </div>
@@ -1708,6 +1779,15 @@ function MoreTab({ ctx }) {
         <div>
           <SectionTitle>Custom equipment & exercises</SectionTitle>
           <CustomMachineCard ctx={ctx} />
+
+          <SectionTitle>During workouts</SectionTitle>
+          <Card>
+            <button type="button" className="row row-action" disabled={!screenWakeLockSupported()} onClick={() => ctx.setSetting('keepScreenAwake', s.settings.keepScreenAwake === false)} aria-pressed={s.settings.keepScreenAwake !== false}>
+              <Sun size={17} color="var(--amber)" />
+              <span className="row-main"><span className="row-title">Keep screen awake</span><span className="row-sub">{screenWakeLockSupported() ? 'Prevents the display from sleeping while the Train tab is open' : 'Not supported by this browser'}</span></span>
+              <span className={`check ${screenWakeLockSupported() && s.settings.keepScreenAwake !== false ? 'on' : ''}`} aria-hidden="true"><Check size={15} /></span>
+            </button>
+          </Card>
 
           <SectionTitle>Data</SectionTitle>
           <Card>

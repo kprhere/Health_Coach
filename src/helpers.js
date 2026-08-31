@@ -753,6 +753,79 @@ export function getBestPerformance(name, state) {
   };
 }
 
+// One point per training date. e1RM is an estimate of the heaviest single rep
+// a person could perform, calculated from the best logged weight and reps.
+export function exerciseProgressSeries(name, state) {
+  return getExerciseHistory(name, state).slice().reverse().map(({ date, sets }) => ({
+    date,
+    label: shortDate(date),
+    e1rm: Math.round(Math.max(...sets.map((set) => e1rm(set.weight, set.reps)))),
+    weight: Math.max(...sets.map((set) => set.weight)),
+    volume: Math.round(sets.reduce((sum, set) => sum + set.weight * set.reps, 0)),
+  }));
+}
+
+// A PR is only counted when it beats the best e1RM from an earlier date. The
+// first logged performance establishes a baseline instead of inflating PR count.
+export function recentPersonalRecords(state, limit = 8) {
+  const bestByExerciseAndDate = new Map();
+  allSetRecords(state).forEach((record) => {
+    const key = `${record.date}\u0000${record.name}`;
+    const current = bestByExerciseAndDate.get(key);
+    if (!current || e1rm(record.weight, record.reps) > e1rm(current.weight, current.reps)) {
+      bestByExerciseAndDate.set(key, record);
+    }
+  });
+  const records = [...bestByExerciseAndDate.values()].sort((a, b) => a.date.localeCompare(b.date));
+  const bestBefore = new Map();
+  const prs = [];
+  records.forEach((record) => {
+    const value = e1rm(record.weight, record.reps);
+    const previous = bestBefore.get(record.name);
+    if (previous != null && value > previous + 0.01) {
+      prs.push({
+        ...record,
+        e1rm: Math.round(value),
+        improvementPct: Math.round(((value - previous) / previous) * 1000) / 10,
+      });
+    }
+    if (previous == null || value > previous) bestBefore.set(record.name, value);
+  });
+  return prs.sort((a, b) => b.date.localeCompare(a.date)).slice(0, limit);
+}
+
+export function trainingActivity(state, days = 84, endKey = todayKey()) {
+  const byDate = {};
+  allSetRecords(state).forEach((record) => {
+    const day = byDate[record.date] || { sets: 0, volume: 0 };
+    day.sets += 1;
+    day.volume += record.weight * record.reps;
+    byDate[record.date] = day;
+  });
+
+  const dates = [];
+  for (let offset = days - 1; offset >= 0; offset--) {
+    const date = addDays(endKey, -offset);
+    const day = byDate[date] || { sets: 0, volume: 0 };
+    const level = day.sets === 0 ? 0 : day.sets <= 4 ? 1 : day.sets <= 8 ? 2 : day.sets <= 14 ? 3 : 4;
+    dates.push({ date, ...day, volume: Math.round(day.volume), level });
+  }
+  return dates;
+}
+
+export function trainingConsistency(state, days = 30, endKey = todayKey()) {
+  const activity = trainingActivity(state, days, endKey);
+  const trained = activity.filter((day) => day.sets > 0);
+  let streak = 0;
+  for (let index = activity.length - 1; index >= 0 && activity[index].sets > 0; index--) streak++;
+  return {
+    workouts: trained.length,
+    sets: trained.reduce((sum, day) => sum + day.sets, 0),
+    volume: trained.reduce((sum, day) => sum + day.volume, 0),
+    streak,
+  };
+}
+
 export function increment(name, state) {
   const p = exerciseMeta(name, state).p || '';
   const small = /Delt|Bicep|Tricep|Calf|Calves|Ab|Oblique|Core|Forearm|Brachialis/i.test(p);

@@ -58,6 +58,7 @@ export const SETTINGS_DEFAULT = {
   // ---- encrypted cross-device sync (passphrase is stored separately, never here) ----
   syncUrl: '',                         // your Cloudflare Worker URL, e.g. https://acp-sync.<you>.workers.dev
   syncAuto: false,                     // pull on open + push on change
+  keepScreenAwake: true,               // prevent screen sleep while the Train tab is open
 };
 
 // Amavasya observance dates for Chicago, Illinois. Panchang dates are

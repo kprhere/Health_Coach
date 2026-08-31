@@ -52,6 +52,7 @@ test('Train workout blocks start folded and open when selected', async () => {
     toggleActivity: () => {},
     swapWorkoutDates: () => {},
     clearWorkoutSwap: () => {},
+    setSetting: () => {},
   };
 
   render(<TrainTab ctx={ctx} />);
