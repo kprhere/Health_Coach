@@ -1,7 +1,7 @@
 // ============================================================
 // demo.js - generates realistic sample history so the Stats,
 // charts and scores have something to show. Fully reversible
-// with "Reset all data" (it just restores the seed scans).
+// with "Reset all data", which clears everything back to first-run setup.
 //
 // The training volume climbs about 12% per week (progressive
 // overload), so "Training volume by week" reads as a clean

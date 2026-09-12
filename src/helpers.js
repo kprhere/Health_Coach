@@ -3,7 +3,7 @@
 // Pure-ish functions. Block-aware: understands single/superset/circuit/finisher/dropset.
 // ============================================================
 import {
-  PROGRAM, programOf, programDay, NUTRITION, EXERCISES, SEED_SCANS, HABITS,
+  PROGRAM, programOf, programDay, NUTRITION, EXERCISES, HABITS,
   PROFILE_DEFAULT, SETTINGS_DEFAULT, STORAGE_KEY, HEALTH_PARAM_MAP, DAILY_BEVERAGES, NO_MOON_DATES,
 } from './data.js';
 import { targetsWithFallback, mealPlanFor, nutritionProfile } from './nutritionEngine.js';
@@ -12,7 +12,7 @@ export { nutritionProfile };
 
 export const PROGRAM_START = '2026-07-08'; // start of the current fat-loss phase (latest scan)
 export const PHASE_NAME = 'Fat Loss Phase 1';
-export const STATE_VERSION = 4;
+export const STATE_VERSION = 5;
 
 // ---------- date utils ----------
 export const pad = (n) => String(n).padStart(2, '0');
@@ -39,7 +39,7 @@ export function defaultState() {
     habitLogs: {},       // key -> { habitKey:true }
     watchLogs: {},       // key -> { steps, ... }
     supplementLogs: {},  // key -> { suppKey:true }
-    bodyScans: [...SEED_SCANS],
+    bodyScans: [], // a person owns their own measurements; nothing is inherited
     saturdayMode: {},    // key -> 'class' | 'fallback'
     dayOverrides: {},    // key -> 'veg' | 'noMoon' (nutrition only; workout stays scheduled)
     workoutSwaps: {},    // key -> paired date key (two-way workout-only swap)
@@ -52,6 +52,72 @@ export function defaultState() {
   };
 }
 
+// A person needs setting up when they have never entered anything of their own.
+// Both halves matter: onboardedAt alone would re-prompt anyone who cleared it,
+// and a name alone would miss someone who skipped straight to logging.
+export function needsOnboarding(state) {
+  if (!state) return true;
+  const settings = state.settings || {};
+  if (settings.onboardedAt) return false;
+  const profile = state.profile || {};
+  const hasAnything = !!(
+    profile.name
+    || (state.bodyScans || []).length
+    || Object.keys(state.workoutSessions || {}).length
+  );
+  return !hasAnything;
+}
+
+// Applies a new persons answers. Their program calendar starts today rather
+// than on whatever date the template happened to ship with, and the first scan
+// (if they have one) seeds both the baseline profile and the scan history.
+export function applyOnboarding(state, answers = {}) {
+  const next = clone(state);
+  const today = todayKey();
+  const num = (v) => { const n = Number(v); return Number.isFinite(n) && n > 0 ? n : null; };
+
+  next.profile = {
+    ...next.profile,
+    name: String(answers.name || '').trim(),
+    heightIn: num(answers.heightIn),
+    age: num(answers.age),
+    gender: answers.gender || '',
+    startWeightLb: num(answers.weightLb),
+    startBodyFatPct: num(answers.bodyFatPct),
+    startWaistIn: num(answers.waistIn),
+    goalBodyFatPct: num(answers.goalBodyFatPct),
+    goalFatLossLb: num(answers.goalFatLossLb),
+  };
+  const startWeight = num(answers.weightLb);
+  const startBf = num(answers.bodyFatPct);
+  if (startWeight && startBf) {
+    next.profile.startFatMassLb = Math.round(startWeight * (startBf / 100) * 10) / 10;
+  }
+
+  const freq = Number(next.settings.scanFrequencyDays) > 0 ? Number(next.settings.scanFrequencyDays) : 14;
+  next.settings = {
+    ...next.settings,
+    programStartDate: today,
+    restartPhaseStartDate: today,
+    nextBodyScanDate: addDays(today, freq),
+    onboardedAt: new Date().toISOString(),
+  };
+
+  // Only record a scan when there are real measurements behind it, so nobody
+  // starts with a half-empty row that the trend maths then reads as a baseline.
+  if (startWeight && startBf) {
+    next.bodyScans = [...(next.bodyScans || []), {
+      id: 'scan-' + Date.now(),
+      date: answers.scanDate || today,
+      weight: startWeight,
+      bodyFatPct: startBf,
+      fatMass: next.profile.startFatMassLb,
+      leanMass: Math.round((startWeight - next.profile.startFatMassLb) * 10) / 10,
+      waist: num(answers.waistIn),
+    }];
+  }
+  return next;
+}
 export function loadState() {
   try {
     const raw = localStorage.getItem(STORAGE_KEY);
@@ -79,7 +145,7 @@ function mergeState(base, incoming) {
     else if (typeof base[k] === 'object') out[k] = { ...base[k], ...v };
     else out[k] = v;
   }
-  if (!Array.isArray(out.bodyScans) || out.bodyScans.length === 0) out.bodyScans = [...SEED_SCANS];
+  if (!Array.isArray(out.bodyScans)) out.bodyScans = [];
   return out;
 }
 
@@ -111,6 +177,26 @@ const MIGRATIONS = {
     const migrated = mergeState(defaultState(), state);
     if (!migrated.program || !migrated.program.days) migrated.program = clone(PROGRAM);
     return { ...migrated, version: 4 };
+  },
+  5: (state) => {
+    // Profile and body scans stop being app defaults and become the persons
+    // own. Nothing is removed here: an existing install keeps every scan and
+    // every profile field it already holds, because mergeState lets incoming
+    // values win over the now-blank defaults. What changes is only what a NEW
+    // install starts with.
+    const migrated = mergeState(defaultState(), state);
+    // Anyone already carrying data has effectively onboarded, so they must not
+    // be shown the setup screen on their next load.
+    const hasHistory = !!(
+      (migrated.profile && migrated.profile.name)
+      || (migrated.bodyScans && migrated.bodyScans.length)
+      || Object.keys(migrated.workoutSessions || {}).length
+      || Object.keys(migrated.mealLogs || {}).length
+    );
+    if (hasHistory && !migrated.settings.onboardedAt) {
+      migrated.settings.onboardedAt = new Date().toISOString();
+    }
+    return { ...migrated, version: 5 };
   },
 };
 
@@ -1811,9 +1897,9 @@ export function calendarSelfTest() {
 }
 export function monthlyTargetProgress(state) {
   const last = latestScan(state);
-  const startFat = state.profile.startFatMassLb;
-  const goalLoss = state.profile.goalFatLossLb;
-  if (!last) return { lost: 0, goal: goalLoss, pct: 0 };
+  const startFat = Number((state.profile || {}).startFatMassLb);
+  const goalLoss = Number((state.profile || {}).goalFatLossLb);
+  if (!last || !Number.isFinite(startFat) || !(goalLoss > 0)) return { lost: 0, goal: goalLoss > 0 ? goalLoss : null, pct: 0 };
   const lost = Math.max(0, startFat - last.fatMass);
   return { lost: Math.round(lost * 10) / 10, goal: goalLoss, pct: Math.min(100, Math.round((lost / goalLoss) * 100)) };
 }

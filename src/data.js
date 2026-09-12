@@ -7,25 +7,30 @@
 export const STORAGE_KEY = 'recomp-os-v1';
 
 // ---- profile / goal seeded from the latest Evolt 360 scan (07-08-2026) ----
+// A blank profile, filled in by onboarding. Every measurement is null rather
+// than 0 on purpose: the nutrition engine falls back through ?? chains, and a
+// literal 0 body fat satisfies those and silently yields lean mass == body
+// weight and a BMR hundreds of calories too high. null keeps the fallbacks.
 export const PROFILE_DEFAULT = {
-  name: 'Krishnaprasath',
-  heightIn: 71,
-  age: 34,
-  gender: 'Male',
-  startWeightLb: 191.1,
-  startBodyFatPct: 24.3,
-  startFatMassLb: 46.5,
-  startWaistIn: 37.2,
-  goalBodyFatPct: 15,
-  goalFatLossLb: 22,
-  goalWaistIn: 33,
-  timelineMonths: 11,
+  name: '',
+  heightIn: null,
+  age: null,
+  gender: '',
+  startWeightLb: null,
+  startBodyFatPct: null,
+  startFatMassLb: null,
+  startWaistIn: null,
+  goalBodyFatPct: null,
+  goalFatLossLb: null,
+  goalWaistIn: null,
+  timelineMonths: null,
 };
 
 export const SETTINGS_DEFAULT = {
   units: 'imperial',
-  proteinTarget: 205,
-  waterTargetL: 3.75,
+  // 0 means "derive from my own lean mass / body weight" (see nutritionEngine)
+  proteinTarget: 0,
+  waterTargetL: 0,
   stepsTarget: 10000,
   sleepTargetH: 7.5,
   deficitPercent: 15,                  // fat-loss deficit vs maintenance (drives all calorie + food targets)
@@ -34,7 +39,7 @@ export const SETTINGS_DEFAULT = {
   // change over 07-08 -> 08-13 implies 1.374 for the old schedule. 1.44 is the
   // reworked week (4 lifts + 2 swims + 5 scheduled walks + BodyBalance).
   // If the walks stop happening, drop this toward 1.37 or the targets lie.
-  activityFactor: 1.44,
+  activityFactor: 0, // 0 = fall back to the scan TEE until this person has data to audit
   // ---- Puratasi: pure vegetarian for the whole Tamil month ----
   // Calories and the 15% deficit are UNCHANGED across it, and protein stays at
   // the full target — going veg is a food restriction, not a reason to eat less
@@ -43,11 +48,12 @@ export const SETTINGS_DEFAULT = {
   puratasiStartDate: '2026-09-17',
   puratasiEndDate: '2026-10-17',
   // ---- program calendar (all editable in More, week/day recalculate from these) ----
-  programStartDate: '2026-07-14',      // program day 1
-  restartPhaseStartDate: '2026-07-14', // restart phase day 1
-  nextBodyScanDate: '2026-08-31',      // current two-week measurement checkpoint
+  programStartDate: '',                // set to today at onboarding
+  restartPhaseStartDate: '',           // set to today at onboarding
+  nextBodyScanDate: '',                // set from the first scan + scanFrequencyDays
   scanFrequencyDays: 14,               // short controlled measurement window, editable after the scan
   restartLoadEnabled: false,           // feature flag: show restart-load suggestions in Train
+  onboardedAt: '',                     // set once this person has entered their own profile
   defaultRestartLoadPercent: 70,       // restart load % of old working weight
   // ---- supplement + lab settings (editable in More) ----
   d3Dose: '2000 IU',                   // total daily D3 (track total across products)

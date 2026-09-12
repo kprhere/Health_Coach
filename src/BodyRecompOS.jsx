@@ -21,6 +21,7 @@ import {
   blockDone, workoutProgress, nutritionActuals, nutritionAdherence,
   watchFor, recoveryScore, habitStatus, habitPct, dailyScore, coachInsights,
   phaseInfo, programCalendar, sortedScans, latestScan, baselineScan, nextScanCountdown, monthlyTargetProgress,
+  needsOnboarding, applyOnboarding,
   volumeByMuscle, volumeByExercise, supersetStats, finisherStats, weeklyVolumeSeries,
   allSetRecords, getBestPerformance, exportJSON, workoutCSV, download, validateImport,
   defaultState, loadState, saveState, mergeSyncedState, migrateState,
@@ -994,7 +995,7 @@ function BodyTab({ ctx }) {
   return (
     <div>
       <div className="page-title">Body</div>
-      <p className="page-sub">Your Evolt 360 scans. Four are seeded from your result sheets. Add the next comparison scan around August 31.</p>
+      <p className="page-sub">{scans.length ? `Your body composition scans. ${scans.length} recorded so far.` : 'No scans yet. Add your first one below to unlock trends and scan-driven targets.'}</p>
 
       <SectionTitle right={<Chip tone="cyan">{Math.max(0, progress.daysUntilScan)} days</Chip>}>Next Scan / 14-Day Progress</SectionTitle>
       <Card>
@@ -1699,7 +1700,7 @@ function MoreTab({ ctx }) {
   const num = (label, key, obj, setter) => (
     <div className="field">
       <label>{label}</label>
-      <input className="input mono" inputMode="decimal" value={obj[key]} onChange={(e) => setter(key, e.target.value)} />
+      <input className="input mono" inputMode="decimal" value={obj[key] ?? ''} onChange={(e) => setter(key, e.target.value)} />
     </div>
   );
 
@@ -1711,20 +1712,20 @@ function MoreTab({ ctx }) {
         <div>
           <SectionTitle>Profile</SectionTitle>
           <Card>
-            <div className="field"><label>Name</label><input className="input" value={s.profile.name} onChange={(e) => ctx.setProfile('name', e.target.value)} /></div>
+            <div className="field"><label>Name</label><input className="input" value={s.profile.name ?? ''} onChange={(e) => ctx.setProfile('name', e.target.value)} /></div>
             <div className="field-row cols-3">
-              {num('Height (in)', 'heightIn', s.profile, (k, v) => ctx.setProfile(k, parseFloat(v) || 0))}
-              {num('Age', 'age', s.profile, (k, v) => ctx.setProfile(k, parseFloat(v) || 0))}
-              {num('Start wt (lb)', 'startWeightLb', s.profile, (k, v) => ctx.setProfile(k, parseFloat(v) || 0))}
+              {num('Height (in)', 'heightIn', s.profile, (k, v) => ctx.setProfile(k, v === '' ? null : (parseFloat(v) || null)))}
+              {num('Age', 'age', s.profile, (k, v) => ctx.setProfile(k, v === '' ? null : (parseFloat(v) || null)))}
+              {num('Start wt (lb)', 'startWeightLb', s.profile, (k, v) => ctx.setProfile(k, v === '' ? null : (parseFloat(v) || null)))}
             </div>
           </Card>
 
           <SectionTitle>Goals</SectionTitle>
           <Card>
             <div className="field-row cols-3">
-              {num('Fat loss (lb)', 'goalFatLossLb', s.profile, (k, v) => ctx.setProfile(k, parseFloat(v) || 0))}
-              {num('Waist goal (in)', 'goalWaistIn', s.profile, (k, v) => ctx.setProfile(k, parseFloat(v) || 0))}
-              {num('Body fat goal %', 'goalBodyFatPct', s.profile, (k, v) => ctx.setProfile(k, parseFloat(v) || 0))}
+              {num('Fat loss (lb)', 'goalFatLossLb', s.profile, (k, v) => ctx.setProfile(k, v === '' ? null : (parseFloat(v) || null)))}
+              {num('Waist goal (in)', 'goalWaistIn', s.profile, (k, v) => ctx.setProfile(k, v === '' ? null : (parseFloat(v) || null)))}
+              {num('Body fat goal %', 'goalBodyFatPct', s.profile, (k, v) => ctx.setProfile(k, v === '' ? null : (parseFloat(v) || null)))}
             </div>
           </Card>
 
@@ -1814,7 +1815,7 @@ function MoreTab({ ctx }) {
               <Zap size={15} /> Load sample data
             </button>
             <div className="hint" style={{ margin: '8px 0 12px' }}>Fills Stats, training-volume charts and scores with a realistic upward trend so you can see the app populated. Undo with Reset all data.</div>
-            <button className="btn danger block" onClick={() => { if (confirm('Reset all data? This clears every log and restores the three seed scans. Export a backup first if unsure.')) ctx.resetAll(); }}>
+            <button className="btn danger block" onClick={() => { if (confirm('Reset all data? This clears every log, scan and measurement and returns the app to first-run setup. Export a backup first if unsure.')) ctx.resetAll(); }}>
               <RotateCcw size={15} /> Reset all data
             </button>
             <div className="hint" style={{ marginTop: 8 }}>Weekly backup reminder: export a JSON on Sundays so your history is safe if Safari clears site storage.</div>
@@ -1898,6 +1899,113 @@ function MoreTab({ ctx }) {
 // =====================================================================
 // ROOT
 // =====================================================================
+// ============================================================
+// First run. Until this is answered the app has no idea whose
+// body it is planning for, and every calorie and protein number
+// downstream is derived from these measurements. Nothing is
+// pre-filled from anyone else.
+// ============================================================
+function Onboarding({ onDone }) {
+  const [a, setA] = useState({
+    name: '', gender: '', age: '', heightIn: '',
+    weightLb: '', bodyFatPct: '', waistIn: '',
+    goalBodyFatPct: '', goalFatLossLb: '',
+  });
+  const set = (k, v) => setA((prev) => ({ ...prev, [k]: v }));
+  const named = a.name.trim().length > 0;
+  const hasScan = Number(a.weightLb) > 0 && Number(a.bodyFatPct) > 0;
+
+  return (
+    <div className="app onboarding">
+      <div className="app-body">
+        <main className="app-main">
+          <Card className="pad">
+            <div className="block-tag"><span className="bar" />Set up your plan</div>
+            <h1 style={{ margin: '10px 0 4px', fontSize: 20 }}>Whose body are we planning for?</h1>
+            <div className="hint" style={{ marginBottom: 14 }}>
+              Your calorie, protein and water targets are all derived from these numbers,
+              so they are worth getting right. Everything stays on this device unless you
+              turn on sync.
+            </div>
+
+            <div className="field">
+              <label>Name</label>
+              <input className="input" value={a.name} aria-label="Your name" placeholder="First name" onChange={(e) => set('name', e.target.value)} />
+            </div>
+            <div className="field-row cols-2">
+              <div className="field">
+                <label>Age</label>
+                <input className="input mono" inputMode="decimal" aria-label="Age" value={a.age} onChange={(e) => set('age', e.target.value)} />
+              </div>
+              <div className="field">
+                <label>Height (in)</label>
+                <input className="input mono" inputMode="decimal" aria-label="Height in inches" value={a.heightIn} onChange={(e) => set('heightIn', e.target.value)} />
+              </div>
+            </div>
+            <div className="field">
+              <label>Sex (used for the BMR estimate)</label>
+              <div className="pill-toggle">
+                {['Male', 'Female'].map((g) => (
+                  <button key={g} className={a.gender === g ? 'active' : ''} onClick={() => set('gender', g)}>{g}</button>
+                ))}
+              </div>
+            </div>
+
+            <div className="block-tag" style={{ marginTop: 18 }}><span className="bar" />Starting measurements</div>
+            <div className="hint" style={{ marginBottom: 10 }}>
+              From a body composition scan if you have one. Weight and body fat together
+              become your first scan and your baseline — skip them and you can add a scan
+              later from the Body tab.
+            </div>
+            <div className="field-row cols-2">
+              <div className="field">
+                <label>Weight (lb)</label>
+                <input className="input mono" inputMode="decimal" aria-label="Current weight" value={a.weightLb} onChange={(e) => set('weightLb', e.target.value)} />
+              </div>
+              <div className="field">
+                <label>Body fat (%)</label>
+                <input className="input mono" inputMode="decimal" aria-label="Current body fat percent" value={a.bodyFatPct} onChange={(e) => set('bodyFatPct', e.target.value)} />
+              </div>
+            </div>
+            <div className="field-row cols-2">
+              <div className="field">
+                <label>Waist (in, optional)</label>
+                <input className="input mono" inputMode="decimal" aria-label="Waist" value={a.waistIn} onChange={(e) => set('waistIn', e.target.value)} />
+              </div>
+              <div className="field">
+                <label>Goal body fat (%)</label>
+                <input className="input mono" inputMode="decimal" aria-label="Goal body fat percent" value={a.goalBodyFatPct} onChange={(e) => set('goalBodyFatPct', e.target.value)} />
+              </div>
+            </div>
+            <div className="field">
+              <label>Fat to lose (lb, optional)</label>
+              <input className="input mono" inputMode="decimal" aria-label="Goal fat loss" value={a.goalFatLossLb} onChange={(e) => set('goalFatLossLb', e.target.value)} />
+            </div>
+
+            {named && !hasScan ? (
+              <Banner tone="amber" icon={Info}>
+                Without a weight and body fat figure your targets fall back to generic
+                estimates until you add your first scan.
+              </Banner>
+            ) : null}
+
+            <div className="btn-row" style={{ marginTop: 16 }}>
+              <button className="btn primary" disabled={!named} onClick={() => onDone(a)}>
+                <Check size={14} /> Start
+              </button>
+            </div>
+            <div className="hint" style={{ marginTop: 10 }}>
+              Sharing this app with someone else? Each person picks their own sync
+              passphrase in More → Cloud backup. Different passphrases keep your
+              history, habits and scans completely separate.
+            </div>
+          </Card>
+        </main>
+      </div>
+    </div>
+  );
+}
+
 export default function BodyRecompOS() {
   const [state, setState] = useState(loadState);
   const [tab, setTab] = useState('home');
@@ -2212,6 +2320,12 @@ export default function BodyRecompOS() {
     setSyncSecret: (value) => { setSyncSecret(value); setSyncCredentialVersion((version) => version + 1); },
     selDate, setSelDate, goto: setTab,
   };
+
+  // First run for this person. Rendered after all hooks above so the hook
+  // order never changes between renders.
+  if (needsOnboarding(state)) {
+    return <Onboarding onDone={(answers) => setState((prev) => applyOnboarding(prev, answers))} />;
+  }
 
   const tabTitle = { home: 'Dashboard', plan: 'Planner', train: 'Train', fuel: 'Fuel', body: 'Body', habits: 'Habits', stats: 'Stats', more: 'More' }[tab];
 
