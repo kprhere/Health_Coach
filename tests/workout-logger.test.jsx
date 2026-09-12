@@ -74,9 +74,39 @@ test('Train workout blocks start folded and open when selected', async () => {
 
 test('plate calculator returns the plates needed on each side', () => {
   expect(plateBreakdown(225, 45)).toEqual({
-    perSide: 90, plates: [{ plate: 45, count: 2 }], remainder: 0, exact: true,
+    perSide: 90, plates: [{ plate: 45, count: 2 }], remainder: 0, exact: true, reason: null,
   });
   expect(plateBreakdown(47, 45).exact).toBe(false);
+});
+
+test('plate calculator loads the target in the fewest plates, not the biggest', () => {
+  // 60 a side. Largest-first gives 45 + 10 + 5; two plates beat three.
+  expect(plateBreakdown(165, 45).plates).toEqual([{ plate: 35, count: 1 }, { plate: 25, count: 1 }]);
+  expect(plateBreakdown(165, 45).exact).toBe(true);
+  // The cases largest-first already got right must not regress.
+  expect(plateBreakdown(185, 45).plates).toEqual([{ plate: 45, count: 1 }, { plate: 25, count: 1 }]);
+  expect(plateBreakdown(315, 45).plates).toEqual([{ plate: 45, count: 3 }]);
+});
+
+test('plate calculator never reports a weight it cannot load as exact', () => {
+  const odd = plateBreakdown(46, 45);
+  expect(odd.exact).toBe(false);
+  expect(odd.remainder).toBe(0.5);
+  expect(odd.plates).toEqual([]);
+  // Bar-only is a real, exactly loadable answer: no plates.
+  expect(plateBreakdown(45, 45)).toMatchObject({ perSide: 0, plates: [], exact: true, reason: null });
+});
+
+test('plate calculator says why a bad entry has no answer', () => {
+  expect(plateBreakdown('', 45).reason).toBe('empty');
+  expect(plateBreakdown('abc', 45).reason).toBe('invalid');
+  expect(plateBreakdown(20, 45).reason).toBe('below-bar');
+  // A blank bar field must not be read as a 0 lb bar — that silently turned
+  // 225 lb into 112.5 a side and reported it as exact.
+  const blankBar = plateBreakdown(225, '');
+  expect(blankBar.reason).toBe('no-bar');
+  expect(blankBar.exact).toBe(false);
+  expect(blankBar.plates).toEqual([]);
 });
 
 test('timed work completes with seconds and does not require fake reps', () => {
@@ -222,4 +252,42 @@ test('superset round copy, completion, and undo keep values with the correct exe
   state = JSON.parse(screen.getByTestId('round-state').textContent);
   expect(state.rounds[1].done).toBe(false);
   expect(state.rounds[1].byExercise['Cable Row'].weight).toBe('100');
+});
+
+const barbellBlock = {
+  id: 'squat', blockType: 'single', name: 'Barbell Back Squat',
+  exercises: [{ name: 'Barbell Back Squat', sets: 3, repLow: 5, repHigh: 5, rpe: 8, restSec: 180, tempo: '2-1-1' }],
+};
+
+function BarbellHarness() {
+  const [entry, setEntry] = useState({
+    blockType: 'single', name: 'Barbell Back Squat', exName: 'Barbell Back Squat',
+    sets: [makeSet(), makeSet(), makeSet()], skipped: false, replacedWith: '',
+  });
+  const onMutate = (producer) => setEntry((current) => {
+    const next = structuredClone(current);
+    producer(next);
+    return next;
+  });
+  return <SingleLogger block={barbellBlock} entry={entry} plan={{}} state={defaultState()} onMutate={onMutate} />;
+}
+
+test('the plate calculator seeds the working weight and explains a blank bar', async () => {
+  const user = userEvent.setup();
+  const view = render(<BarbellHarness />);
+
+  // Warm-up on row one, working weight on row two. The logger mounts before
+  // either exists, so the seed has to happen when the panel is opened.
+  await user.type(screen.getByLabelText('Set 1 weight'), '135');
+  await user.type(screen.getByLabelText('Set 2 weight'), '225');
+  await user.click(screen.getByRole('button', { name: /plate calculator/i }));
+
+  expect(screen.getByLabelText('Plate calculator target').value).toBe('225');
+  expect(view.container.querySelector('.plate-result').textContent).toContain('2 × 45');
+
+  // A blank bar field is a missing answer, not a 0 lb bar, and must not be
+  // reported as an exact load.
+  await user.clear(screen.getByLabelText('Bar weight'));
+  expect(view.container.querySelector('.plate-result')).toBeNull();
+  expect(view.container.querySelector('.plate-panel .hint').textContent).toContain('not a 0 lb bar');
 });

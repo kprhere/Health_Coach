@@ -138,21 +138,49 @@ function ExerciseNote({ name, state, setExerciseNote }) {
   );
 }
 
+// Why the bar cannot be loaded, in words. Without these the panel reported
+// every bad input as "0 lb per side cannot be loaded with standard plates".
+const PLATE_HINTS = {
+  empty: 'Enter the total weight, including the bar.',
+  'no-bar': 'Enter the bar weight — a blank field is not a 0 lb bar.',
+  invalid: 'Enter the total and the bar as numbers.',
+  'below-bar': 'That total is lighter than the bar on its own.',
+};
+
+// The heaviest set logged so far, which is the one you are walking to the rack
+// to load — not the first row, which is usually a warm-up.
+function heaviestLogged(sets = []) {
+  const top = sets
+    .map((set) => Number(set.weight))
+    .filter((weight) => Number.isFinite(weight) && weight > 0)
+    .reduce((max, weight) => (weight > max ? weight : max), 0);
+  return top ? String(top) : '';
+}
+
 function PlateCalculator({ initialWeight = '' }) {
   const [open, setOpen] = useState(false);
   const [target, setTarget] = useState(initialWeight);
   const [bar, setBar] = useState('45');
   const result = plateBreakdown(target, bar);
+  // Seed on the way open rather than at mount: the logger mounts before any
+  // set has a weight, so a mount-time seed was always empty. Only fills a
+  // blank field, so a typed target is never clobbered.
+  const toggle = () => {
+    if (!open && !target && initialWeight) setTarget(String(initialWeight));
+    setOpen((value) => !value);
+  };
   return (
     <div className="plate-calculator">
-      <button className="btn xs ghost" onClick={() => setOpen((value) => !value)} aria-expanded={open}><Calculator size={13} /> Plate calculator</button>
+      <button className="btn xs ghost" onClick={toggle} aria-expanded={open}><Calculator size={13} /> Plate calculator</button>
       {open ? (
         <div className="plate-panel">
           <div className="field-row cols-2">
             <div className="field"><label>Target total (lb)</label><input aria-label="Plate calculator target" className="input mono" inputMode="decimal" value={target} onChange={(event) => setTarget(event.target.value)} placeholder="225" /></div>
             <div className="field"><label>Bar weight (lb)</label><input aria-label="Bar weight" className="input mono" inputMode="decimal" value={bar} onChange={(event) => setBar(event.target.value)} /></div>
           </div>
-          {target ? <div className={`plate-result ${result.exact ? '' : 'warn'}`}><b>Each side:</b> {result.plates.length ? result.plates.map(({ plate, count }) => `${count} × ${plate}`).join(' + ') : 'no plates'}{result.exact ? '' : ` · ${result.remainder} lb per side cannot be loaded with standard plates`}</div> : <div className="hint">Enter the total weight, including the bar.</div>}
+          {result.reason
+            ? <div className="hint">{PLATE_HINTS[result.reason]}</div>
+            : <div className={`plate-result ${result.exact ? '' : 'warn'}`}><b>Each side:</b> {result.plates.length ? result.plates.map(({ plate, count }) => `${count} × ${plate}`).join(' + ') : 'no plates'}{result.exact ? '' : ` · ${result.remainder} lb per side cannot be loaded with standard plates`}</div>}
         </div>
       ) : null}
     </div>
@@ -232,7 +260,7 @@ export function SingleLogger({ block, entry, plan, state, onMutate, setRestart, 
       ) : null}
 
       <ExerciseNote name={name} state={state} setExerciseNote={setExerciseNote} />
-      {usesBarbell ? <PlateCalculator initialWeight={entry.sets.find((set) => set.weight)?.weight || ''} /> : null}
+      {usesBarbell ? <PlateCalculator initialWeight={heaviestLogged(entry.sets)} /> : null}
       {!timed ? <HistoryGrid name={name} state={state} rx={rx} /> : <div className="hint">Timed hold: enter the completed seconds for each set. Weight is optional.</div>}
 
       <div className="set-head">

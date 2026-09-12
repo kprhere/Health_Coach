@@ -10,7 +10,7 @@
     "preview": "vite preview --host",
     "test": "node --test tests/*.test.mjs && npm run test:ui",
     "test:unit": "node --test tests/*.test.mjs",
-    "test:ui": "vitest run tests/*.test.jsx"
+    "test:ui": "vitest run .test.jsx"
   },
   "dependencies": {
     "lucide-react": "^0.462.0",
