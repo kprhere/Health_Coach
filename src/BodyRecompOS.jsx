@@ -11,8 +11,8 @@ import {
 } from 'lucide-react';
 
 import {
-  programDay, NUTRITION, SUPPLEMENTS, HABITS, SCAN_FIELDS, WATCH_FIELDS, DAY_SHORT,
-  EXERCISES, PROGRAM_RATIONALE, BADMINTON_FUEL, SWIMMING_FUEL, DAY_VARIANTS,
+  programOf, programDay, NUTRITION, SUPPLEMENTS, HABITS, SCAN_FIELDS, WATCH_FIELDS, DAY_SHORT,
+  EXERCISES, BADMINTON_FUEL, SWIMMING_FUEL, DAY_VARIANTS,
   LABS, HAIR_HEALTH, DAILY_BEVERAGES, MUSCLE_GROUPS,
 } from './data.js';
 import {
@@ -1864,7 +1864,7 @@ function MoreTab({ ctx }) {
             </div>
             {importErr ? <Banner tone="red" icon={AlertTriangle}>{importErr}</Banner> : null}
             <div className="divider" />
-            <button className="btn primary block" onClick={() => { if (confirm('Load 8 weeks of sample workouts, meals and watch data so the Stats and charts fill in? This overwrites current logs. Reset all data restores the seed scans.')) ctx.loadDemo(); }}>
+            <button className="btn primary block" onClick={() => { if (confirm('Load 8 weeks of sample workouts, meals and watch data so the Stats and charts fill in? This overwrites current logs.')) ctx.loadDemo(); }}>
               <Zap size={15} /> Load sample data
             </button>
             <div className="hint" style={{ margin: '8px 0 12px' }}>Fills Stats, training-volume charts and scores with a realistic upward trend so you can see the app populated. Undo with Reset all data.</div>
@@ -1935,7 +1935,7 @@ function MoreTab({ ctx }) {
           <SectionTitle>Program</SectionTitle>
           <Card>
             <div className="block-tag"><span className="bar" />Why this split</div>
-            <p style={{ margin: 0, fontSize: 12.5, lineHeight: 1.55, color: 'var(--muted)' }}>{PROGRAM_RATIONALE}</p>
+            <p style={{ margin: 0, fontSize: 12.5, lineHeight: 1.55, color: 'var(--muted)' }}>{programOf(ctx.state).rationale}</p>
           </Card>
 
           <SectionTitle>Deployment</SectionTitle>

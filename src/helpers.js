@@ -7,10 +7,10 @@ import {
   PROFILE_DEFAULT, SETTINGS_DEFAULT, STORAGE_KEY, HEALTH_PARAM_MAP, DAILY_BEVERAGES, NO_MOON_DATES,
 } from './data.js';
 import { targetsWithFallback, mealPlanFor, nutritionProfile } from './nutritionEngine.js';
+import { V4_LEGACY_PROGRAM } from './migrations/v4-legacy-program.js';
 
 export { nutritionProfile };
 
-export const PROGRAM_START = '2026-07-08'; // start of the current fat-loss phase (latest scan)
 export const PHASE_NAME = 'Fat Loss Phase 1';
 export const STATE_VERSION = 5;
 
@@ -25,6 +25,11 @@ export const daysBetween = (a, b) => Math.round((parseKey(b) - parseKey(a)) / 86
 export const prettyDate = (key) => parseKey(key).toLocaleDateString(undefined, { weekday: 'long', month: 'short', day: 'numeric' });
 export const shortDate = (key) => parseKey(key).toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
 export const clone = (o) => JSON.parse(JSON.stringify(o));
+
+// Last-resort fallback only: a persons real start date is settings.programStartDate,
+// written when they set the app up. Dating everyone from one hardcoded day put a
+// brand new person on week 10 of a program they had not started.
+export const PROGRAM_START = todayKey();
 
 // ---------- storage ----------
 export function defaultState() {
@@ -175,7 +180,11 @@ const MIGRATIONS = {
     // so each passphrase can carry its own split. Anyone upgrading keeps exactly
     // the program they have been training, which is that same constant.
     const migrated = mergeState(defaultState(), state);
-    if (!migrated.program || !migrated.program.days) migrated.program = clone(PROGRAM);
+    // Decide from what the install ACTUALLY held, not from the merged result:
+    // mergeState has already filled program in with the current default template,
+    // so checking the merged copy would never restore the legacy routine.
+    const hadProgram = !!(state && state.program && state.program.days);
+    if (!hadProgram) migrated.program = clone(V4_LEGACY_PROGRAM);
     return { ...migrated, version: 4 };
   },
   5: (state) => {

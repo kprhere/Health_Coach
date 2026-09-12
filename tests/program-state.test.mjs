@@ -6,7 +6,8 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 
-import { PROGRAM, programDay, REST_DAY } from '../src/data.js';
+import { PROGRAM, EXERCISES, programDay, REST_DAY } from '../src/data.js';
+import { V4_LEGACY_PROGRAM } from '../src/migrations/v4-legacy-program.js';
 import { defaultState, migrateState, resolveWorkout, clone, STATE_VERSION } from '../src/helpers.js';
 import { deriveSync, encryptJSON, decryptJSON } from '../src/sync.js';
 
@@ -27,26 +28,56 @@ const pplProgram = {
 const MONDAY = '2026-09-14';
 const SUNDAY = '2026-09-13';
 
-test('upgrading from v3 keeps the program that person was already training', () => {
+test('upgrading from v3 restores the routine that person was actually training', () => {
+  // A v3 install predates state.program, so the upgrade has to hand back the
+  // routine the app shipped at v3 - the frozen snapshot - and NOT whatever the
+  // current default template happens to be. Getting this wrong silently swaps
+  // someone onto a different program.
   const before = { version: 3, workoutSessions: { '2026-09-15': { entries: [] } } };
   const after = migrateState(before);
 
   assert.equal(after.version, STATE_VERSION);
-  assert.equal(after.program.name, PROGRAM.name);
+  assert.equal(after.program.name, V4_LEGACY_PROGRAM.name);
+  assert.notEqual(after.program.name, PROGRAM.name, 'v3 must not be handed the new starter template');
   assert.equal(resolveWorkout(MONDAY, after).title, 'Upper Body A');
   // a migration must never drop what the person logged
   assert.deepEqual(Object.keys(after.workoutSessions), ['2026-09-15']);
+});
+
+test('the frozen migration snapshot never drifts with the shipped default', () => {
+  // If this ever starts reading the live constant, past upgrades change meaning.
+  assert.notEqual(V4_LEGACY_PROGRAM.name, PROGRAM.name);
+  assert.equal(V4_LEGACY_PROGRAM.days[1].title, 'Upper Body A');
+  assert.ok(Object.isFrozen(V4_LEGACY_PROGRAM));
 });
 
 test('two people carry different programs without touching each other', () => {
   const mine = defaultState();
   const theirs = { ...defaultState(), program: clone(pplProgram) };
 
-  assert.equal(resolveWorkout(MONDAY, mine).title, 'Upper Body A');
+  assert.equal(resolveWorkout(MONDAY, mine).title, 'Full Body A');
   assert.equal(resolveWorkout(MONDAY, theirs).title, 'Push Day');
   assert.equal(resolveWorkout(MONDAY, theirs).blocks[0].exercises[0].name, 'Barbell Bench Press');
   // reading one must not mutate or leak into the other
-  assert.equal(resolveWorkout(MONDAY, mine).title, 'Upper Body A');
+  assert.equal(resolveWorkout(MONDAY, mine).title, 'Full Body A');
+});
+
+test('the shipped default is a neutral template, not one persons routine', () => {
+  // It must not name a particular gym's plate-loaded brands, and every exercise
+  // it names has to exist in the library or the logger renders an empty block.
+  const names = [];
+  Object.values(PROGRAM.days).forEach((day) => (day.blocks || []).forEach(
+    (block) => (block.exercises || []).forEach((ex) => names.push(ex.name)),
+  ));
+  assert.ok(names.length > 0);
+  names.forEach((name) => {
+    assert.ok(EXERCISES[name], `${name} is not in the exercise library`);
+    assert.doesNotMatch(
+      EXERCISES[name].eq || '',
+      /hammer strength|life fitness|arsenal|body builder/i,
+      `${name} assumes a specific gym's equipment`,
+    );
+  });
 });
 
 test('a weekday a hand-built program never defined resolves to rest', () => {

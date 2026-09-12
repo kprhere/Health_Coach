@@ -1,7 +1,8 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 
-import { EXERCISES, PROGRAM } from '../src/data.js';
+import { EXERCISES } from '../src/data.js';
+import { KRISHNA } from '../src/profiles/krishna.js';
 import {
   customExercisePlanFits,
   defaultState,
@@ -149,6 +150,8 @@ test('Copy last appends a second set when only one set exists', () => {
 
 test('custom chest equipment is automatically recommended for matching plan slots', () => {
   const state = defaultState();
+  // the recommendation is matched against the routine this person trains
+  state.program = KRISHNA.program;
   const name = 'Hammer Strength Iso-Lateral Decline Chest Press';
   state.customExercises[name] = {
     p: 'Chest',
@@ -181,7 +184,7 @@ test('Chest-Assisted Dip is a chest machine movement in the current Upper B plan
     { primary: 'Chest', equipment: 'Assisted Dip Machine' },
   );
 
-  const upperBExercises = PROGRAM.days[5].blocks.flatMap((block) => block.exercises.map((exercise) => exercise.name));
+  const upperBExercises = KRISHNA.program.days[5].blocks.flatMap((block) => block.exercises.map((exercise) => exercise.name));
   assert.ok(upperBExercises.includes('Chest-Assisted Dip'));
   assert.ok(!upperBExercises.includes('Arsenal Laying Pec Fly'), 'the dip replaces chest volume instead of adding more sets');
 });

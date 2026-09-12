@@ -21,6 +21,7 @@ import { SETTINGS_DEFAULT } from '../src/data.js';
 import { KRISHNA } from '../src/profiles/krishna.js';
 
 const baseState = () => ({
+  program: KRISHNA.program,
   bodyScans: [...KRISHNA.scans],
   settings: { ...SETTINGS_DEFAULT, ...KRISHNA.settings },
   profile: { ...KRISHNA.profile },
