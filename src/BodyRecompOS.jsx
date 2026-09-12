@@ -11,7 +11,7 @@ import {
 } from 'lucide-react';
 
 import {
-  PROGRAM, NUTRITION, SUPPLEMENTS, HABITS, SCAN_FIELDS, WATCH_FIELDS, DAY_SHORT,
+  programDay, NUTRITION, SUPPLEMENTS, HABITS, SCAN_FIELDS, WATCH_FIELDS, DAY_SHORT,
   EXERCISES, PROGRAM_RATIONALE, BADMINTON_FUEL, SWIMMING_FUEL, DAY_VARIANTS,
   LABS, HAIR_HEALTH, DAILY_BEVERAGES, MUSCLE_GROUPS,
 } from './data.js';
@@ -118,7 +118,7 @@ function ActivityToggles({ date, ctx }) {
 
 function DayNutritionMode({ date, ctx }) {
   const mode = (ctx.state.dayOverrides && ctx.state.dayOverrides[date]) || '';
-  const scheduled = DAY_VARIANTS[PROGRAM.days[dowOf(date)].dayType] || DAY_VARIANTS.training;
+  const scheduled = DAY_VARIANTS[programDay(ctx.state, dowOf(date)).dayType] || DAY_VARIANTS.training;
   return (
     <Card className="pad-sm">
       <div className="block-tag"><span className="bar" />Food plan for {shortDate(date)}</div>

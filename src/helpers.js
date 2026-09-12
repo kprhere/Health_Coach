@@ -3,7 +3,7 @@
 // Pure-ish functions. Block-aware: understands single/superset/circuit/finisher/dropset.
 // ============================================================
 import {
-  PROGRAM, NUTRITION, EXERCISES, SEED_SCANS, HABITS,
+  PROGRAM, programOf, programDay, NUTRITION, EXERCISES, SEED_SCANS, HABITS,
   PROFILE_DEFAULT, SETTINGS_DEFAULT, STORAGE_KEY, HEALTH_PARAM_MAP, DAILY_BEVERAGES, NO_MOON_DATES,
 } from './data.js';
 import { targetsWithFallback, mealPlanFor, nutritionProfile } from './nutritionEngine.js';
@@ -12,7 +12,7 @@ export { nutritionProfile };
 
 export const PROGRAM_START = '2026-07-08'; // start of the current fat-loss phase (latest scan)
 export const PHASE_NAME = 'Fat Loss Phase 1';
-export const STATE_VERSION = 3;
+export const STATE_VERSION = 4;
 
 // ---------- date utils ----------
 export const pad = (n) => String(n).padStart(2, '0');
@@ -32,6 +32,7 @@ export function defaultState() {
     version: STATE_VERSION,
     profile: { ...PROFILE_DEFAULT },
     settings: { ...SETTINGS_DEFAULT },
+    program: clone(PROGRAM), // per-person training split; see programOf in data.js
     workoutSessions: {}, // key -> session
     mealLogs: {},        // key -> { eaten:{}, extras:[], water:0, flags:{} }
     beverageLogs: {},    // key -> { greenTeaAm, greenTeaPm, coconutWater }
@@ -102,6 +103,14 @@ const MIGRATIONS = {
       ]),
     );
     return { ...migrated, version: 3 };
+  },
+  4: (state) => {
+    // The training program moves out of the app constants and into user state,
+    // so each passphrase can carry its own split. Anyone upgrading keeps exactly
+    // the program they have been training, which is that same constant.
+    const migrated = mergeState(defaultState(), state);
+    if (!migrated.program || !migrated.program.days) migrated.program = clone(PROGRAM);
+    return { ...migrated, version: 4 };
   },
 };
 
@@ -393,9 +402,9 @@ function exerciseFit(candidateName, targetName, state) {
   return { score, reasons };
 }
 
-function programSlots() {
+function programSlots(state) {
   const slots = [];
-  Object.values(PROGRAM.days).forEach((day) => {
+  Object.values(programOf(state).days).forEach((day) => {
     const variants = [{ ...day, variantLabel: day.title }];
     if (day.fallback) variants.push({ ...day.fallback, variantLabel: `${day.fallback.title} fallback` });
     variants.forEach((variant) => {
@@ -417,7 +426,7 @@ function programSlots() {
 
 export function customExercisePlanFits(name, state, limit = 4) {
   const seen = new Set();
-  return programSlots()
+  return programSlots(state)
     .map((slot) => ({ ...slot, ...exerciseFit(name, slot.exerciseName, state) }))
     .filter((slot) => Number.isFinite(slot.score) && slot.score >= 11)
     .sort((a, b) => b.score - a.score || a.dayTitle.localeCompare(b.dayTitle))
@@ -483,7 +492,7 @@ export function nutritionDayType(key, state) {
   if (override === 'noMoon' || override === 'fast1' || override === 'fast2' || override === 'fast') return 'noMoonFast';
   if (override === 'veg') return 'vegSat';
   if (isNoMoonDay(key)) return 'noMoonFast';
-  const scheduled = PROGRAM.days[dowOf(key)].dayType;
+  const scheduled = programDay(state, dowOf(key)).dayType;
   if (inPuratasi(key, state)) {
     if (scheduled === 'training') return 'trainingVeg';
     if (scheduled === 'rest') return 'restVeg';
@@ -521,7 +530,7 @@ export function workoutSwapPartner(key, state) {
 export function resolveWorkout(key, state) {
   const sourceDate = workoutSwapPartner(key, state) || key;
   const dow = dowOf(sourceDate);
-  const base = PROGRAM.days[dow];
+  const base = programDay(state, dow);
   let src = base, usingFallback = false;
   if (base.isClassDay) {
     const mode = (state.saturdayMode && state.saturdayMode[key]) || 'class';
@@ -1087,7 +1096,7 @@ export function dailyScore(key, state) {
   const hp = habitPct(key, state);
   const na = nutritionAdherence(key, state).pct;
   const s = state.workoutSessions && state.workoutSessions[key];
-  const hasLifts = PROGRAM.days[dowOf(key)].blocks.length > 0;
+  const hasLifts = programDay(state, dowOf(key)).blocks.length > 0;
   const wa = s ? workoutProgress(s).pct : (hasLifts ? 0 : 100);
   const rec = recoveryScore(key, state).pct;
   const score = Math.round(hp * 0.35 + na * 0.3 + wa * 0.2 + rec * 0.15);

@@ -418,6 +418,21 @@ export const PROGRAM = {
   },
 };
 
+// PROGRAM above is only the STARTING template. The program a person actually
+// trains lives in their own state, so two people syncing under different
+// passphrases can run completely different splits. Read it through these two
+// accessors, never off the constant directly.
+//
+// A hand-built program is not guaranteed to define all seven weekdays, so a
+// missing day resolves to rest rather than throwing on .dayType or .blocks.
+export const REST_DAY = {
+  key: 'rest', title: 'Rest', focus: 'Recovery', intensity: 'Easy', dayType: 'rest',
+  blocks: [], conditioning: [], mobility: [], sport: [], notes: '',
+};
+
+export const programOf = (state) => (state && state.program) || PROGRAM;
+export const programDay = (state, dow) => programOf(state).days[dow] || REST_DAY;
+
 // ============================================================
 // NUTRITION  (dayType targets + meal templates + quick adds)
 // veg=true meals are safe for Thursday and Saturday.

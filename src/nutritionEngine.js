@@ -10,7 +10,7 @@
 // It intentionally has NO dependency on helpers.js (helpers imports
 // this), so the scan picker is re-implemented locally and small.
 // ============================================================
-import { NUTRITION, PROGRAM } from './data.js';
+import { NUTRITION, programOf } from './data.js';
 
 const clamp = (v, lo, hi) => Math.max(lo, Math.min(hi, v));
 const LB_PER_KG = 2.20462;
@@ -349,4 +349,4 @@ export function targetsWithFallback(dayType, state) {
   return personalTargets(dayType, state);
 }
 
-export const dayTypeOf = (dow) => PROGRAM.days[dow]?.dayType || 'training';
+export const dayTypeOf = (dow, state) => programOf(state).days[dow]?.dayType || 'training';
