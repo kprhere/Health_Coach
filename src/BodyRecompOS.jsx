@@ -970,24 +970,40 @@ function BodyTab({ ctx }) {
   const openEdit = (sc) => { setDraft({ ...sc }); setEditing(sc.id); };
   const save = () => {
     const clean = { ...draft };
-    SCAN_FIELDS.forEach((f) => { clean[f.key] = clean[f.key] === '' ? 0 : parseFloat(clean[f.key]); });
+    // A field left blank is a measurement this scan does not have, not a
+    // measurement of zero. Storing 0 put a real-looking value into the trends.
+    SCAN_FIELDS.forEach((f) => {
+      const parsed = parseFloat(clean[f.key]);
+      clean[f.key] = Number.isFinite(parsed) ? parsed : null;
+    });
     if (editing === 'new') ctx.addScan(clean); else ctx.updateScan(editing, clean);
     setEditing(null);
   };
 
+  // A hand-entered scan carries far fewer fields than an Evolt sheet, so a row
+  // is only comparable when BOTH scans actually have the measurement. Without
+  // this every absent field rendered its delta as "NaN".
   const cmpRow = (f) => {
     if (!latest || !prev) return null;
     const cur = latest[f.key], b0 = prev[f.key];
-    const d = Math.round((cur - b0) * 100) / 100;
-    const pct = Number(b0) ? Math.round((d / b0) * 1000) / 10 : null;
-    const improved = (f.good === 'down' && d < 0) || (f.good === 'up' && d > 0);
-    const worse = (f.good === 'down' && d > 0) || (f.good === 'up' && d < 0);
+    const curNum = Number(cur), b0Num = Number(b0);
+    const hasCur = cur !== '' && cur != null && Number.isFinite(curNum);
+    const hasB0 = b0 !== '' && b0 != null && Number.isFinite(b0Num);
+    if (!hasCur && !hasB0) return null;   // neither scan measured it at all
+
+    const comparable = hasCur && hasB0;
+    const d = comparable ? Math.round((curNum - b0Num) * 100) / 100 : null;
+    const pct = comparable && b0Num ? Math.round((d / b0Num) * 1000) / 10 : null;
+    const improved = comparable && ((f.good === 'down' && d < 0) || (f.good === 'up' && d > 0));
+    const worse = comparable && ((f.good === 'down' && d > 0) || (f.good === 'up' && d < 0));
     return (
       <div className="cmp" key={f.key}>
         <div className="cmp-lab">{f.label}</div>
-        <div className="cmp-v">{b0}{f.unit ? ` ${f.unit}` : ''}</div>
-        <div className="cmp-v">{cur}{f.unit ? ` ${f.unit}` : ''}</div>
-        <div className={`cmp-d ${improved ? 'delta up' : worse ? 'delta down' : 'faint'}`}>{d > 0 ? '+' : ''}{d}{pct != null ? ` (${pct > 0 ? '+' : ''}${pct}%)` : ''}</div>
+        <div className="cmp-v">{hasB0 ? `${b0}${f.unit ? ` ${f.unit}` : ''}` : '-'}</div>
+        <div className="cmp-v">{hasCur ? `${cur}${f.unit ? ` ${f.unit}` : ''}` : '-'}</div>
+        <div className={`cmp-d ${improved ? 'delta up' : worse ? 'delta down' : 'faint'}`}>
+          {comparable ? `${d > 0 ? '+' : ''}${d}${pct != null ? ` (${pct > 0 ? '+' : ''}${pct}%)` : ''}` : '-'}
+        </div>
       </div>
     );
   };
@@ -1019,11 +1035,26 @@ function BodyTab({ ctx }) {
 
       {latest ? (
         <Card>
+          {/* Only body fat is guaranteed. A hand-entered scan often has no
+              visceral or BWI figure, and a ring drawn from a missing number is
+              not an empty ring, it is an arc of NaN. */}
           <div className="ring-grid">
-            <MetricRing pct={100 - (latest.bodyFatPct / 30) * 100} value={latest.bodyFatPct} sub="%" label="Body Fat" color="var(--amber)" size={72} />
-            <MetricRing pct={(1 - (latest.waist - 32) / 8) * 100} value={latest.waist} sub="in" label="Waist" color="var(--cyan)" size={72} />
-            <MetricRing pct={100 - (latest.visceralFatArea / 120) * 100} value={latest.visceralFatArea} sub="cm2" label="Visceral" color="var(--red)" size={72} />
-            <MetricRing pct={(latest.bwi / 10) * 100} value={latest.bwi} sub="/10" label="BWI" color="var(--green)" size={72} />
+            {[
+              { key: 'bodyFatPct', label: 'Body Fat', sub: '%', color: 'var(--amber)', pct: (v) => 100 - (v / 30) * 100 },
+              { key: 'waist', label: 'Waist', sub: 'in', color: 'var(--cyan)', pct: (v) => (1 - (v - 32) / 8) * 100 },
+              { key: 'visceralFatArea', label: 'Visceral', sub: 'cm2', color: 'var(--red)', pct: (v) => 100 - (v / 120) * 100 },
+              { key: 'bwi', label: 'BWI', sub: '/10', color: 'var(--green)', pct: (v) => (v / 10) * 100 },
+            ].filter((ring) => Number.isFinite(Number(latest[ring.key]))).map((ring) => (
+              <MetricRing
+                key={ring.key}
+                pct={ring.pct(Number(latest[ring.key]))}
+                value={latest[ring.key]}
+                sub={ring.sub}
+                label={ring.label}
+                color={ring.color}
+                size={72}
+              />
+            ))}
           </div>
         </Card>
       ) : null}
@@ -1438,15 +1469,37 @@ function BodyMiniStats({ ctx }) {
   const latest = latestScan(s), base = baselineScan(s);
   const target = monthlyTargetProgress(s);
   if (!latest) return null;
+
+  // Only weight and body fat are guaranteed on a scan; waist, visceral and the
+  // rest are optional, and a first scan has nothing behind it to compare with.
+  // A delta is shown only when the same field exists on two different scans -
+  // otherwise this rendered "NaN" against a blank.
+  const stat = (label, key, unit, better = 'down') => {
+    const now = Number(latest[key]);
+    const then = base ? Number(base[key]) : NaN;
+    const has = Number.isFinite(now);
+    const comparable = has && Number.isFinite(then) && base.id !== latest.id;
+    const improved = better === 'up' ? now > then : now < then;
+    return (
+      <StatCell
+        k={label}
+        v={has ? latest[key] : '-'}
+        unit={has ? unit : ''}
+        delta={comparable ? (now - then).toFixed(1) : null}
+        deltaDir={comparable ? (improved ? 'up' : 'down') : null}
+      />
+    );
+  };
+
   return (
     <Card>
       <div className="stat-grid cols-3">
-        <StatCell k="Weight" v={latest.weight} unit="lb" delta={base ? `${(latest.weight - base.weight).toFixed(1)}` : null} deltaDir={latest.weight < base.weight ? 'up' : 'down'} />
-        <StatCell k="Body fat" v={latest.bodyFatPct} unit="%" delta={base ? `${(latest.bodyFatPct - base.bodyFatPct).toFixed(1)}` : null} deltaDir={latest.bodyFatPct < base.bodyFatPct ? 'up' : 'down'} />
-        <StatCell k="Lean mass" v={latest.leanMass} unit="lb" delta={base ? `${(latest.leanMass - base.leanMass).toFixed(1)}` : null} deltaDir={latest.leanMass > base.leanMass ? 'up' : 'down'} />
-        <StatCell k="Waist" v={latest.waist} unit="in" delta={base ? `${(latest.waist - base.waist).toFixed(1)}` : null} deltaDir={latest.waist < base.waist ? 'up' : 'down'} />
-        <StatCell k="Visceral" v={latest.visceralFatArea} unit="cm2" />
-        <StatCell k="Fat to goal" v={`${target.lost}/${target.goal}`} unit="lb" />
+        {stat('Weight', 'weight', 'lb')}
+        {stat('Body fat', 'bodyFatPct', '%')}
+        {stat('Lean mass', 'leanMass', 'lb', 'up')}
+        {stat('Waist', 'waist', 'in')}
+        {stat('Visceral', 'visceralFatArea', 'cm2')}
+        <StatCell k="Fat to goal" v={target.goal ? `${target.lost}/${target.goal}` : '-'} unit={target.goal ? 'lb' : ''} />
       </div>
     </Card>
   );

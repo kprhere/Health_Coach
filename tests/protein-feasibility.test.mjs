@@ -17,12 +17,13 @@ import assert from 'node:assert/strict';
 
 import { FOODS, mealPlanFor, personalTargets } from '../src/nutritionEngine.js';
 import { nutritionDayType, inPuratasi, observedActivityFactor } from '../src/helpers.js';
-import { SEED_SCANS, SETTINGS_DEFAULT, PROFILE_DEFAULT } from '../src/data.js';
+import { SETTINGS_DEFAULT } from '../src/data.js';
+import { KRISHNA } from '../src/profiles/krishna.js';
 
 const baseState = () => ({
-  bodyScans: [...SEED_SCANS],
-  settings: { ...SETTINGS_DEFAULT },
-  profile: { ...PROFILE_DEFAULT },
+  bodyScans: [...KRISHNA.scans],
+  settings: { ...SETTINGS_DEFAULT, ...KRISHNA.settings },
+  profile: { ...KRISHNA.profile },
   dayOverrides: {},
   mealLogs: {},
   beverageLogs: {},
@@ -254,8 +255,8 @@ test('the audit flags an overstated activity factor and suggests a real one', ()
 test('the audit verdict does not move with the factor it is auditing', () => {
   // The whole point: logged intake is independent of activityFactor, so the
   // measured answer must be identical no matter what the setting claims.
-  const a = observedActivityFactor({ ...withLoggedIntake(baseState(), 2264), settings: { ...SETTINGS_DEFAULT, activityFactor: 1.2 } });
-  const b = observedActivityFactor({ ...withLoggedIntake(baseState(), 2264), settings: { ...SETTINGS_DEFAULT, activityFactor: 1.9 } });
+  const a = observedActivityFactor({ ...withLoggedIntake(baseState(), 2264), settings: { ...SETTINGS_DEFAULT, ...KRISHNA.settings, activityFactor: 1.2 } });
+  const b = observedActivityFactor({ ...withLoggedIntake(baseState(), 2264), settings: { ...SETTINGS_DEFAULT, ...KRISHNA.settings, activityFactor: 1.9 } });
   assert.equal(a.factor, b.factor);
   assert.equal(a.tee, b.tee);
 });
@@ -270,11 +271,11 @@ test('the audit stays quiet when the factor matches reality', () => {
 });
 
 test('the audit refuses to guess from too little data', () => {
-  const one = { ...baseState(), bodyScans: [SEED_SCANS[0]] };
+  const one = { ...baseState(), bodyScans: [KRISHNA.scans[0]] };
   assert.equal(observedActivityFactor(one).ok, false);
 
   // Two scans only twelve days apart: water noise swamps the signal.
-  const close = { ...baseState(), bodyScans: [SEED_SCANS[2], { ...SEED_SCANS[3], date: '2026-07-20' }] };
+  const close = { ...baseState(), bodyScans: [KRISHNA.scans[2], { ...KRISHNA.scans[3], date: '2026-07-20' }] };
   const r = observedActivityFactor(close);
   assert.equal(r.ok, false);
   assert.match(r.reason, /21\+/);

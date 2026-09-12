@@ -583,12 +583,9 @@ export const HABITS = [
 // ============================================================
 // SEED BODY SCANS (your four real Evolt 360 result sheets)
 // ============================================================
-export const SEED_SCANS = [
-  { id: 'seed-2025-10-29', date: '2025-10-29', weight: 182.3, bodyFatPct: 23.1, fatMass: 42.1, leanMass: 140.2, skeletalMuscle: 77.8, protein: 28.7, mineral: 10.6, bodyWater: 101.0, subcutFat: 36.6, visceralFatLevel: 8, visceralFatArea: 76, waist: 36.1, waistHip: 0.82, bmr: 1743, tee: 2684, bioAge: 35, bwi: 7.2 },
-  { id: 'seed-2026-04-20', date: '2026-04-20', weight: 189.4, bodyFatPct: 24.8, fatMass: 47.0, leanMass: 142.4, skeletalMuscle: 78.9, protein: 28.9, mineral: 11.0, bodyWater: 102.5, subcutFat: 40.6, visceralFatLevel: 9, visceralFatArea: 80, waist: 37.3, waistHip: 0.83, bmr: 1765, tee: 2718, bioAge: 36, bwi: 6.9 },
-  { id: 'seed-2026-07-08', date: '2026-07-08', weight: 191.1, bodyFatPct: 24.3, fatMass: 46.5, leanMass: 144.6, skeletalMuscle: 80.2, protein: 29.5, mineral: 10.8, bodyWater: 104.3, subcutFat: 40.1, visceralFatLevel: 9, visceralFatArea: 78, waist: 37.2, waistHip: 0.83, bmr: 1786, tee: 2750, bioAge: 36, bwi: 6.9 },
-  { id: 'seed-2026-08-13', date: '2026-08-13', weight: 187.8, bodyFatPct: 24.0, fatMass: 45.0, leanMass: 142.9, skeletalMuscle: 79.1, protein: 29.1, mineral: 11.0, bodyWater: 102.7, subcutFat: 38.8, visceralFatLevel: 9, visceralFatArea: 77, waist: 36.8, waistHip: 0.83, bmr: 1769, tee: 2724, bioAge: 35, bwi: 7.2 },
-];
+// Body scans belong to the person, not to the app. One real baseline used to
+// live here and was force-fed to every install; it now sits in
+// profiles/krishna.js, which no app code imports.
 
 export const SCAN_FIELDS = [
   { key: 'weight', label: 'Weight', unit: 'lb', good: 'down' },

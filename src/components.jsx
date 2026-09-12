@@ -329,7 +329,10 @@ let ringSeq = 0;
 export function MetricRing({ pct = 0, value, sub, label, color = 'var(--cyan)', size = 64, stroke = 7 }) {
   const r = (size - stroke) / 2;
   const c = 2 * Math.PI * r;
-  const p = Math.max(0, Math.min(100, pct));
+  // Math.min/max propagate NaN, which reaches the SVG as stroke-dashoffset="NaN".
+  // A ring with nothing to show is an empty ring, never a broken one.
+  const safePct = Number(pct);
+  const p = Number.isFinite(safePct) ? Math.max(0, Math.min(100, safePct)) : 0;
   const off = c - (p / 100) * c;
   const gid = useRef(`rg${++ringSeq}`).current;
   return (
