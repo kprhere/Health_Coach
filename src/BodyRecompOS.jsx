@@ -33,6 +33,10 @@ import {
   exerciseProgressSeries, recentPersonalRecords, trainingActivity, trainingConsistency, volumeByMuscleWindow,
 } from './helpers.js';
 import {
+  snapshot, listSnapshots, readSnapshot, recordCounts, summariseLoss, MAX_SNAPSHOTS,
+  hasQuarantined, readRaw, QUARANTINE_KEY,
+} from './storage.js';
+import {
   Sidebar, BottomNav, Card, Chip, SectionTitle, MetricRing, ScoreRing, ProgressBar,
   StatCell, CoachInsights, Sheet, Banner, EmptyState, LineTrend, BarMini,
   MacroChips, FuelPlan, SupplementTiming, HairHealthCard, LabsCard,
@@ -1545,6 +1549,88 @@ function HealthSyncCard() {
   );
 }
 
+// Automatic local snapshots. The app takes one before anything that could
+// reduce your history - a reset, an import, a state migration, or any write
+// that drops records - so a mistake is recoverable without a JSON backup.
+function RecoveryCard({ ctx }) {
+  const [snaps, setSnaps] = useState(() => listSnapshots());
+  const [note, setNote] = useState(null);
+  const quarantined = hasQuarantined();
+
+  const refresh = () => setSnaps(listSnapshots());
+
+  const restore = (key) => {
+    const entry = readSnapshot(key);
+    if (!entry) { setNote({ tone: 'red', msg: 'That snapshot could not be read.' }); return; }
+    const counts = recordCounts(entry.state);
+    const ok = confirm(
+      `Restore ${counts.scans} scans and ${counts.workouts} logged workouts from `
+      + `${new Date(entry.at).toLocaleString()}?\n\nYour current data is snapshotted first, so this is reversible.`,
+    );
+    if (!ok) return;
+    ctx.replaceState(entry.state);
+    setNote({ tone: 'green', msg: 'Restored. The copy you replaced was snapshotted first.' });
+    setTimeout(refresh, 50);
+  };
+
+  const saveQuarantined = () => {
+    const raw = readRaw(QUARANTINE_KEY);
+    if (!raw) return;
+    download('recomp-unreadable-data.json', raw);
+  };
+
+  const label = {
+    'before-reset': 'Before reset all data',
+    'before-import': 'Before importing a JSON file',
+    'records-removed': 'Before records were removed',
+  };
+
+  return (
+    <Card>
+      {quarantined ? (
+        <Banner tone="amber" icon={AlertTriangle}>
+          <b>Some saved data could not be read</b><br />
+          It was set aside rather than deleted. Download it and send it on if you want it recovered by hand.
+          <div className="btn-row" style={{ marginTop: 8 }}>
+            <button className="btn xs" onClick={saveQuarantined}><Download size={13} /> Download it</button>
+          </div>
+        </Banner>
+      ) : null}
+
+      {note ? <Banner tone={note.tone} icon={note.tone === 'red' ? AlertTriangle : Check}>{note.msg}</Banner> : null}
+
+      {snaps.length === 0 ? (
+        <div className="hint">
+          No snapshots yet. One is taken automatically before a reset, before importing a file,
+          before a version upgrade, and before any save that would remove scans or workouts.
+        </div>
+      ) : (
+        <>
+          <div className="hint" style={{ marginBottom: 10 }}>
+            Taken automatically before anything that could reduce your history. The newest {MAX_SNAPSHOTS} are kept.
+          </div>
+          {snaps.map((snap) => (
+            <div className="row" key={snap.key}>
+              <RotateCcw size={17} color="var(--cyan)" />
+              <span className="row-main">
+                <span className="row-title">{label[snap.reason] || snap.reason}</span>
+                <span className="row-sub">
+                  {new Date(snap.at).toLocaleString()} · {snap.counts.scans} scans · {snap.counts.workouts} workouts · {snap.counts.meals} meal days
+                </span>
+              </span>
+              <button className="btn xs" onClick={() => restore(snap.key)}>Restore</button>
+            </div>
+          ))}
+        </>
+      )}
+      <div className="hint" style={{ marginTop: 10 }}>
+        Snapshots live on this device only. They survive a bad import or a mistaken reset,
+        but not clearing your browser data — for that, keep exporting a JSON and turn on cloud sync.
+      </div>
+    </Card>
+  );
+}
+
 function SyncCard({ ctx }) {
   const s = ctx.state;
   const [pass, setPass] = useState(ctx.getSyncSecret());
@@ -1874,6 +1960,9 @@ function MoreTab({ ctx }) {
             <div className="hint" style={{ marginTop: 8 }}>Weekly backup reminder: export a JSON on Sundays so your history is safe if Safari clears site storage.</div>
           </Card>
 
+          <SectionTitle>Safety net</SectionTitle>
+          <RecoveryCard ctx={ctx} />
+
           <SectionTitle>Cloud sync (cross-device)</SectionTitle>
           <SyncCard ctx={ctx} />
 
@@ -1958,7 +2047,7 @@ function MoreTab({ ctx }) {
 // downstream is derived from these measurements. Nothing is
 // pre-filled from anyone else.
 // ============================================================
-function Onboarding({ onDone }) {
+function Onboarding({ onDone, onRestore }) {
   const [a, setA] = useState({
     name: '', gender: '', age: '', heightIn: '',
     weightLb: '', bodyFatPct: '', waistIn: '',
@@ -1967,6 +2056,13 @@ function Onboarding({ onDone }) {
   const set = (k, v) => setA((prev) => ({ ...prev, [k]: v }));
   const named = a.name.trim().length > 0;
   const hasScan = Number(a.weightLb) > 0 && Number(a.bodyFatPct) > 0;
+
+  // Reaching this screen with snapshots on the device means someone reset, or
+  // arrived here by accident, and their history is still recoverable. The
+  // restore panel lives in More, which is unreachable until setup is done - so
+  // the offer has to be made here or the safety net cannot be used at all.
+  const recoverable = listSnapshots().filter((snap) => snap.counts.scans || snap.counts.workouts);
+  const best = recoverable[0];
 
   return (
     <div className="app onboarding">
@@ -1980,6 +2076,20 @@ function Onboarding({ onDone }) {
               so they are worth getting right. Everything stays on this device unless you
               turn on sync.
             </div>
+
+            {best ? (
+              <Banner tone="amber" icon={RotateCcw}>
+                <b>There is earlier history on this device</b><br />
+                {best.counts.scans} scans and {best.counts.workouts} logged workouts, saved{' '}
+                {new Date(best.at).toLocaleString()}. Setting up fresh will leave them untouched
+                but unused.
+                <div className="btn-row" style={{ marginTop: 8 }}>
+                  <button className="btn xs" onClick={() => onRestore(best.key)}>
+                    <RotateCcw size={13} /> Restore it instead
+                  </button>
+                </div>
+              </Banner>
+            ) : null}
 
             <div className="field">
               <label>Name</label>
@@ -2069,7 +2179,13 @@ export default function BodyRecompOS() {
     catch { return nextNoMoonReminder(todayKey()); }
   });
 
-  useEffect(() => { saveState(state); }, [state]);
+  // A save that quietly fails is how a day of logging disappears, so the
+  // result is surfaced rather than swallowed.
+  const [saveFailure, setSaveFailure] = useState(null);
+  useEffect(() => {
+    const res = saveState(state);
+    setSaveFailure(res && res.ok === false ? res : null);
+  }, [state]);
   useEffect(() => { window.scrollTo(0, 0); }, [tab]);
 
   // Apple Health sync: a Shortcut opens #health?steps=..&sleep=.. etc.
@@ -2210,8 +2326,10 @@ export default function BodyRecompOS() {
   const restartCalendar = (dateStr) => mutate((d) => { d.settings.programStartDate = dateStr; d.settings.restartPhaseStartDate = dateStr; });
   const autoScanDate = () => mutate((d) => { const c = programCalendar(d); d.settings.nextBodyScanDate = c.autoNextScanDate; });
   const recalcNow = () => mutate((d) => { d.settings.lastRecalc = Date.now(); }); // forces a fresh derive + re-render
-  const replaceState = (obj) => setState(() => migrateState(obj));
-  const resetAll = () => setState(defaultState());
+  // Both of these throw away everything on this device, so the current
+  // state is preserved first and can be restored from More.
+  const replaceState = (obj) => setState((prev) => { snapshot('before-import', prev); return migrateState(obj); });
+  const resetAll = () => setState((prev) => { snapshot('before-reset', prev); return defaultState(); });
   // Sample data fills only EMPTY days — any real log you already have
   // (today's workout, meals, watch numbers) is kept untouched.
   // ---------- encrypted cross-device sync ----------
@@ -2377,13 +2495,31 @@ export default function BodyRecompOS() {
   // First run for this person. Rendered after all hooks above so the hook
   // order never changes between renders.
   if (needsOnboarding(state)) {
-    return <Onboarding onDone={(answers) => setState((prev) => applyOnboarding(prev, answers))} />;
+    return (
+      <Onboarding
+        onDone={(answers) => setState((prev) => applyOnboarding(prev, answers))}
+        onRestore={(key) => {
+          const entry = readSnapshot(key);
+          if (entry) setState(migrateState(entry.state));
+        }}
+      />
+    );
   }
 
   const tabTitle = { home: 'Dashboard', plan: 'Planner', train: 'Train', fuel: 'Fuel', body: 'Body', habits: 'Habits', stats: 'Stats', more: 'More' }[tab];
 
   return (
     <div className="app">
+      {/* This one does not auto-dismiss. Everything logged since the failure
+          exists only in memory, and closing the tab ends it. */}
+      {saveFailure ? (
+        <div className="sync-toast error persistent" role="alert">
+          <AlertTriangle size={15} />
+          {saveFailure.reason === 'quota'
+            ? 'Storage is full — nothing you log is being saved. Export a JSON backup now, then clear space.'
+            : 'This device is not saving your logs. Export a JSON backup before closing the app.'}
+        </div>
+      ) : null}
       {healthNotice ? (
         <div className={`sync-toast ${healthNotice.error ? 'error' : ''}`} role={healthNotice.error ? 'alert' : 'status'}>
           {healthNotice.error ? <AlertTriangle size={15} /> : <Watch size={15} />} {healthNotice.message}

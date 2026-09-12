@@ -8,6 +8,7 @@ import {
 } from './data.js';
 import { targetsWithFallback, mealPlanFor, nutritionProfile } from './nutritionEngine.js';
 import { V4_LEGACY_PROGRAM } from './migrations/v4-legacy-program.js';
+import { readStoredState, writeStoredState, snapshot } from './storage.js';
 
 export { nutritionProfile };
 
@@ -123,22 +124,23 @@ export function applyOnboarding(state, answers = {}) {
   }
   return next;
 }
+// Reading never silently starts fresh over the top of real data. Anything
+// unreadable is quarantined and the last good copy tried instead, and the
+// pre-migration state is snapshotted so a bad upgrade can be undone.
 export function loadState() {
-  try {
-    const raw = localStorage.getItem(STORAGE_KEY);
-    if (!raw) return defaultState();
-    const parsed = JSON.parse(raw);
-    if (!parsed || typeof parsed !== 'object') return defaultState();
-    return migrateState(parsed);
-  } catch (e) {
-    console.warn('Recomp OS: could not read saved data, starting fresh.', e);
-    return defaultState();
-  }
+  const { state, source } = readStoredState();
+  if (!state) return defaultState();
+  const incomingVersion = Number.isInteger(state.version) ? state.version : 1;
+  if (incomingVersion < STATE_VERSION) snapshot(`pre-migration-v${incomingVersion}`, state);
+  const migrated = migrateState(state);
+  if (source === 'backup') migrated.restoredFromBackup = true;
+  return migrated;
 }
 
+// Returns the write result rather than swallowing it. A save that quietly
+// does nothing is how a day of logging disappears, so the caller must show it.
 export function saveState(state) {
-  try { localStorage.setItem(STORAGE_KEY, JSON.stringify(state)); }
-  catch (e) { console.warn('Recomp OS: could not save data.', e); }
+  return writeStoredState(state);
 }
 
 function mergeState(base, incoming) {

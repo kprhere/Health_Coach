@@ -1188,6 +1188,15 @@ body::before {
   background: linear-gradient(180deg, #ff8b78, var(--red));
   box-shadow: 0 12px 30px -12px rgba(255, 107, 85, 0.72);
 }
+/* Storage failures do not time out and must stay legible over several lines:
+   everything logged since the failure exists only in memory. */
+.sync-toast.persistent {
+  max-width: min(92vw, 460px);
+  border-radius: 12px;
+  text-align: left;
+  line-height: 1.45;
+  white-space: normal;
+}
 @keyframes toast-in { from { opacity: 0; transform: translate(-50%, -10px); } to { opacity: 1; transform: translate(-50%, 0); } }
 
 .health-guide { display: grid; gap: 8px; margin-top: 12px; }
