@@ -17,7 +17,7 @@ import {
 } from './data.js';
 import {
   todayKey, addDays, prettyDate, shortDate, dowOf, clone, fastEndTime,
-  dayFlags, resolveWorkout, resolveNutrition, initSession,
+  dayFlags, resolveNutrition, initSession,
   blockDone, workoutProgress, nutritionActuals, nutritionAdherence,
   watchFor, recoveryScore, habitStatus, habitPct, dailyScore, coachInsights,
   phaseInfo, programCalendar, sortedScans, latestScan, baselineScan, nextScanCountdown, monthlyTargetProgress,
@@ -44,6 +44,9 @@ import {
 } from './components.jsx';
 import { BlockLogger, AddExercisePicker, makeUnplannedEntry } from './loggers.jsx';
 import { generateDemoData } from './demo.js';
+import { effectiveWorkout as resolveWorkout } from './coach/effective.js';
+import { SaveStatusPill, SaveFailureBanner, UpdateBanner } from './features/account/SaveStatus.jsx';
+import { downloadUnsavedState } from './store/quota.js';
 import { buildBackup, backupFilename, parseBackup, importPreview } from './backup.js';
 import { canAutoPush, deriveSync, pullRemote, pushRemote } from './sync.js';
 import { screenWakeLockSupported, useScreenWakeLock } from './wakeLock.js';
@@ -2210,8 +2213,8 @@ function Onboarding({ onDone, onRestore }) {
   );
 }
 
-export default function BodyRecompOS() {
-  const [state, setState] = useState(loadState);
+export default function BodyRecompOS({ initialState, store = null, degraded = null } = {}) {
+  const [state, setState] = useState(() => initialState || loadState());
   const [tab, setTab] = useState('home');
   const [selDate, setSelDate] = useState(todayKey());
   const [healthNotice, setHealthNotice] = useState(null);
@@ -2221,12 +2224,49 @@ export default function BodyRecompOS() {
   });
 
   // A save that quietly fails is how a day of logging disappears, so the
-  // result is surfaced rather than swallowed.
+  // result is surfaced rather than swallowed. With the durable store running,
+  // "saved" is only ever reported after its transaction has completed. The
+  // original localStorage copy keeps being written as a best-effort mirror so a
+  // rollback never lands on stale data; its failure alone is not shown.
   const [saveFailure, setSaveFailure] = useState(null);
+  const [saveInfo, setSaveInfo] = useState({ status: 'saved', pending: 0 });
+  const lastCommitted = useRef(state);
   useEffect(() => {
-    const res = saveState(state);
-    setSaveFailure(res && res.ok === false ? res : null);
-  }, [state]);
+    if (!store) {
+      const res = saveState(state);
+      setSaveFailure(res && res.ok === false ? res : null);
+      setSaveInfo({ status: res && res.ok === false ? 'failed' : 'saved', pending: 0 });
+      return;
+    }
+    const previous = lastCommitted.current;
+    lastCommitted.current = state;
+    if (previous === state) return;
+    store.commit(previous, state, { accountMode: false });
+    saveState(state);
+  }, [state, store]);
+  useEffect(() => {
+    if (!store) return undefined;
+    const apply = (s) => {
+      setSaveInfo({ status: s.status, pending: s.pending || 0 });
+      setSaveFailure(s.status === 'failed' ? { reason: s.reason } : null);
+    };
+    apply(store.getSaveStatus());
+    return store.subscribe(apply);
+  }, [store]);
+  const exportUnsaved = () => downloadUnsavedState(store || state, { fallbackState: state });
+
+  // A new build was downloaded in the background; apply it only when asked.
+  const [updateReg, setUpdateReg] = useState(null);
+  useEffect(() => {
+    const onUpdate = (e) => setUpdateReg(e.detail || true);
+    window.addEventListener('recomp-sw-update', onUpdate);
+    return () => window.removeEventListener('recomp-sw-update', onUpdate);
+  }, []);
+  const applyUpdate = () => {
+    const waiting = updateReg && updateReg.waiting;
+    if (waiting) waiting.postMessage({ type: 'SKIP_WAITING' });
+    else window.location.reload();
+  };
   useEffect(() => { window.scrollTo(0, 0); }, [tab]);
 
   // Apple Health sync: a Shortcut opens #health?steps=..&sleep=.. etc.
@@ -2562,13 +2602,14 @@ export default function BodyRecompOS() {
       {/* This one does not auto-dismiss. Everything logged since the failure
           exists only in memory, and closing the tab ends it. */}
       {saveFailure ? (
-        <div className="sync-toast error persistent" role="alert">
-          <AlertTriangle size={15} />
-          {saveFailure.reason === 'quota'
-            ? 'Storage is full — nothing you log is being saved. Export a JSON backup now, then clear space.'
-            : 'This device is not saving your logs. Export a JSON backup before closing the app.'}
+        <SaveFailureBanner reason={saveFailure.reason} onRetry={() => (store ? store.retry() : setState((x) => ({ ...x })))} onExport={exportUnsaved} />
+      ) : null}
+      {degraded ? (
+        <div className="sync-toast" role="status">
+          Running in compatibility mode ({String(degraded.reason).replace(/[:].*$/, '')}). Your data is still saved on this device.
         </div>
       ) : null}
+      {updateReg ? <UpdateBanner onUpdate={applyUpdate} onDismiss={() => setUpdateReg(null)} /> : null}
       {healthNotice ? (
         <div className={`sync-toast ${healthNotice.error ? 'error' : ''}`} role={healthNotice.error ? 'alert' : 'status'}>
           {healthNotice.error ? <AlertTriangle size={15} /> : <Watch size={15} />} {healthNotice.message}
@@ -2584,6 +2625,7 @@ export default function BodyRecompOS() {
               <span>{phase.name} · Week {phase.programWeek} · Day {phase.programDay}</span>
             </div>
           </div>
+          <SaveStatusPill status={saveInfo.status} pending={saveInfo.pending} accountMode={false} />
           <div className="score-chip">
             <span className="day-badge" title="Program day (from your start date)">D{phase.programDay}</span>
             <MetricRing pct={score} value={score} color={score >= 70 ? 'var(--green)' : score >= 45 ? 'var(--cyan)' : 'var(--amber)'} size={40} stroke={5} />
