@@ -11,9 +11,9 @@ a redistributed copy, the text is in the package's own folder inside `node_modul
 |---|---|---|
 | [leonxlnx/taste-skill](https://github.com/leonxlnx/taste-skill) (`redesign-skill`) | MIT | **Read only.** Its audit-first workflow (typography, palette, rhythm, states) shaped the review order in `docs/DESIGN_SYSTEM.md`. No code, wording or visual composition was copied or installed. |
 | [nextlevelbuilder/ui-ux-pro-max-skill](https://github.com/nextlevelbuilder/ui-ux-pro-max-skill) | MIT | **Read only.** Its accessibility and interaction rules (4.5:1 contrast, visible focus, reduced motion, meaning not carried by colour alone, explicit loading/error/empty states) are general principles restated in our own words in the design system. Not installed as a plugin. |
-| [21st-dev](https://github.com/21st-dev) (Magic MCP, ISC) | ISC | **Not used.** The MCP was not connected in this development environment and needs the owner's own 21st.dev account. See the setup note in the delivery summary. |
+| [21st-dev Magic MCP](https://github.com/21st-dev/magic-mcp) | ISC | **Dev tool, installed locally, not shipped.** Installed as a Claude Code plugin to browse component ideas. Anything it generates is reviewed and reimplemented against our tokens; generated component code is only kept if its terms allow it. The API key lives in the git-ignored `.claude/settings.local.json`. |
 
-Neither skill is copied, so no MIT notice is redistributed in the app. If you later install either, keep its
+Neither skill nor any 21st component is copied, so no MIT notice is redistributed in the app. If you later install either, keep its
 LICENSE file.
 
 ## Runtime dependencies
