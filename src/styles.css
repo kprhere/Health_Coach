@@ -1211,3 +1211,8 @@ body::before {
 }
 .health-step strong { color: var(--text); font-weight: 600; }
 .health-note { margin-top: 10px; padding-left: 10px; border-left: 2px solid var(--amber); }
+
+/* import preview */
+.import-counts { width: 100%; border-collapse: collapse; font-size: 13px; margin-top: 10px; }
+.import-counts th, .import-counts td { padding: 6px 8px; text-align: right; border-bottom: 1px solid var(--line, #253039); }
+.import-counts th[scope="row"], .import-counts thead th:first-child { text-align: left; font-weight: 500; }

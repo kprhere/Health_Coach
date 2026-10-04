@@ -143,6 +143,9 @@ export function saveState(state) {
   return writeStoredState(state);
 }
 
+// Set at load time to describe this run; never part of the saved record.
+const TRANSIENT_KEYS = new Set(['restoredFromBackup']);
+
 function mergeState(base, incoming) {
   const out = { ...base };
   for (const k of Object.keys(base)) {
@@ -151,6 +154,13 @@ function mergeState(base, incoming) {
     if (Array.isArray(base[k])) out[k] = Array.isArray(v) ? v : base[k];
     else if (typeof base[k] === 'object') out[k] = { ...base[k], ...v };
     else out[k] = v;
+  }
+  // Anything this build does not recognise belongs to a newer build (or to the
+  // person) and is carried through untouched. Dropping it here meant an older
+  // client erased newer data just by opening the app.
+  for (const k of Object.keys(incoming)) {
+    if (k in base || TRANSIENT_KEYS.has(k)) continue;
+    if (incoming[k] !== undefined) out[k] = incoming[k];
   }
   if (!Array.isArray(out.bodyScans)) out.bodyScans = [];
   return out;
@@ -391,6 +401,11 @@ export function mergeSyncedState(localState, remoteState) {
   for (const key of ['saturdayMode', 'dayOverrides', 'workoutSwaps', 'restartWeights', 'customExercises', 'exerciseNotes']) {
     const cloudMap = remote[key] && typeof remote[key] === 'object' ? remote[key] : {};
     out[key] = { ...cloudMap, ...(local[key] || {}) };
+  }
+
+  // Fields a newer build wrote on another device survive a merge on this one.
+  for (const key of Object.keys(remote)) {
+    if (!(key in out) && !TRANSIENT_KEYS.has(key)) out[key] = clone(remote[key]);
   }
 
   if (Array.isArray(remote.bodyScans)) {

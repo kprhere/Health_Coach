@@ -23,8 +23,8 @@ import {
   phaseInfo, programCalendar, sortedScans, latestScan, baselineScan, nextScanCountdown, monthlyTargetProgress,
   needsOnboarding, applyOnboarding,
   volumeByMuscle, volumeByExercise, supersetStats, finisherStats, weeklyVolumeSeries,
-  allSetRecords, getBestPerformance, exportJSON, workoutCSV, download, validateImport,
-  defaultState, loadState, saveState, mergeSyncedState, migrateState,
+  allSetRecords, getBestPerformance, exportJSON, workoutCSV, download,
+  defaultState, loadState, saveState, mergeSyncedState, migrateState, STATE_VERSION,
   supplementAdherence, hairHealthChecks, daysToLab,
   nutritionProfile, volumeTrend, muscleBalance, fmtVol, parseHealthParams, muscleWeekTrend,
   recompSignal, consistencyStreak, energyBalance, proteinPerLbLean, trainingLoadSummary,
@@ -44,6 +44,7 @@ import {
 } from './components.jsx';
 import { BlockLogger, AddExercisePicker, makeUnplannedEntry } from './loggers.jsx';
 import { generateDemoData } from './demo.js';
+import { buildBackup, backupFilename, parseBackup, importPreview } from './backup.js';
 import { canAutoPush, deriveSync, pullRemote, pushRemote } from './sync.js';
 import { screenWakeLockSupported, useScreenWakeLock } from './wakeLock.js';
 
@@ -681,7 +682,7 @@ export function TrainTab({ ctx }) {
 
           <div className="btn-row" style={{ marginTop: 10 }}>
             <button className="btn ghost sm" onClick={() => download(`workout-${date}.csv`, workoutCSV(s), 'text/csv')}><Download size={14} /> Export CSV</button>
-            <button className="btn ghost sm" onClick={() => download('recomp-os-backup.json', exportJSON(s))}><Download size={14} /> Export JSON</button>
+            <button className="btn ghost sm" onClick={() => ctx.exportBackup()}><Download size={14} /> Export JSON</button>
           </div>
         </div>
 
@@ -1821,16 +1822,17 @@ function MoreTab({ ctx }) {
   const s = ctx.state;
   const [importErr, setImportErr] = useState('');
 
+  const [pending, setPending] = useState(null); // a parsed, verified file awaiting a merge/replace choice
+  const [confirmText, setConfirmText] = useState('');
+
   const doImport = (file) => {
     const reader = new FileReader();
-    reader.onload = () => {
-      try {
-        const obj = JSON.parse(reader.result);
-        if (!validateImport(obj)) { setImportErr('That file does not look like a Recomp OS backup.'); return; }
-        ctx.replaceState(obj);
-        setImportErr('');
-        alert('Backup imported.');
-      } catch (e) { setImportErr('Could not read that file. Make sure it is a valid JSON export.'); }
+    reader.onload = async () => {
+      const res = await parseBackup(String(reader.result), { maxStateVersion: STATE_VERSION });
+      if (!res.ok) { setImportErr(res.error); return; }
+      setImportErr('');
+      setConfirmText('');
+      setPending({ ...res, name: file.name, preview: importPreview(s, res.state, ctx.previewMerge(res.state)) });
     };
     reader.onerror = () => setImportErr('Could not read that file.');
     reader.readAsText(file);
@@ -1944,11 +1946,50 @@ function MoreTab({ ctx }) {
           <SectionTitle>Data</SectionTitle>
           <Card>
             <div className="btn-row">
-              <button className="btn sm" onClick={() => download('recomp-os-backup.json', exportJSON(s))}><Download size={14} /> Export JSON</button>
+              <button className="btn sm" onClick={() => ctx.exportBackup()}><Download size={14} /> Export JSON</button>
               <label className="btn sm"><Upload size={14} /> Import JSON<input className="file-input" type="file" accept=".json" onChange={(e) => { const f = e.target.files?.[0]; if (f) doImport(f); }} /></label>
               <button className="btn sm ghost" onClick={() => download('workout-history.csv', workoutCSV(s), 'text/csv')}><Download size={14} /> Workout CSV</button>
             </div>
             {importErr ? <Banner tone="red" icon={AlertTriangle}>{importErr}</Banner> : null}
+            {pending ? (
+              <Sheet title="Import backup" onClose={() => setPending(null)}>
+                <Banner tone={pending.verified ? 'cyan' : 'amber'} icon={pending.verified ? Check : AlertTriangle}>
+                  {pending.verified
+                    ? `${pending.name} passed its integrity check${pending.exportedAt ? ` (exported ${new Date(pending.exportedAt).toLocaleString()})` : ''}.`
+                    : `${pending.name} is an older-style export with no checksum, so it cannot be verified. Compare the counts below before continuing.`}
+                </Banner>
+                <table className="import-counts">
+                  <thead><tr><th scope="col">Records</th><th scope="col">On this device</th><th scope="col">In the file</th><th scope="col">After merge</th></tr></thead>
+                  <tbody>
+                    {Object.keys(pending.preview.device).map((k) => (
+                      <tr key={k}><th scope="row">{k}</th><td>{pending.preview.device[k]}</td><td>{pending.preview.file[k]}</td><td>{pending.preview.afterMerge[k]}</td></tr>
+                    ))}
+                  </tbody>
+                </table>
+                <div className="btn-row" style={{ marginTop: 12 }}>
+                  <button className="btn primary" onClick={() => { ctx.mergeImport(pending.state); setPending(null); }}>
+                    <Upload size={14} /> Merge: keep everything on this device
+                  </button>
+                </div>
+                <div className="hint" style={{ margin: '6px 0 14px' }}>Adds what is missing. Nothing on this device is removed.</div>
+                {pending.preview.replaceLoss.length ? (
+                  <Banner tone="red" icon={AlertTriangle}>
+                    Replacing would remove {summariseLoss(pending.preview.replaceLoss)} that exist only on this device.
+                  </Banner>
+                ) : <div className="hint">Replacing would not remove any records.</div>}
+                <div className="field" style={{ marginTop: 10 }}>
+                  <label htmlFor="replace-confirm">Replace everything on this device with the file: type REPLACE to confirm</label>
+                  <input id="replace-confirm" className="input" value={confirmText} autoComplete="off" onChange={(e) => setConfirmText(e.target.value)} />
+                </div>
+                <div className="btn-row">
+                  <button className="btn danger" disabled={confirmText !== 'REPLACE'} onClick={() => { ctx.replaceState(pending.state); setPending(null); }}>
+                    <RotateCcw size={14} /> Replace
+                  </button>
+                  <button className="btn ghost" onClick={() => setPending(null)}>Cancel</button>
+                </div>
+                <div className="hint" style={{ marginTop: 8 }}>A restorable snapshot of this device is taken before either choice.</div>
+              </Sheet>
+            ) : null}
             <div className="divider" />
             <button className="btn primary block" onClick={() => { if (confirm('Load 8 weeks of sample workouts, meals and watch data so the Stats and charts fill in? This overwrites current logs.')) ctx.loadDemo(); }}>
               <Zap size={15} /> Load sample data
@@ -2329,6 +2370,14 @@ export default function BodyRecompOS() {
   // Both of these throw away everything on this device, so the current
   // state is preserved first and can be restored from More.
   const replaceState = (obj) => setState((prev) => { snapshot('before-import', prev); return migrateState(obj); });
+  const previewMerge = (obj) => mergeSyncedState(state, obj);
+  const mergeImport = (obj) => setState((prev) => { snapshot('before-import-merge', prev); return mergeSyncedState(prev, obj); });
+  // The file records the checksum of exactly what it holds, and is only offered
+  // for download once the write of "last backup" has been recorded.
+  const exportBackup = async () => {
+    const file = await buildBackup(state);
+    if (download(backupFilename(), JSON.stringify(file, null, 2))) setState((prev) => ({ ...prev, lastBackup: { at: Date.now(), counts: file.counts } }));
+  };
   const resetAll = () => setState((prev) => { snapshot('before-reset', prev); return defaultState(); });
   // Sample data fills only EMPTY days — any real log you already have
   // (today's workout, meals, watch numbers) is kept untouched.
@@ -2486,7 +2535,7 @@ export default function BodyRecompOS() {
   const ctx = {
     state, setState, mutate, patchSession, mutateEntry, getSession,
     setMeal, setWatch, toggleHabit, setHabits, toggleSupplement, toggleBeverage, toggleActivity, setActivityField, setSatMode, setDayOverride, swapWorkoutDates, clearWorkoutSwap,
-    addScan, updateScan, deleteScan, setProfile, setSetting, setRestart, setExerciseNote, saveCustomExercise, deleteCustomExercise, restartCalendar, autoScanDate, recalcNow, replaceState, resetAll, loadDemo,
+    addScan, updateScan, deleteScan, setProfile, setSetting, setRestart, setExerciseNote, saveCustomExercise, deleteCustomExercise, restartCalendar, autoScanDate, recalcNow, replaceState, previewMerge, mergeImport, exportBackup, resetAll, loadDemo,
     doPull, doPush, syncStatus, syncBusy, syncPhase, syncLastAt, getSyncSecret,
     setSyncSecret: (value) => { setSyncSecret(value); setSyncCredentialVersion((version) => version + 1); },
     selDate, setSelDate, goto: setTab,
