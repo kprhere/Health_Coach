@@ -43,6 +43,7 @@ test('parses the privacy-safe Health fragment and legacy query format', () => {
 test('a completed 40-minute evening walk satisfies but does not double-count the scheduled walk', () => {
   const state = defaultState();
   state.program = KRISHNA.program; // these assert THIS routine's walks and day keys
+  state.settings = { ...state.settings, ...KRISHNA.settings }; // week shape, fast day and no-moon dates are this person's
   const date = '2026-08-17';
   const target = plannedWalkingMinutes(date, state);
   assert.equal(target, 20);
@@ -56,6 +57,7 @@ test('a completed 40-minute evening walk satisfies but does not double-count the
 const scanState = (currentPatch = {}, tracked = true) => {
   const state = defaultState();
   state.program = KRISHNA.program; // these assert THIS routine's walks and day keys
+  state.settings = { ...state.settings, ...KRISHNA.settings }; // week shape, fast day and no-moon dates are this person's
   state.bodyScans = [
     { id: 'before', date: '2026-08-01', weight: 190, fatMass: 45, leanMass: 145, bodyFatPct: 23.7 },
     { id: 'after', date: '2026-08-11', weight: 188, fatMass: 43, leanMass: 145, bodyFatPct: 22.9, ...currentPatch },
@@ -111,6 +113,7 @@ test('the documented sample produces 99 percent recovery', () => {
   const parsed = parseHealthParams(`#health?${eightValues}`);
   const state = defaultState();
   state.program = KRISHNA.program; // these assert THIS routine's walks and day keys
+  state.settings = { ...state.settings, ...KRISHNA.settings }; // week shape, fast day and no-moon dates are this person's
   state.watchLogs[parsed.date] = parsed.patch;
 
   assert.deepEqual(recoveryScore(parsed.date, state), { pct: 99, sleep: 7.3, maxPain: 0, rhr: 58 });
@@ -119,6 +122,7 @@ test('the documented sample produces 99 percent recovery', () => {
 test('every weekly day resolves a workout and positive nutrition targets', () => {
   const state = defaultState();
   state.program = KRISHNA.program; // these assert THIS routine's walks and day keys
+  state.settings = { ...state.settings, ...KRISHNA.settings }; // week shape, fast day and no-moon dates are this person's
   for (let day = 8; day <= 14; day += 1) {
     const date = `2026-07-${String(day).padStart(2, '0')}`;
     const workout = resolveWorkout(date, state);
@@ -152,6 +156,7 @@ test('any date can override its nutrition plan to vegetarian or a 1 PM no-moon f
   const date = '2026-08-03';
   const state = defaultState();
   state.program = KRISHNA.program; // these assert THIS routine's walks and day keys
+  state.settings = { ...state.settings, ...KRISHNA.settings }; // week shape, fast day and no-moon dates are this person's
   const scheduledWorkout = resolveWorkout(date, state);
 
   state.dayOverrides[date] = 'veg';
@@ -183,16 +188,17 @@ test('any date can override its nutrition plan to vegetarian or a 1 PM no-moon f
 test('Chicago Panchang no-moon days activate automatically and remind one week before', () => {
   const state = defaultState();
   state.program = KRISHNA.program; // these assert THIS routine's walks and day keys
+  state.settings = { ...state.settings, ...KRISHNA.settings }; // week shape, fast day and no-moon dates are this person's
   const noMoonDate = '2026-09-10';
 
-  assert.equal(isNoMoonDay(noMoonDate), true);
+  assert.equal(isNoMoonDay(noMoonDate, state), true);
   assert.equal(nutritionDayType(noMoonDate, state), 'noMoonFast');
   assert.deepEqual(fastEndTime(noMoonDate, state), { hour: 13, label: '1 PM', noMoon: true });
-  assert.deepEqual(nextNoMoonReminder('2026-09-03'), { date: noMoonDate, daysAway: 7 });
-  assert.deepEqual(nextNoMoonReminder('2026-09-10'), { date: noMoonDate, daysAway: 0 });
-  assert.equal(nextNoMoonReminder('2026-09-02'), null);
-  assert.equal(nextNoMoonReminder('2026-09-03', noMoonDate), null);
-  assert.deepEqual(nextNoMoonReminder('2026-12-31'), { date: '2027-01-07', daysAway: 7 });
+  assert.deepEqual(nextNoMoonReminder('2026-09-03', '', state), { date: noMoonDate, daysAway: 7 });
+  assert.deepEqual(nextNoMoonReminder('2026-09-10', '', state), { date: noMoonDate, daysAway: 0 });
+  assert.equal(nextNoMoonReminder('2026-09-02', '', state), null);
+  assert.equal(nextNoMoonReminder('2026-09-03', noMoonDate, state), null);
+  assert.deepEqual(nextNoMoonReminder('2026-12-31', '', state), { date: '2027-01-07', daysAway: 7 });
 });
 
 test('workout dates swap in both directions without moving their nutrition plans', () => {
@@ -200,6 +206,7 @@ test('workout dates swap in both directions without moving their nutrition plans
   const wednesday = '2026-08-05';
   const state = defaultState();
   state.program = KRISHNA.program; // these assert THIS routine's walks and day keys
+  state.settings = { ...state.settings, ...KRISHNA.settings }; // week shape, fast day and no-moon dates are this person's
   const mondayWorkout = resolveWorkout(monday, state);
   const wednesdayWorkout = resolveWorkout(wednesday, state);
   const mondayNutrition = resolveNutrition(monday, state);
@@ -238,6 +245,7 @@ test('daily green tea is zero-calorie tracking and coconut water counts toward m
   const date = '2026-08-03';
   const state = defaultState();
   state.program = KRISHNA.program; // these assert THIS routine's walks and day keys
+  state.settings = { ...state.settings, ...KRISHNA.settings }; // week shape, fast day and no-moon dates are this person's
   state.mealLogs[date] = { eaten: {}, extras: [], water: 1, flags: {}, choices: {} };
   state.beverageLogs[date] = { greenTeaAm: true, greenTeaPm: true, coconutWater: true };
   const actual = nutritionActuals(date, state);

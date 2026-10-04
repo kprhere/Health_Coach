@@ -2216,8 +2216,8 @@ export default function BodyRecompOS() {
   const [selDate, setSelDate] = useState(todayKey());
   const [healthNotice, setHealthNotice] = useState(null);
   const [noMoonReminder, setNoMoonReminder] = useState(() => {
-    try { return nextNoMoonReminder(todayKey(), localStorage.getItem('recomp-no-moon-reminder-dismissed') || ''); }
-    catch { return nextNoMoonReminder(todayKey()); }
+    try { return nextNoMoonReminder(todayKey(), localStorage.getItem('recomp-no-moon-reminder-dismissed') || '', state); }
+    catch { return nextNoMoonReminder(todayKey(), '', state); }
   });
 
   // A save that quietly fails is how a day of logging disappears, so the

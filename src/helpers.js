@@ -4,7 +4,7 @@
 // ============================================================
 import {
   PROGRAM, programOf, programDay, NUTRITION, EXERCISES, HABITS,
-  PROFILE_DEFAULT, SETTINGS_DEFAULT, STORAGE_KEY, HEALTH_PARAM_MAP, DAILY_BEVERAGES, NO_MOON_DATES,
+  PROFILE_DEFAULT, SETTINGS_DEFAULT, STORAGE_KEY, HEALTH_PARAM_MAP, DAILY_BEVERAGES
 } from './data.js';
 import { targetsWithFallback, mealPlanFor, nutritionProfile } from './nutritionEngine.js';
 import { V4_LEGACY_PROGRAM } from './migrations/v4-legacy-program.js';
@@ -12,20 +12,19 @@ import { readStoredState, writeStoredState, snapshot } from './storage.js';
 
 export { nutritionProfile };
 
-export const PHASE_NAME = 'Fat Loss Phase 1';
-export const STATE_VERSION = 5;
+export const DEFAULT_PHASE_NAME = 'Training';
+export const STATE_VERSION = 6;
 
 // ---------- date utils ----------
-export const pad = (n) => String(n).padStart(2, '0');
-export const toKey = (d) => `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
-export const todayKey = () => toKey(new Date());
-export const parseKey = (key) => { const [y, m, d] = key.split('-').map(Number); return new Date(y, m - 1, d); };
-export const dowOf = (key) => parseKey(key).getDay();
-export const addDays = (key, n) => { const d = parseKey(key); d.setDate(d.getDate() + n); return toKey(d); };
-export const daysBetween = (a, b) => Math.round((parseKey(b) - parseKey(a)) / 86400000);
-export const prettyDate = (key) => parseKey(key).toLocaleDateString(undefined, { weekday: 'long', month: 'short', day: 'numeric' });
-export const shortDate = (key) => parseKey(key).toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
-export const clone = (o) => JSON.parse(JSON.stringify(o));
+import {
+  pad, toKey, todayKey, parseKey, dowOf, addDays, daysBetween, prettyDate, shortDate,
+} from './domain/dates.js';
+import { clone, hasEnteredValue } from './domain/util.js';
+import { plateBreakdown } from './domain/plates.js';
+
+export {
+  pad, toKey, todayKey, parseKey, dowOf, addDays, daysBetween, prettyDate, shortDate, clone, plateBreakdown,
+};
 
 // Last-resort fallback only: a persons real start date is settings.programStartDate,
 // written when they set the app up. Dating everyone from one hardcoded day put a
@@ -55,6 +54,11 @@ export function defaultState() {
     exerciseNotes: {},   // exerciseName -> persistent coaching/setup note
     lastHealthSync: { at: null, date: '', count: 0, fields: [] }, // device-visible Shortcut import receipt
     lastBackup: null,
+    planVersions: [],    // effective-dated copies of the program, newest last
+    planOverrides: {},   // date -> versioned adaptive override (see src/coach)
+    dayStatus: {},       // date -> 'rest' | 'missed' (confirmed by the person; absence means unknown)
+    coach: { proposals: {}, audit: [], settings: { mode: 'recommend' } },
+    importHistory: [],   // uploads that were reviewed and accepted or discarded
   };
 }
 
@@ -219,7 +223,41 @@ const MIGRATIONS = {
     }
     return { ...migrated, version: 5 };
   },
+  6: (state) => {
+    // Personal assumptions that used to be hardcoded become settings. Someone
+    // who already has history keeps EXACTLY the behaviour they had, by having
+    // the old values written out explicitly; a brand-new account gets none.
+    // `state.settings` is read before the merge so only what the install never
+    // stored is filled in.
+    const migrated = mergeState(defaultState(), state);
+    const raw = (state && state.settings) || {};
+    const hasHistory = !!(
+      (migrated.profile && migrated.profile.name)
+      || (migrated.bodyScans && migrated.bodyScans.length)
+      || Object.keys(migrated.workoutSessions || {}).length
+      || Object.keys(migrated.mealLogs || {}).length
+    );
+    if (hasHistory) {
+      const fill = (key, value) => { if (!(key in raw)) migrated.settings[key] = value; };
+      fill('scheduleTags', { swimDows: [2, 4], badmintonDows: [1, 2, 3, 4, 5], classDow: 6, fastDow: 4, vegDow: 6 });
+      fill('noMoonDates', [...LEGACY_NO_MOON_DATES]);
+      fill('phaseName', 'Fat Loss Phase 1');
+      fill('puratasiStartDate', '2026-09-17');
+      fill('puratasiEndDate', '2026-10-17');
+      fill('timezone', 'America/Chicago');
+      fill('d3Dose', '2000 IU');
+      fill('magElementalMg', '200 mg');
+      fill('biotinDose', '50,000 mcg');
+    }
+    return { ...migrated, version: 6 };
+  },
 };
+
+// The Chicago Panchang list the app used to ship for everyone.
+const LEGACY_NO_MOON_DATES = [
+  '2026-08-12', '2026-09-10', '2026-10-10', '2026-11-08', '2026-12-08',
+  '2027-01-07', '2027-02-06', '2027-03-07', '2027-04-06',
+];
 
 export function migrateState(input) {
   let state = input && typeof input === 'object' ? clone(input) : {};
@@ -588,12 +626,17 @@ export function inPuratasi(key, state) {
   return key >= start && key <= end;
 }
 
-export function isNoMoonDay(key) {
-  return NO_MOON_DATES.includes(key);
+const noMoonDatesOf = (state) => {
+  const list = state && state.settings && state.settings.noMoonDates;
+  return Array.isArray(list) ? [...list].sort() : [];
+};
+
+export function isNoMoonDay(key, state) {
+  return noMoonDatesOf(state).includes(key);
 }
 
-export function nextNoMoonReminder(key, dismissedDate = '') {
-  const date = NO_MOON_DATES.find((candidate) => candidate >= key);
+export function nextNoMoonReminder(key, dismissedDate = '', state) {
+  const date = noMoonDatesOf(state).find((candidate) => candidate >= key);
   if (!date || date === dismissedDate) return null;
   const daysAway = daysBetween(key, date);
   return daysAway >= 0 && daysAway <= 7 ? { date, daysAway } : null;
@@ -603,7 +646,7 @@ export function nutritionDayType(key, state) {
   const override = state && state.dayOverrides && state.dayOverrides[key];
   if (override === 'noMoon' || override === 'fast1' || override === 'fast2' || override === 'fast') return 'noMoonFast';
   if (override === 'veg') return 'vegSat';
-  if (isNoMoonDay(key)) return 'noMoonFast';
+  if (isNoMoonDay(key, state)) return 'noMoonFast';
   const scheduled = programDay(state, dowOf(key)).dayType;
   if (inPuratasi(key, state)) {
     if (scheduled === 'training') return 'trainingVeg';
@@ -619,17 +662,27 @@ export function fastEndTime(key, state) {
   return null;
 }
 
+// A person's own week shape. Missing or malformed tags mean "none", never a
+// default routine borrowed from someone else.
+export function scheduleTagsOf(state) {
+  const t = (state && state.settings && state.settings.scheduleTags) || {};
+  const list = (v) => (Array.isArray(v) ? v.filter((n) => Number.isInteger(n) && n >= 0 && n <= 6) : []);
+  const one = (v) => (Number.isInteger(v) && v >= 0 && v <= 6 ? v : null);
+  return { swimDows: list(t.swimDows), badmintonDows: list(t.badmintonDows), classDow: one(t.classDow), fastDow: one(t.fastDow), vegDow: one(t.vegDow) };
+}
+
 export function dayFlags(key, state) {
   const dow = dowOf(key);
   const dayType = nutritionDayType(key, state);
+  const tags = scheduleTagsOf(state);
   return {
     dow,
-    swimDay: dow === 2 || dow === 4,
+    swimDay: tags.swimDows.includes(dow),
     fastDay: dayType === 'fastThu' || dayType === 'noMoonFast',
     vegDay: dayType === 'fastThu' || dayType === 'noMoonFast' || dayType === 'vegSat'
       || dayType === 'trainingVeg' || dayType === 'restVeg',
-    badmintonAvailable: dow >= 1 && dow <= 5,
-    classDay: dow === 6,
+    badmintonAvailable: tags.badmintonDows.includes(dow),
+    classDay: tags.classDow === dow,
   };
 }
 
@@ -699,7 +752,6 @@ export function getDayPlan(key, state) {
 export const makeSet = () => ({ weight: '', reps: '', seconds: '', rpe: '', restSec: '', form: '', pain: 0, notes: '', isDrop: false, isWarmup: false });
 export const makeCell = () => ({ weight: '', reps: '', seconds: '', rpe: '', restSec: '', form: '', pain: 0, notes: '', done: false, skipped: false, skipReason: '', replacedWith: '' });
 
-const hasEnteredValue = (value) => value !== undefined && value !== null && String(value).trim() !== '';
 
 // Performance data is the safe, repeatable part of a set. Observations such as
 // pain, form and notes make a set user-owned but are intentionally not copied.
@@ -1142,12 +1194,13 @@ const NON_VEG_RE = /chicken|fish|mutton|prawn|shrimp|turkey|meat|beef|pork|salmo
 export function habitApplicability(key, state) {
   const dow = dowOf(key);
   const flags = dayFlags(key, state);
+  const tags = scheduleTagsOf(state);
   const satMode = (state.saturdayMode && state.saturdayMode[key]) || 'class';
   return {
     thu_fast: flags.fastDay,
-    thu_veg: dow === 4,
-    sat_veg: dow === 6,
-    bodybalance: dow === 6 && satMode === 'class',
+    thu_veg: tags.fastDow === dow,
+    sat_veg: tags.vegDow === dow,
+    bodybalance: tags.classDow === dow && satMode === 'class',
   };
 }
 
@@ -1303,108 +1356,6 @@ function mondayOf(key) {
 }
 
 export const fmtVol = (v) => (v >= 1000 ? `${(v / 1000).toFixed(v >= 10000 ? 0 : 1)}k` : `${Math.round(v)}`);
-
-// ---------- barbell plate math ----------
-// The bar carries no plates, so the loadable weight splits evenly across both
-// sleeves and every count below is PER SIDE.
-//
-// Largest-plate-first is the obvious approach and it is wrong at the rack:
-// 60 lb a side comes out as 45 + 10 + 5 when 35 + 25 is the same weight in
-// two plates instead of three. So every plate size is reduced to a common
-// integer step (their GCD) and a small table finds the fewest plates that hit
-// the target exactly, falling back to the closest loadable weight under it.
-const cents = (value) => Math.round(value * 100);
-const gcd = (a, b) => (b ? gcd(b, a % b) : a);
-
-// Safety valve. Real bars never get near this; nonsense input should not
-// allocate a huge table, so it drops back to the largest-first pass instead.
-const MAX_PLATE_STEPS = 20000;
-
-function largestFirst(perSideCents, denomCents) {
-  const result = [];
-  let remaining = perSideCents;
-  denomCents.forEach((plate) => {
-    const count = Math.floor(remaining / plate);
-    if (count) {
-      result.push({ plate: plate / 100, count });
-      remaining -= plate * count;
-    }
-  });
-  return { result, remaining };
-}
-
-export function plateBreakdown(totalWeight, barWeight = 45, plates = [45, 35, 25, 10, 5, 2.5]) {
-  // `reason` tells the caller WHY there is nothing to load, so the UI can say
-  // something true instead of "0 lb per side cannot be loaded".
-  const nothing = (reason) => ({ perSide: 0, plates: [], remainder: 0, exact: false, reason });
-  if (!hasEnteredValue(totalWeight)) return nothing('empty');
-  // A blank bar field is a missing answer, not a 0 lb bar. Treating it as zero
-  // silently turns 225 lb into 112.5 a side and reports it as exact.
-  if (!hasEnteredValue(barWeight)) return nothing('no-bar');
-
-  const total = Number(totalWeight);
-  const bar = Number(barWeight);
-  if (!Number.isFinite(total) || !Number.isFinite(bar) || total < 0 || bar < 0) return nothing('invalid');
-  if (total < bar) return nothing('below-bar');
-
-  const perSideCents = cents(total - bar) / 2;
-  const perSide = Math.round(perSideCents) / 100;
-  const denomCents = [...new Set(
-    plates.filter((plate) => Number.isFinite(plate) && plate > 0).map(cents),
-  )].sort((a, b) => b - a);
-  if (!denomCents.length) {
-    return { perSide, plates: [], remainder: perSide, exact: perSide === 0, reason: null };
-  }
-
-  const step = denomCents.reduce(gcd);
-  const targetSteps = Math.floor(perSideCents / step);
-
-  if (targetSteps > MAX_PLATE_STEPS) {
-    const { result, remaining } = largestFirst(perSideCents, denomCents);
-    const remainder = Math.round(remaining) / 100;
-    return { perSide, plates: result, remainder, exact: remainder === 0, reason: null };
-  }
-
-  // fewest[n] = fewest plates that weigh exactly n steps, -1 when unreachable.
-  const units = denomCents.map((plate) => plate / step);
-  const fewest = new Int32Array(targetSteps + 1).fill(-1);
-  const chosen = new Int32Array(targetSteps + 1).fill(-1);
-  fewest[0] = 0;
-  for (let n = 1; n <= targetSteps; n += 1) {
-    for (let d = 0; d < units.length; d += 1) {
-      const unit = units[d];
-      if (unit > n || fewest[n - unit] < 0) continue;
-      const cost = fewest[n - unit] + 1;
-      if (fewest[n] < 0 || cost < fewest[n]) {
-        fewest[n] = cost;
-        chosen[n] = d;
-      }
-    }
-  }
-
-  // Walk down to the heaviest loadable weight at or under the target. Step 0
-  // is always reachable, so this terminates.
-  let loaded = targetSteps;
-  while (loaded > 0 && fewest[loaded] < 0) loaded -= 1;
-
-  const counts = new Map();
-  for (let n = loaded; n > 0; n -= units[chosen[n]]) {
-    const plate = denomCents[chosen[n]];
-    counts.set(plate, (counts.get(plate) || 0) + 1);
-  }
-  const result = [...counts.entries()]
-    .sort(([a], [b]) => b - a)
-    .map(([plate, count]) => ({ plate: plate / 100, count }));
-
-  const remainderCents = perSideCents - loaded * step;
-  return {
-    perSide,
-    plates: result,
-    remainder: Math.round(remainderCents) / 100,
-    exact: remainderCents < 0.005,
-    reason: null,
-  };
-}
 
 // ---------- week-over-week training volume improvement ----------
 // The current week is usually mid-progress, so the headline compares the
@@ -1649,7 +1600,7 @@ export function programCalendar(state) {
     currentProgramWeek: Math.floor(pDays / 7) + 1,
     currentRestartDay: rDays + 1,
     currentRestartWeek: Math.floor(rDays / 7) + 1,
-    currentPhase: PHASE_NAME,
+    currentPhase: st.phaseName || DEFAULT_PHASE_NAME,
     scanFrequencyDays: freq,
     autoNextScanDate: autoNext,
     nextBodyScanDate: nextScan,

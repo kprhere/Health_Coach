@@ -4,40 +4,7 @@
    amber = action/coach, green = done, red = warning.
    ============================================================ */
 
-:root {
-  --bg: #0a0e13;
-  --surface: #12181f;
-  --surface-2: #1a222b;
-  --surface-3: #212b35;
-  --line: #253039;
-  --line-soft: #1c242d;
-
-  --text: #e8edf2;
-  --muted: #aab4bd;
-  --faint: #8996a1;
-
-  --cyan: #34d0de;
-  --amber: #f6a623;
-  --green: #37c871;
-  --red: #ff6b55;
-  --violet: #a99cff;
-
-  --radius: 16px;
-  --radius-sm: 11px;
-  --ease-premium: cubic-bezier(0.16, 1, 0.3, 1);
-  --shadow-card: 0 18px 44px -30px rgba(0, 0, 0, 0.95);
-  --shadow-focus: 0 0 0 4px rgba(52, 208, 222, 0.12);
-  --nav-h: 62px;
-  --pad: 16px;
-
-  --sat: env(safe-area-inset-top, 0px);
-  --sab: env(safe-area-inset-bottom, 0px);
-  --sal: env(safe-area-inset-left, 0px);
-  --sar: env(safe-area-inset-right, 0px);
-
-  --sans: 'IBM Plex Sans', system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
-  --mono: 'IBM Plex Mono', ui-monospace, 'SF Mono', Menlo, monospace;
-}
+/* design tokens live in ui/tokens.css */
 
 * { box-sizing: border-box; }
 

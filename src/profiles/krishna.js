@@ -46,6 +46,14 @@ export const KRISHNA = {
     restartPhaseStartDate: '2026-07-14',
     nextBodyScanDate: '2026-08-31',
     scanFrequencyDays: 14,
+    phaseName: 'Fat Loss Phase 1',
+    timezone: 'America/Chicago',
+    puratasiStartDate: '2026-09-17',
+    puratasiEndDate: '2026-10-17',
+    scheduleTags: { swimDows: [2, 4], badmintonDows: [1, 2, 3, 4, 5], classDow: 6, fastDow: 4, vegDow: 6 },
+    // Chicago Panchang amavasya dates; extend when the next annual list is published.
+    noMoonDates: ['2026-08-12', '2026-09-10', '2026-10-10', '2026-11-08', '2026-12-08', '2027-01-07', '2027-02-06', '2027-03-07', '2027-04-06'],
+    d3Dose: '2000 IU', magElementalMg: '200 mg', biotinDose: '50,000 mcg',
   },
 
   // Evolt 360 result sheets, oldest first.

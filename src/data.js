@@ -40,13 +40,22 @@ export const SETTINGS_DEFAULT = {
   // reworked week (4 lifts + 2 swims + 5 scheduled walks + BodyBalance).
   // If the walks stop happening, drop this toward 1.37 or the targets lie.
   activityFactor: 0, // 0 = fall back to the scan TEE until this person has data to audit
-  // ---- Puratasi: pure vegetarian for the whole Tamil month ----
-  // Calories and the 15% deficit are UNCHANGED across it, and protein stays at
-  // the full target — going veg is a food restriction, not a reason to eat less
-  // or accept less protein. Dates are approximate (the month turns when the sun
-  // enters Kanya, around Sept 17); confirm against your almanac and edit here.
-  puratasiStartDate: '2026-09-17',
-  puratasiEndDate: '2026-10-17',
+  // ---- observances: optional food rules a person may follow ----
+  // Dates are blank until a person sets them. Calories and protein are NOT
+  // reduced by an observance; it only changes which foods are offered.
+  puratasiStartDate: '',
+  puratasiEndDate: '',
+  noMoonDates: [],                     // YYYY-MM-DD list; the fast ends at 1 PM and meals turn vegetarian
+  // ---- how a person's week is shaped (all blank for a new account) ----
+  // dow numbers follow JS getDay: 0 Sunday ... 6 Saturday.
+  scheduleTags: { swimDows: [], badmintonDows: [], classDow: null, fastDow: null, vegDow: null },
+  phaseName: '',                       // label shown in the header, e.g. 'Fat Loss Phase 1'
+  timezone: '',                        // IANA name, informational; day keys follow the device clock
+  goals: [],                           // e.g. ['fat-loss', 'strength']
+  equipment: [],                       // categories available to this person
+  availableDays: [],                   // dows the person can train; [] = not told yet
+  sessionMinutes: null,
+  restrictions: { noHardLiftingOnFastDays: true },
   // ---- program calendar (all editable in More, week/day recalculate from these) ----
   programStartDate: '',                // set to today at onboarding
   restartPhaseStartDate: '',           // set to today at onboarding
@@ -56,9 +65,9 @@ export const SETTINGS_DEFAULT = {
   onboardedAt: '',                     // set once this person has entered their own profile
   defaultRestartLoadPercent: 70,       // restart load % of old working weight
   // ---- supplement + lab settings (editable in More) ----
-  d3Dose: '2000 IU',                   // total daily D3 (track total across products)
-  magElementalMg: '200 mg',            // elemental magnesium, not capsule weight
-  biotinDose: '50,000 mcg',            // high-dose
+  d3Dose: '',                   // total daily D3 (track total across products)
+  magElementalMg: '',            // elemental magnesium, not capsule weight
+  biotinDose: '',            // high-dose
   labWarningOn: true,                  // show biotin lab-interference warnings
   upcomingLabDate: '',                 // YYYY-MM-DD, blank = none scheduled
   pauseBiotinBeforeLabs: true,         // remind to pause biotin before blood work
@@ -68,21 +77,6 @@ export const SETTINGS_DEFAULT = {
   keepScreenAwake: true,               // prevent screen sleep while the Train tab is open
 };
 
-// Amavasya observance dates for Chicago, Illinois. Panchang dates are
-// location-specific, so this list intentionally uses the user's local city
-// rather than a generic astronomical new-moon timestamp. Review and extend
-// the list when the next annual Chicago Panchang is published.
-export const NO_MOON_DATES = [
-  '2026-08-12',
-  '2026-09-10',
-  '2026-10-10',
-  '2026-11-08',
-  '2026-12-08',
-  '2027-01-07',
-  '2027-02-06',
-  '2027-03-07',
-  '2027-04-06',
-];
 // The reasoning behind a routine travels with the routine itself, as
 // program.rationale, so each person reads why THEIR plan looks the way it does.
 
