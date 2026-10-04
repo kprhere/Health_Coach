@@ -1,0 +1,11 @@
+SYNTHETIC SAMPLE - Fictional Person C (invented data, not a real scan)
+Date: 2026-04-18
+Weight: 82.7 kg
+Body Fat %: 18.6 %
+Body Fat Mass: 15.4 kg
+Lean Body Mass: 67.3 kg
+Skeletal Muscle Mass: 36.5 kg
+Total Body Water: 49.8 L
+Visceral Fat Level: 5
+Waist: 87.0 cm
+Basal Metabolic Rate: 1,790 kcal

@@ -47,6 +47,8 @@ import { generateDemoData } from './demo.js';
 import { effectiveWorkout as resolveWorkout } from './coach/effective.js';
 import { SaveStatusPill, SaveFailureBanner, UpdateBanner } from './features/account/SaveStatus.jsx';
 import { downloadUnsavedState } from './store/quota.js';
+import PlanSetup from './features/onboarding/PlanSetup.jsx';
+import { flagOn } from './features/flags.js';
 import { buildBackup, backupFilename, parseBackup, importPreview } from './backup.js';
 import { canAutoPush, deriveSync, pullRemote, pushRemote } from './sync.js';
 import { screenWakeLockSupported, useScreenWakeLock } from './wakeLock.js';
@@ -1824,6 +1826,7 @@ function ActivityFactorCheck({ s, ctx }) {
 function MoreTab({ ctx }) {
   const s = ctx.state;
   const [importErr, setImportErr] = useState('');
+  const [planSheet, setPlanSheet] = useState(false);
 
   const [pending, setPending] = useState(null); // a parsed, verified file awaiting a merge/replace choice
   const [confirmText, setConfirmText] = useState('');
@@ -1945,6 +1948,21 @@ function MoreTab({ ctx }) {
               <span className={`check ${screenWakeLockSupported() && s.settings.keepScreenAwake !== false ? 'on' : ''}`} aria-hidden="true"><Check size={15} /></span>
             </button>
           </Card>
+
+          <SectionTitle>Plan</SectionTitle>
+          <Card>
+            <div className="row-sub" style={{ marginBottom: 8 }}>Current: {programOf(s).name || 'Custom plan'}</div>
+            {flagOn('planSetup', s) ? (
+              <button className="btn sm" onClick={() => setPlanSheet(true)}><Sparkles size={14} /> Build a plan from my answers</button>
+            ) : <div className="hint">Plan builder is not enabled.</div>}
+            <div className="hint" style={{ marginTop: 8 }}>You review any proposed plan before it replaces yours. The previous plan is kept as a version, and logged workouts are never changed.</div>
+          </Card>
+          {planSheet ? (
+            <Sheet title="Build a plan" onClose={() => setPlanSheet(false)}>
+              <PlanSetup state={s} onCancel={() => setPlanSheet(false)} onKeep={() => setPlanSheet(false)}
+                onAccept={(program, meta) => { ctx.acceptProgram(program, { ...meta, source: 'generated' }); setPlanSheet(false); }} />
+            </Sheet>
+          ) : null}
 
           <SectionTitle>Data</SectionTitle>
           <Card>
@@ -2410,6 +2428,27 @@ export default function BodyRecompOS({ initialState, store = null, degraded = nu
   // Both of these throw away everything on this device, so the current
   // state is preserved first and can be restored from More.
   const replaceState = (obj) => setState((prev) => { snapshot('before-import', prev); return migrateState(obj); });
+  // Accepting a new program archives the previous one as a versioned copy and
+  // records where the new one came from. Logged sessions, swaps, notes and
+  // restart baselines are never touched.
+  const acceptProgram = (program, meta = {}) => mutate((d) => {
+    const today = todayKey();
+    const stamp = Date.now();
+    d.planVersions = [
+      ...(d.planVersions || []),
+      { id: `plan-${stamp}-prev`, kind: 'retired', retiredOn: today, program: d.program },
+      { id: `plan-${stamp}`, kind: 'accepted', effectiveFrom: today, source: meta.source || 'manual', inputsHash: meta.inputsHash || null, fileSha256: meta.fileSha256 || null, programName: program.name },
+    ];
+    d.program = program;
+    if (meta.answers) {
+      const a = meta.answers;
+      if (a.availableDays) d.settings.availableDays = a.availableDays;
+      if (a.equipment) d.settings.equipment = a.equipment;
+      if (a.sessionMinutes) d.settings.sessionMinutes = a.sessionMinutes;
+      if (a.goal) d.settings.goals = [a.goal];
+    }
+    if (meta.history) d.importHistory = [...(d.importHistory || []), { ...meta.history, acceptedOn: today }];
+  });
   const previewMerge = (obj) => mergeSyncedState(state, obj);
   const mergeImport = (obj) => setState((prev) => { snapshot('before-import-merge', prev); return mergeSyncedState(prev, obj); });
   // The file records the checksum of exactly what it holds, and is only offered
@@ -2575,7 +2614,7 @@ export default function BodyRecompOS({ initialState, store = null, degraded = nu
   const ctx = {
     state, setState, mutate, patchSession, mutateEntry, getSession,
     setMeal, setWatch, toggleHabit, setHabits, toggleSupplement, toggleBeverage, toggleActivity, setActivityField, setSatMode, setDayOverride, swapWorkoutDates, clearWorkoutSwap,
-    addScan, updateScan, deleteScan, setProfile, setSetting, setRestart, setExerciseNote, saveCustomExercise, deleteCustomExercise, restartCalendar, autoScanDate, recalcNow, replaceState, previewMerge, mergeImport, exportBackup, resetAll, loadDemo,
+    addScan, updateScan, deleteScan, setProfile, setSetting, setRestart, setExerciseNote, saveCustomExercise, deleteCustomExercise, restartCalendar, autoScanDate, recalcNow, replaceState, acceptProgram, previewMerge, mergeImport, exportBackup, resetAll, loadDemo,
     doPull, doPush, syncStatus, syncBusy, syncPhase, syncLastAt, getSyncSecret,
     setSyncSecret: (value) => { setSyncSecret(value); setSyncCredentialVersion((version) => version + 1); },
     selDate, setSelDate, goto: setTab,

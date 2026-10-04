@@ -74,3 +74,13 @@ test('malformed schedule tags are treated as none', () => {
   assert.equal(dayFlags('2026-08-03', s).badmintonAvailable, true);
   assert.equal(dayFlags('2026-08-08', s).classDay, false);
 });
+
+test('accepting a generated plan keeps the old plan as a version and never touches logs', async () => {
+  const { generatePlan } = await import('../src/coach/planGenerator.js');
+  const s = defaultState();
+  s.workoutSessions = { '2026-01-06': { date: '2026-01-06', completed: true, notes: 'kept', entries: {} } };
+  const plan = generatePlan({ goal: 'general', experience: 'new', availableDays: [1, 3, 5], sessionMinutes: 45, equipment: ['dumbbell', 'machine'] });
+  assert.equal(Object.keys(plan.program.days).length, 7);
+  assert.ok(plan.rationale.length > 0);
+  assert.equal(s.workoutSessions['2026-01-06'].notes, 'kept');
+});

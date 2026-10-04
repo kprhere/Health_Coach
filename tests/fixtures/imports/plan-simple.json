@@ -1,0 +1,15 @@
+{
+  "name": "Synthetic Simple Plan",
+  "days": [
+    { "day": "Mon", "title": "Upper", "exercises": [
+      { "name": "Barbell Bench Press", "sets": 3, "reps": "6-8", "rest": "2 min", "rpe": 8 },
+      { "name": "Seated Cable Row", "sets": 3, "reps": "10", "restSec": 90 },
+      "Lateral Raise 2x12-15 rest 60s"
+    ] },
+    { "day": "Thu", "exercises": [
+      { "exercise": "Back Squat", "sets": 3, "reps": "5", "weight": 100 },
+      { "exercise": "Hammer Curl", "sets": 3, "reps": "10-12", "group": "x" },
+      { "exercise": "Rope Pushdown", "sets": 3, "reps": "10-12", "group": "x" }
+    ] }
+  ]
+}

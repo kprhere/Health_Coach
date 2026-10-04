@@ -1,0 +1,12 @@
+Day,Exercise,Sets,Reps,Rest,RPE,Group,Notes
+Monday,Back Squat,3,6-8,150s,7,,Synthetic sample plan
+Monday,Barbell Bench Press,3,8-10,2 min,8,,
+Monday,Hammer Curl,3,10-12,90,9,A,rest has no unit
+Monday,Rope Pushdown,3,12-15,90,9,A,
+Wednesday,Romanian Deadlift,3,8-10,150s,7,,
+Wednesday,Zorblax Hyper Pull,3,to failure,60s,,,made-up exercise
+Wednesday,Plank,2,30s,60s,,,
+Friday,Leg Press,3,,2 min,8,,reps are missing
+Friday,Easy Run,1,,,,,cardio with no duration
+Friday,Back Squat,3,5,3 min,,,second squat day
+Monday,Calf Raise,2,12-15,60s,9,,Monday appears again later

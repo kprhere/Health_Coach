@@ -1,0 +1,19 @@
+SYNTHETIC SAMPLE - Example Person (invented data, not a real scan)
+Scan Date: March 5, 2026
+Weight 182.4 lb
+Body Fat Percentage 21.3 %
+Body Fat Mass 38.9 lb
+Lean Body Mass 143.5 lb
+Fat Free Mass 141.2 lb
+Skeletal Muscle Mass 72.1 lb
+Total Body Water 104.6 lb
+Protein 28.3 lb
+Mineral 9.8 lb
+Subcutaneous Fat 31.0 lb
+Visceral Fat Level 6
+Visceral Fat Area 71 cm2
+Waist 34.5 in
+Waist-Hip Ratio 0.91
+Basal Metabolic Rate 1,812 kcal
+Total Energy Expenditure 2,610 kcal
+Bio Age 36 yrs

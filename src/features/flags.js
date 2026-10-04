@@ -10,7 +10,7 @@ export const FLAGS = {
   scanUpload: false,      // PDF/image scan import with review screen
   planUpload: false,      // CSV/JSON/PDF plan import with review screen
   adaptiveCoach: false,   // proposals, overrides, undo
-  planSetup: false,       // onboarding questionnaire + generated plan
+  planSetup: true,        // questionnaire + generated plan (in More); working end to end
   aiExplanations: false,  // optional model-written explanations (also needs per-user opt-in)
 };
 

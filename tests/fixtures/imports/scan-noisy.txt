@@ -1,0 +1,9 @@
+SYNTHETIC SAMPLE - Test Person B (invented data, not a real scan)
+Test Date: O3/O5/2O26
+Weight l82,4 1b
+Body Fat % 2O.3
+Fat Mass 37.l lb
+Lean Body Mass l45.3 lb
+Skeletal Muscle Mass 7O.1 lb
+Visceral Fat Level 7
+Basal Metabolic Rate 1,8O5 kcal
