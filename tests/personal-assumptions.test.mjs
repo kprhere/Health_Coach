@@ -106,3 +106,27 @@ test('an existing install keeps its supplement tracking through migration', () =
   delete old.settings.supplementsEnabled;
   assert.equal(migrateState(JSON.parse(JSON.stringify(old))).settings.supplementsEnabled, true);
 });
+
+test('no personal health values ship in the app defaults', async () => {
+  const data = await import('../src/data.js');
+  const blob = JSON.stringify([data.SUPPLEMENTS, data.LABS, data.HAIR_HEALTH, data.SETTINGS_DEFAULT, data.PROFILE_DEFAULT]);
+  for (const needle of ['50 ng/mL', '123 mg/dL', '5.6 %', 'TSH 1.78', '50,000 mcg', 'LDL is 123', 'Chicago', 'Krishna']) {
+    assert.equal(blob.includes(needle), false, `defaults must not contain "${needle}"`);
+  }
+  assert.deepEqual(data.LABS, []);
+});
+
+test('an existing install keeps its supplement plan, labs and hair notes through migration', async () => {
+  const { supplementPlan, labResults, hairHealthConfig } = await import('../src/helpers.js');
+  const old = defaultState();
+  old.version = 5; old.profile.name = 'Sample Person';
+  for (const k of ['supplementPlan', 'labResults', 'hairHealthConfig', 'supplementsEnabled']) delete old.settings[k];
+  const out = migrateState(JSON.parse(JSON.stringify(old)));
+  assert.ok(supplementPlan(out).some((x) => x.key === 'biotin' && x.dose === '50,000 mcg'));
+  assert.equal(labResults(out).length, 4);
+  assert.ok(hairHealthConfig(out).labReminders.some((r) => /TSH/.test(r)));
+  // a new account sees the neutral versions
+  const fresh = defaultState();
+  assert.equal(labResults(fresh).length, 0);
+  assert.equal(supplementPlan(fresh).some((x) => x.dose === '50,000 mcg'), false);
+});

@@ -425,34 +425,30 @@ export const DAILY_BEVERAGES = [
 ];
 
 // ============================================================
-// SUPPLEMENTS (daily)
+// SUPPLEMENTS (neutral defaults)
+// A person's own plan, doses and lab values live in their settings
+// (supplementPlan, labResults, hairHealthConfig); see helpers.supplementPlan.
+// These defaults carry no doses, schedules or health values.
 // ============================================================
 export const SUPPLEMENTS = [
-  { key: 'creatine', name: 'Creatine monohydrate', dose: '5 g', timing: 'Anytime, daily', withFood: 'Either', purpose: 'Strength, lean mass, muscle retention in a deficit', caution: 'Stay hydrated. Timing does not matter, consistency does.', tag: 'daily' },
-  { key: 'whey', name: 'Whey protein', dose: '1 scoop before strength training', timing: '7:00-7:15 AM before the 7:45 AM gym session', withFood: 'Water; remaining planned whey stays with breakfast if shown', purpose: 'Makes the current pre-workout habit explicit while preserving daily protein', caution: 'Already counted in the meal plan. Do not add another scoop unless you deliberately choose a logged protein top-up.', tag: 'daily' },
-  { key: 'vitd', name: 'Vitamin D3 + K2', dose: 'Per label', timing: 'Morning', withFood: 'With a fatty meal', purpose: 'Maintenance. Your level is 50 ng/mL, already optimal', caution: 'Maintenance only unless a doctor says otherwise. Do not stack multiple D products, track total daily IU. Recheck periodically.', tag: 'maintenance' },
-  { key: 'magnesium', name: 'Magnesium glycinate', dose: 'Per label (track elemental Mg)', timing: 'Evening, 30-60 min before bed', withFood: 'Either', purpose: 'Sleep quality, relaxation, recovery', caution: 'Track elemental magnesium, not capsule weight. Loose stool means reduce or stop. Caution with kidney disease.', tag: 'daily' },
-  { key: 'biotin', name: 'Hair, Skin & Nails (Biotin)', dose: '50,000 mcg', timing: 'With a meal', withFood: 'With food', purpose: 'Hair/skin/nails support', caution: 'HIGH-DOSE. High-dose biotin can skew lab tests (thyroid, troponin, vitamin D, hormones). Tell your doctor and lab before blood work, and pause if they advise. Biotin only helps hair if you are deficient, it is not a guaranteed hair-loss fix.', tag: 'high-dose' },
-  { key: 'fishoil', name: 'Fish oil (omega-3)', dose: '2-3 g EPA + DHA', timing: 'With a meal', withFood: 'With food', purpose: 'Supports LDL and recovery (LDL is 123)', caution: 'Optional. Choose a low-oxidation brand.', tag: 'optional' },
-  { key: 'electrolytes', name: 'Electrolytes', dose: '1 serving', timing: 'Around badminton or swimming', withFood: 'In water', purpose: 'Replace sweat losses on sport days', caution: 'Sport days only. Pick a low- or zero-sugar option to protect HbA1c.', tag: 'conditional', conditional: 'sport' },
+  { key: 'creatine', name: 'Creatine monohydrate', dose: 'Per label', timing: 'Anytime, daily', withFood: 'Either', purpose: 'Strength and lean mass', caution: 'Stay hydrated. Consistency matters more than timing.', tag: 'daily' },
+  { key: 'vitd', name: 'Vitamin D', dose: 'Per label', timing: 'Morning', withFood: 'With a meal that has fat', purpose: 'Maintenance', caution: 'Ask a clinician before taking more than the label says. Count the total across products.', tag: 'maintenance' },
+  { key: 'magnesium', name: 'Magnesium', dose: 'Per label (track elemental Mg)', timing: 'Evening', withFood: 'Either', purpose: 'Sleep and recovery', caution: 'Track elemental magnesium, not capsule weight. Loose stool means reduce or stop. Ask a clinician if you have kidney disease.', tag: 'daily' },
+  { key: 'fishoil', name: 'Fish oil (omega-3)', dose: 'Per label', timing: 'With a meal', withFood: 'With food', purpose: 'General health', caution: 'Optional.', tag: 'optional' },
+  { key: 'biotin', name: 'Biotin', dose: 'Per label', timing: 'With a meal', withFood: 'With food', purpose: 'Optional', caution: 'Biotin can skew some lab tests. Tell your clinician and the lab before blood work.', tag: 'optional' },
+  { key: 'electrolytes', name: 'Electrolytes', dose: '1 serving', timing: 'Around hard sessions', withFood: 'In water', purpose: 'Replace sweat losses on sport days', caution: 'Sport days only.', tag: 'conditional', conditional: 'sport' },
 ];
 
-// ---- labs snapshot (shown in Body > Labs) ----
-export const LABS = [
-  { key: 'vitd', label: 'Vitamin D', value: '50 ng/mL', status: 'good', note: 'Already optimal. Maintenance, not aggressive dosing.' },
-  { key: 'tsh', label: 'TSH (thyroid)', value: '1.78', status: 'good', note: 'In range. Thyroid is not the limiter right now.' },
-  { key: 'ldl', label: 'LDL', value: '123 mg/dL', status: 'watch', note: 'Slightly high. Keep paneer measured, avoid fried food, keep omega-3 and fiber up.' },
-  { key: 'hba1c', label: 'HbA1c', value: '5.6 %', status: 'watch', note: 'Upper-normal. Pair carbs with protein, avoid sugary drinks, keep the deficit steady.' },
-];
+// No lab results ship with the app; a person's own go in settings.labResults.
+export const LABS = [];
 
-// ---- hair-health checklist config (drives the Hair Protection card) ----
+// Neutral hair-protection config; a person's own reminders go in settings.hairHealthConfig.
 export const HAIR_HEALTH = {
   title: 'Hair protection',
   intro: 'Fat loss done too hard can trigger shedding. These levers keep hair, muscle and recovery safe at the same time.',
-  labReminders: ['Ask about ferritin and iron studies if you notice shedding', 'Thyroid (TSH 1.78) already checked and fine', 'Vitamin D 50 ng/mL already optimal', 'Re-check B12 and zinc if shedding persists'],
-  disclaimer: 'This is coaching, not diagnosis. Ongoing shedding warrants a physician or dermatologist and the labs above. No supplement is promised to regrow hair.',
+  labReminders: ['Ask a clinician about iron studies if you notice shedding'],
+  disclaimer: 'This is coaching, not diagnosis. Ongoing shedding warrants a physician or dermatologist. No supplement is promised to regrow hair.',
 };
-
 
 // ============================================================
 // HABITS (daily checklist template)
@@ -477,10 +473,10 @@ export const HABITS = [
   { key: 'badminton', label: 'Badminton (if played)', group: 'Activity' },
   { key: 'no_junk', label: 'No junk food', group: 'Nutrition' },
   { key: 'no_sugary', label: 'No sugary drinks', group: 'Nutrition' },
-  { key: 'thu_fast', label: 'Thursday fast completed', group: 'Rules' },
-  { key: 'thu_veg', label: 'Thursday vegetarian followed', group: 'Rules' },
-  { key: 'sat_veg', label: 'Saturday vegetarian followed', group: 'Rules' },
-  { key: 'bodybalance', label: 'BodyBalance completed (if selected)', group: 'Rules' },
+  { key: 'thu_fast', label: 'Fast day completed', group: 'Rules' },
+  { key: 'thu_veg', label: 'Fast-day vegetarian followed', group: 'Rules' },
+  { key: 'sat_veg', label: 'Vegetarian day followed', group: 'Rules' },
+  { key: 'bodybalance', label: 'Class completed (if selected)', group: 'Rules' },
   { key: 'morning_weight', label: 'Morning body weight', group: 'Tracking' },
 ];
 
@@ -617,6 +613,6 @@ export const DAY_VARIANTS = {
   rest:     { label: 'Rest day', tone: 'violet', why: 'Lower carbs, protein held high to keep recovery and muscle up.' },
   restVeg:  { label: 'Puratasi rest day', tone: 'green', why: 'Same calories and same protein as any rest day, vegetarian only. Protein is the hard part today, so front-load it.' },
   fastThu:  { label: 'Fast plus swim', tone: 'amber', why: 'Fasted until 6 PM, then a gentle break and a high-protein veg dinner around the swim.' },
-  noMoonFast: { label: 'No-moon day · fast to 1 PM', tone: 'amber', why: 'Chicago Panchang no-moon day. Fast until 1 PM, followed by a fully vegetarian high-protein plan.' },
+  noMoonFast: { label: 'No-moon day · fast to 1 PM', tone: 'amber', why: 'No-moon observance day. Fast until 1 PM, followed by a fully vegetarian high-protein plan.' },
   vegSat:   { label: 'Vegetarian day', tone: 'green', why: 'No chicken, fish or eggs. Protein anchored on whey, paneer, tofu, dal and Greek yogurt.' },
 };

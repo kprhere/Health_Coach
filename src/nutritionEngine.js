@@ -146,7 +146,7 @@ export function personalTargets(dayType, state) {
 // veg:false = contains chicken/fish. tags drive the goal chips.
 //   lean  = high protein per calorie (fat-loss friendly)
 //   ldl   = low saturated fat / good for LDL 123
-//   gi    = low-GI or carbs paired with protein (good for HbA1c 5.6)
+//   gi    = low-GI or carbs paired with protein
 //   omega = omega-3 source
 // ============================================================
 const F = (label, per, p, c, f, kcal, veg, tags = []) => ({ label, per, p, c, f, kcal, veg, tags });

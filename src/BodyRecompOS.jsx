@@ -25,7 +25,7 @@ import {
   volumeByMuscle, volumeByExercise, supersetStats, finisherStats, weeklyVolumeSeries,
   allSetRecords, getBestPerformance, exportJSON, workoutCSV, download,
   defaultState, loadState, saveState, mergeSyncedState, migrateState, STATE_VERSION,
-  supplementAdherence, hairHealthChecks, daysToLab,
+  supplementAdherence, hairHealthChecks, daysToLab, supplementPlan, labResults, hairHealthConfig,
   nutritionProfile, volumeTrend, muscleBalance, fmtVol, parseHealthParams, muscleWeekTrend,
   recompSignal, consistencyStreak, energyBalance, proteinPerLbLean, trainingLoadSummary,
   customExercisePlanFits, workoutSwapPartner, workoutSessionHasData,
@@ -323,7 +323,7 @@ function HomeTab({ ctx }) {
             </Card>
             <Card className="pad-sm">
               <div className="block-tag"><span className="bar" />Supplements</div>
-              {!s.settings.supplementsEnabled ? <div className="hint">Supplement tracking is off. Turn it on in More if you take any.</div> : SUPPLEMENTS.map((sp) => (
+              {!s.settings.supplementsEnabled ? <div className="hint">Supplement tracking is off. Turn it on in More if you take any.</div> : supplementPlan(s).map((sp) => (
                 <div className="row" key={sp.key}>
                   <div className="row-main"><div className="row-title">{sp.name}</div><div className="row-sub">{sp.dose} · {sp.timing}</div></div>
                 </div>
@@ -449,7 +449,7 @@ function PlanTab({ ctx }) {
             <Card>
               <div className="card-head"><h3>Saturday choice</h3></div>
               <div className="pill-toggle">
-                <button className={(s.saturdayMode[date] || 'class') === 'class' ? 'active' : ''} onClick={() => ctx.setSatMode(date, 'class')}>BodyBalance</button>
+                <button className={(s.saturdayMode[date] || 'class') === 'class' ? 'active' : ''} onClick={() => ctx.setSatMode(date, 'class')}>the class</button>
                 <button className={s.saturdayMode[date] === 'fallback' ? 'active' : ''} onClick={() => ctx.setSatMode(date, 'fallback')}>Full Body fallback</button>
               </div>
               <div className="hint" style={{ marginTop: 8 }}>{plan.usingFallback ? 'Showing the lifting fallback for a missed class.' : 'Showing the mobility class. Switch if you miss it.'}</div>
@@ -637,7 +637,7 @@ export function TrainTab({ ctx }) {
       {plan.isClassDay ? (
         <Card className="pad-sm">
           <div className="pill-toggle">
-            <button className={(s.saturdayMode[date] || 'class') === 'class' ? 'active' : ''} onClick={() => ctx.setSatMode(date, 'class')}>BodyBalance class</button>
+            <button className={(s.saturdayMode[date] || 'class') === 'class' ? 'active' : ''} onClick={() => ctx.setSatMode(date, 'class')}>Class</button>
             <button className={s.saturdayMode[date] === 'fallback' ? 'active' : ''} onClick={() => ctx.setSatMode(date, 'fallback')}>Full Body fallback</button>
           </div>
         </Card>
@@ -924,7 +924,7 @@ function FuelTab({ ctx }) {
                 <SectionTitle right={<Chip tone="green">{Object.values(supMap).filter(Boolean).length} today</Chip>}>Supplement timing</SectionTitle>
                 <Card>
                   <SupplementTiming
-                    items={SUPPLEMENTS}
+                    items={supplementPlan(s)}
                     takenMap={supMap}
                     onToggle={(k) => ctx.toggleSupplement(date, k)}
                     adherence={(k) => supplementAdherence(k, s, date)}
@@ -933,7 +933,7 @@ function FuelTab({ ctx }) {
                 </Card>
 
                 <SectionTitle right={<Chip tone="violet">Fat-loss safe</Chip>}>Hair health</SectionTitle>
-                <Card><HairHealthCard checks={hairHealthChecks(date, s)} config={HAIR_HEALTH} labWarning={biotinWarn} /></Card>
+                <Card><HairHealthCard checks={hairHealthChecks(date, s)} config={hairHealthConfig(s)} labWarning={biotinWarn} /></Card>
               </>
             );
           })()}
@@ -1141,7 +1141,7 @@ function BodyTab({ ctx }) {
           {s.settings.supplementsEnabled ? (
             <>
               <SectionTitle>Labs</SectionTitle>
-              <Card><LabsCard labs={LABS} /></Card>
+              <Card><LabsCard labs={labResults(s)} /></Card>
             </>
           ) : null}
 
@@ -1957,7 +1957,7 @@ function MoreTab({ ctx }) {
               {num('Magnesium elemental', 'magElementalMg', s.settings, (k, v) => ctx.setSetting(k, v))}
               {num('Biotin dose', 'biotinDose', s.settings, (k, v) => ctx.setSetting(k, v))}
             </div>
-            <div className="hint" style={{ marginBottom: 10 }}>Vitamin D is 50 ng/mL, so D3 + K2 is maintenance. Track total daily IU across all products. Log elemental magnesium, not capsule weight.</div>
+            <div className="hint" style={{ marginBottom: 10 }}>Track total daily IU across all vitamin D products. Log elemental magnesium, not capsule weight.</div>
 
             <div className="field" style={{ marginBottom: 10 }}>
               <label>Upcoming lab / blood work date</label>
@@ -2831,7 +2831,7 @@ export default function BodyRecompOS({ initialState, store = null, degraded = nu
       {noMoonReminder ? (
         <Sheet title="No-moon fast coming up" onClose={() => setNoMoonReminder(null)}>
           <Banner tone="amber" icon={Moon}>
-            {prettyDate(noMoonReminder.date)} is a Chicago Panchang no-moon day. Your plan will fast until 1 PM, then switch to vegetarian meals.
+            {prettyDate(noMoonReminder.date)} is a no-moon day on your calendar. Your plan will fast until 1 PM, then switch to vegetarian meals.
           </Banner>
           <div className="hint" style={{ margin: '10px 0 14px' }}>
             {noMoonReminder.daysAway === 0 ? 'The fast is today.' : `${noMoonReminder.daysAway} day${noMoonReminder.daysAway === 1 ? '' : 's'} remaining. This reminder begins one week before the fast.`}

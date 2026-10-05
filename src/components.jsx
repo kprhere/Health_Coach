@@ -275,6 +275,7 @@ export function LabsCard({ labs = [] }) {
   return (
     <div className="labs-list">
       <div className="fp-head"><FlaskConical size={16} color="var(--cyan)" /><div className="fp-title">Labs snapshot</div></div>
+      {labs.length === 0 ? <div className="hint">No lab results entered. Nothing is shown here until you add your own.</div> : null}
       {labs.map((l) => (
         <div className="lab-row" key={l.key}>
           <div className="lab-main">

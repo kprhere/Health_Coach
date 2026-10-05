@@ -4,10 +4,11 @@
 // ============================================================
 import {
   PROGRAM, programOf, programDay, NUTRITION, EXERCISES, HABITS,
-  PROFILE_DEFAULT, SETTINGS_DEFAULT, STORAGE_KEY, HEALTH_PARAM_MAP, DAILY_BEVERAGES
+  PROFILE_DEFAULT, SETTINGS_DEFAULT, STORAGE_KEY, HEALTH_PARAM_MAP, DAILY_BEVERAGES, SUPPLEMENTS, LABS, HAIR_HEALTH,
 } from './data.js';
 import { targetsWithFallback, mealPlanFor, nutritionProfile } from './nutritionEngine.js';
 import { V4_LEGACY_PROGRAM } from './migrations/v4-legacy-program.js';
+import { LEGACY_SUPPLEMENT_PLAN, LEGACY_LAB_RESULTS, LEGACY_HAIR_HEALTH } from './migrations/v6-legacy-health.js';
 import { readStoredState, writeStoredState, snapshot } from './storage.js';
 
 export { nutritionProfile };
@@ -246,6 +247,9 @@ const MIGRATIONS = {
       fill('puratasiEndDate', '2026-10-17');
       fill('timezone', 'America/Chicago');
       fill('supplementsEnabled', true);
+      fill('supplementPlan', clone(LEGACY_SUPPLEMENT_PLAN));
+      fill('labResults', clone(LEGACY_LAB_RESULTS));
+      fill('hairHealthConfig', clone(LEGACY_HAIR_HEALTH));
       fill('d3Dose', '2000 IU');
       fill('magElementalMg', '200 mg');
       fill('biotinDose', '50,000 mcg');
@@ -1561,7 +1565,7 @@ export function coachInsights(key, state, now) {
   }
   if (flags.classDay) {
     const mode = (state.saturdayMode && state.saturdayMode[key]) || 'class';
-    if (mode === 'fallback') out.push({ type: 'info', text: 'BodyBalance swapped for the Full Body fallback. Vegetarian protein: whey, paneer, dal, Greek yogurt.' });
+    if (mode === 'fallback') out.push({ type: 'info', text: 'Class swapped for the full-body fallback. Vegetarian protein: whey, paneer, dal, Greek yogurt.' });
     else out.push({ type: 'info', text: 'Vegetarian day. Anchor protein with whey, Greek yogurt, paneer, tofu and dal.' });
   }
   if (flags.vegDay && !flags.fastDay && !flags.classDay) {
@@ -1910,6 +1914,20 @@ export function workoutCSV(state) {
 
 // ============================================================
 // SUPPLEMENTS, LABS, HAIR HEALTH
+// A person's own plan, results and notes live in settings; the neutral defaults
+// from data.js apply until they set their own.
+export const supplementPlan = (state) => {
+  const own = state && state.settings && state.settings.supplementPlan;
+  return Array.isArray(own) && own.length ? own : SUPPLEMENTS;
+};
+export const labResults = (state) => {
+  const own = state && state.settings && state.settings.labResults;
+  return Array.isArray(own) ? own : LABS;
+};
+export const hairHealthConfig = (state) => {
+  const own = state && state.settings && state.settings.hairHealthConfig;
+  return own && typeof own === 'object' && Array.isArray(own.labReminders) ? own : HAIR_HEALTH;
+};
 // ============================================================
 export function supplementAdherence(suppKey, state, key = todayKey(), days = 7) {
   let taken = 0;
