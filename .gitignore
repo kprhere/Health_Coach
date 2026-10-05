@@ -11,3 +11,7 @@ preview.html
 # local-only secrets and settings, never committed
 .claude/settings.local.json
 .mcp.json
+
+# cloud backups hold user data
+backups/
+!.env.example
