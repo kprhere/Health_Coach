@@ -17,11 +17,19 @@ total takes a snapshot first.
 | `program` | The person's training split (blocks, targets, rationale) | - | no |
 | `profile`, `settings` | Body profile and goals; program/restart/scan dates, targets, units, sync URL | - | no |
 | `lastBackup`, `lastHealthSync` | Receipts | - | no |
+| `planVersions`, `planOverrides`, `dayStatus`, `coach`, `importHistory` | Plan versions (previous plans are archived), adaptive overrides per date, confirmed rest/missed days, coach proposals + audit + mode, accepted imports | id / date | no |
 | *(any other key)* | Carried through untouched by `migrateState` and `mergeSyncedState` (added in stage 1) | - | no |
 
 Outside the state blob: `recomp-os-v1.backup` (previous good copy), `recomp-os-v1.unreadable` (quarantined
 bytes), `recomp-os-v1.snapshot.*` (up to 5 labelled snapshots), `recomp-sync-secret` (sync passphrase, plain
 localStorage), `recomp-sync-updated`, `recomp-no-moon-reminder-dismissed`.
+
+## IndexedDB (per account, `recomp-<account>`)
+
+Stores: `records` (one row per collection+key), `outbox` (pending changes), `conflicts` (both competing versions),
+`files` (original uploads), `staging` and `meta` (migration flags, `$fields`, array order). Written in one transaction
+with its outbox entry; "saved" is reported only after it completes. The legacy localStorage blob, backup and snapshots
+are never deleted by the migration and remain the rollback path.
 
 ## Backup file (schema 2)
 

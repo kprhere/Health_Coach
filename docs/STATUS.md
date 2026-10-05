@@ -1,27 +1,29 @@
 # Build status
 
-Implemented = merged on `feature/multi-user-coach`, tested. Placeholder = module may exist but is not wired
-into the app and sits behind a flag in `src/features/flags.js`. Blocked = needs something outside the code.
+Implemented = on `feature/multi-user-coach` and tested. In progress = being built. Blocked = needs something outside the code.
+Test suite at last run: 379 node tests and 46+ UI tests passing; production build clean.
 
-| # | Item | State | Next step |
+| # | Item | State | Notes |
 |---|---|---|---|
-| 1 | Verified backup + merge/replace import | Implemented | - |
-| 2 | Unknown fields preserved through migrate/merge | Implemented | - |
-| 3 | State v6, personal assumptions in settings, migration | Implemented | - |
-| 4 | Domain modules, tokens, self-hosted fonts, reduced motion | Implemented | - |
-| 5 | Opt-in service-worker updates (banner UI) | Placeholder (event fired, no banner yet) | Add banner in `BodyRecompOS` |
-| 6 | Plan generator, plan compare, AI wrapper (modules) | Implemented, tested | - |
-| 7 | Plan setup screen (`features/onboarding/PlanSetup.jsx`) | Placeholder (flag `planSetup`) | Wire into onboarding + More |
-| 8 | Coach engine (metrics, rules, proposals, overrides) | Agent building | Wire `applyOverrides` into `resolveWorkout`; Coach tab (flag `adaptiveCoach`) |
-| 9 | IndexedDB store, outbox, localStorage migration | Agent building | Async boot gate; Saved/Pending/Synced/Failed pill |
-| 10 | Supabase schema, RLS, edge functions, sync engine, access codes | Agent building | Account screen (flag `accounts`) |
-| 11 | Scan + plan parsers | Agent building | Upload + review screens (flags `scanUpload`, `planUpload`) |
-| 12 | Session RPE x duration inputs | Placeholder | Two optional fields on "Mark complete" |
-| 13 | README (single), ARCHITECTURE, COACHING docs; delete `README-root.md` | Pending | After 8-11 report formulas and APIs |
-| 14 | Browser verification, screenshots, offline check | Pending | After 7-11 |
-| 15 | 21st plugin for UI references | Blocked: tools load on session restart | Restart session |
+| 1 | Verified backup + merge/replace import | Implemented | `src/backup.js` |
+| 2 | Unknown fields preserved through migrate/merge | Implemented | |
+| 3 | State v6, personal assumptions as settings, preserving migration | Implemented | |
+| 4 | Domain modules, tokens, self-hosted fonts, reduced motion | Implemented | |
+| 5 | IndexedDB store, outbox, localStorage migration with rollback | Implemented | app boots from it; honest save pill |
+| 6 | Opt-in service-worker updates | Implemented | Update banner |
+| 7 | Plan builder (questionnaire -> plan -> accept/edit/regenerate/keep) | Implemented | More -> Plan |
+| 8 | Plan import and scan import with review screens | Implemented | OCR/PDF need a real-browser check |
+| 9 | Coach engine + Coach screen + session RPE x minutes inputs | Implemented | reassess on open/data change |
+| 10 | Supabase schema, RLS, sync engine, access codes, edge functions | Implemented, tested in PGlite/mocks | **not applied to the live project** |
+| 11 | Account screen, login, "move my data" flow, cloud sync wiring | In progress | flag `accounts` stays off until verified |
+| 12 | Browser verification, screenshots | Pending | |
+| 13 | Optional AI explanations wiring | Module done, UI toggle pending | flag `aiExplanations` off |
+
+## Blocked / needs the owner
+- `supabase login` and `supabase link`; applying migrations and auth settings to the hosted project (not done).
+- Backup destination for `scripts/backup-cloud.mjs`; the 4-5 account labels.
+- Real Evolt PDF/screenshot, OCR in a browser, iPhone Safari as installed PWA.
+- Restart the session so the 21st plugin tools load; rotate keys shared in chat.
 
 ## Cannot be verified in this environment
-- Live Supabase Auth, Storage and Edge runtime (no project exists; SQL is tested in PGlite instead).
-- OCR (Tesseract needs a browser).
-- Real iPhone Safari / installed PWA behaviour.
+Live Supabase Auth/Storage/Edge runtime, OCR (browser only), real-device Safari/PWA behaviour.
