@@ -55,6 +55,7 @@ import ScanImport from './features/uploads/ScanImport.jsx';
 import PlanImport from './features/uploads/PlanImport.jsx';
 import { generateProposals, recordProposals, applyProposal } from './coach/proposals.js';
 import { inputsHash } from './coach/metrics.js';
+import { ollamaProvider } from './coach/ai.js';
 import { useCloudSync } from './cloud/useCloudSync.js';
 import { setActiveAccountId } from './cloud/activeAccount.js';
 import { createCloudClient } from './cloud/client.js';
@@ -2017,6 +2018,25 @@ function MoreTab({ ctx }) {
             ) : null}
             <div className="hint" style={{ marginTop: 8 }}>You review any proposed plan before it replaces yours. The previous plan is kept as a version, and logged workouts are never changed.</div>
           </Card>
+          {flagOn('aiExplanations', s) ? (
+            <>
+              <SectionTitle>AI explanations (optional)</SectionTitle>
+              <Card>
+                <label className="check-line">
+                  <input type="checkbox" checked={!!(s.settings.ai && s.settings.ai.enabled)}
+                    onChange={(e) => ctx.mutate((d) => { d.settings.ai = { ...(d.settings.ai || {}), enabled: e.target.checked }; })} />
+                  Let a local model reword the coach's explanations
+                </label>
+                <div className="field">
+                  <label htmlFor="ai-model">Local model name (Ollama on this device)</label>
+                  <input id="ai-model" className="input" placeholder="e.g. a model you have pulled" value={(s.settings.ai && s.settings.ai.model) || ''}
+                    onChange={(e) => ctx.mutate((d) => { d.settings.ai = { ...(d.settings.ai || {}), model: e.target.value.trim() }; })} />
+                </div>
+                <div className="hint">Off by default. Only the numbers behind a suggestion (no name, notes or dates) go to a model running on this device. It can only reword text; it cannot change your plan. The coach works the same without it.</div>
+              </Card>
+            </>
+          ) : null}
+
           <SectionTitle>Tracking</SectionTitle>
           <Card>
             <label className="check-line">
@@ -2396,6 +2416,14 @@ export default function BodyRecompOS({ initialState, store = null, degraded = nu
     window.location.reload();
     return { ok: true };
   };
+  // Optional local-model wording. Never required: if it is off, unset or fails,
+  // the rule-based text is shown.
+  const ai = (state.settings && state.settings.ai) || {};
+  const aiEnabled = flagOn('aiExplanations', state) && ai.enabled === true && !!ai.model;
+  const aiCall = useMemo(() => {
+    if (!aiEnabled) return undefined;
+    try { return ollamaProvider({ baseUrl: ai.baseUrl || 'http://localhost:11434', model: ai.model }); } catch { return undefined; }
+  }, [aiEnabled, ai.baseUrl, ai.model]);
   const exportUnsaved = () => downloadUnsavedState(store || state, { fallbackState: state });
 
   // A new build was downloaded in the background; apply it only when asked.
@@ -2808,7 +2836,7 @@ export default function BodyRecompOS({ initialState, store = null, degraded = nu
         <main className="app-main">
           {tab === 'home' && <HomeTab ctx={ctx} />}
           {tab === 'plan' && <PlanTab ctx={ctx} />}
-          {tab === 'coach' && <CoachTab state={state} setState={setState} today={today} nowMs={Date.now()} />}
+          {tab === 'coach' && <CoachTab state={state} setState={setState} today={today} nowMs={Date.now()} aiEnabled={aiEnabled} callModel={aiCall} />}
           {tab === 'train' && <TrainTab ctx={ctx} />}
           {tab === 'fuel' && <FuelTab ctx={ctx} />}
           {tab === 'body' && <BodyTab ctx={ctx} />}

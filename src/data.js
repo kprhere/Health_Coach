@@ -65,6 +65,10 @@ export const SETTINGS_DEFAULT = {
   onboardedAt: '',                     // set once this person has entered their own profile
   defaultRestartLoadPercent: 70,       // restart load % of old working weight
   // ---- supplement + lab settings (editable in More) ----
+  // Optional AI wording for coach explanations. Off until the person turns it on.
+  // Only a local model (Ollama on this machine) is offered here, so nothing leaves
+  // the device. The coach works fully without it.
+  ai: { enabled: false, baseUrl: 'http://localhost:11434', model: '' },
   supplementsEnabled: false,           // shows the supplement list, doses and supplement habits
   d3Dose: '',                   // total daily D3 (track total across products)
   magElementalMg: '',            // elemental magnesium, not capsule weight

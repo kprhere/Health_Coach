@@ -1214,3 +1214,7 @@ body::before {
   .save-pill.green { padding: 0 8px; }
   .save-pill.green span { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
 }
+
+/* let card headers wrap on narrow phones instead of squeezing the title */
+.card-head { flex-wrap: wrap; row-gap: 8px; }
+.card-head .lead { min-width: 0; flex: 1 1 150px; }

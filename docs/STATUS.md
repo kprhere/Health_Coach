@@ -1,7 +1,7 @@
 # Build status
 
 Implemented = on `feature/multi-user-coach` and tested. In progress = being built. Blocked = needs something outside the code.
-Test suite at last run: 379 node tests and 46+ UI tests passing; production build clean.
+Test suite at last run: 383 node tests and 72 UI tests passing; production build clean.
 
 | # | Item | State | Notes |
 |---|---|---|---|
@@ -15,9 +15,10 @@ Test suite at last run: 379 node tests and 46+ UI tests passing; production buil
 | 8 | Plan import and scan import with review screens | Implemented | OCR/PDF need a real-browser check |
 | 9 | Coach engine + Coach screen + session RPE x minutes inputs | Implemented | reassess on open/data change |
 | 10 | Supabase schema, RLS, sync engine, access codes, edge functions | Implemented, tested in PGlite/mocks | **not applied to the live project** |
-| 11 | Account screen, login, "move my data" flow, cloud sync wiring | In progress | flag `accounts` stays off until verified |
-| 12 | Browser verification, screenshots | Pending | |
-| 13 | Optional AI explanations wiring | Module done, UI toggle pending | flag `aiExplanations` off |
+| 11 | Account screen, login, "move my data" flow, cloud sync wiring | Implemented and wired, **flag `accounts` off** | needs a real Supabase project to verify |
+| 12 | Browser verification, screenshots | Partly done | Phone Home/Train and Coach checked in a browser (docs/screenshots, synthetic data); OCR, real PDFs, offline toggle, iPhone Safari not checked |
+| 13 | Optional AI explanations | Implemented: local model only, per-person opt-in, off by default | hosted model needs the server function, not enabled |
+| 14 | Personal data out of defaults (labs, supplements, schedule, observances) | Implemented | guarded by a test; existing installs keep theirs via migration |
 
 ## Blocked / needs the owner
 - `supabase login` and `supabase link`; applying migrations and auth settings to the hosted project (not done).

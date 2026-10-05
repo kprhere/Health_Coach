@@ -11,7 +11,7 @@ export const FLAGS = {
   planUpload: true,       // plan import with review screen
   adaptiveCoach: true,    // proposals, overrides, undo
   planSetup: true,        // questionnaire + generated plan (in More); working end to end
-  aiExplanations: false,  // optional model-written explanations (also needs per-user opt-in)
+  aiExplanations: true,   // local-model explanations; still off until each person opts in
 };
 
 export const flagOn = (name, state) => {
