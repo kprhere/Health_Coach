@@ -872,6 +872,10 @@ function toBlock(b) {
 
 // Only CONFIRMED days with a weekday become training days; everything else is
 // rest. What was left out is listed in program.source.skipped.
+// Text that reads like an instruction stays on the review screen only; it is
+// never stored in a program.
+const safeNotes = (notes) => (notes || []).filter((n) => !INSTRUCTION_LIKE.test(String(n))).join(' ');
+
 export function toProgram(parsed, { name, importedAt } = {}) {
   const days = {};
   const skipped = [];
@@ -883,7 +887,7 @@ export function toProgram(parsed, { name, importedAt } = {}) {
     if (used.has(d.dow)) { skipped.push({ day: d.dayLabel, reason: 'duplicate-weekday' }); return; }
     used.add(d.dow);
     if (d.restDay || !d.blocks.length) {
-      days[d.dow] = { ...days[d.dow], title: d.title || 'Rest', notes: d.notes.join(' ') };
+      days[d.dow] = { ...days[d.dow], title: d.title || 'Rest', notes: safeNotes(d.notes) };
       return;
     }
     days[d.dow] = {
@@ -894,7 +898,7 @@ export function toProgram(parsed, { name, importedAt } = {}) {
       intensity: 'Moderate',
       blocks: d.blocks.map(toBlock),
       conditioning: [], mobility: [], sport: [],
-      notes: d.notes.join(' '),
+      notes: safeNotes(d.notes),
     };
   });
   return {

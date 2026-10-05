@@ -76,6 +76,8 @@ export function buildProposal(findings, state, asOf, nowMs) {
     windows: windows.length ? windows : [...WINDOWS],
     sourceVersion: inputsHash(state, asOf),
     requiresAcceptance: list.some((f) => f.requiresAcceptance) || changes.some((o) => o.op === 'increase'),
+    // Safety wording a finding wants shown with the proposal (e.g. the pain note).
+    notes: [...new Set(list.map((f) => f.note).filter(Boolean))],
     status: 'pending',
   };
 }
@@ -93,7 +95,9 @@ export function generateProposals(state, asOf, nowMs, { config } = {}) {
   findings.forEach((f) => {
     if (!f.changes.length) { notes.push(f); return; }
     const p = buildProposal(f, state, asOf, nowMs);
-    if (existing.some((e) => e.fingerprint === p.fingerprint && (e.status === 'pending' || e.status === 'applied'))) return;
+    const recentlyDeclined = (e) => (e.status === 'declined' || e.status === 'rejected')
+      && e.resolvedAtMs != null && nowMs != null && (nowMs - e.resolvedAtMs) < cfg.cooldownDays * 86400000;
+    if (existing.some((e) => e.fingerprint === p.fingerprint && (e.status === 'pending' || e.status === 'applied' || recentlyDeclined(e)))) return;
     proposals.push(p);
   });
   return { assessment, findings, proposals, notes };

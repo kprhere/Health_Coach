@@ -238,3 +238,32 @@ test('rejecting or keeping the current plan records it and suppresses an immedia
   const applied = applyProposal(s, p, opts);
   assert.equal(generateProposals(applied.state, ASOF, NOW_MS).proposals.some((x) => x.fingerprint === p.fingerprint), false);
 });
+
+test('a recently declined proposal is not offered again, and a pain proposal carries its safety note', () => {
+  const s = scenario();
+  const first = generateProposals(s, ASOF, NOW_MS).proposals.find((x) => x.rules.includes('low-recovery'));
+  assert.ok(first, 'scenario should yield a low-recovery proposal');
+  const recorded = applyRecord(s, first);
+  const declined = keepCurrent(recorded, first.id, { nowMs: NOW_MS }).state;
+
+  // The next day, inside the cooldown: same finding must not come back.
+  const tomorrow = NOW_MS + 86400000;
+  const again = generateProposals(declined, ASOF, tomorrow).proposals.find((x) => x.fingerprint === first.fingerprint);
+  assert.equal(again, undefined);
+
+  // After the cooldown it may be offered again.
+  const later = NOW_MS + 5 * 86400000;
+  assert.ok(generateProposals(declined, ASOF, later).proposals.some((x) => x.fingerprint === first.fingerprint));
+});
+
+test('buildProposal carries the safety note a finding asks to show', () => {
+  const f = { rule: 'pain-block', kind: 'reduce', targetDates: [MON], note: 'persistent or concerning pain: consider evaluation by a qualified clinician', rationale: 'x', confidence: 'medium', evidence: [], missing: [], changes: [{ op: 'scale-sets', factor: 0.8, minSets: 1 }] };
+  assert.deepEqual(buildProposal(f, scenario(), ASOF, NOW_MS).notes, [f.note]);
+});
+
+function applyRecord(state, p) {
+  const next = structuredClone(state);
+  next.coach = next.coach || { proposals: {}, audit: [], settings: { mode: 'recommend' } };
+  next.coach.proposals[p.id] = p;
+  return next;
+}

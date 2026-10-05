@@ -3,7 +3,7 @@
 // ============================================================
 import React, { useState, useEffect, useRef } from 'react';
 import {
-  Home, CalendarDays, Dumbbell, UtensilsCrossed, ScanLine, ListChecks, BarChart3, Settings2,
+  Home, CalendarDays, Dumbbell, Brain, UtensilsCrossed, ScanLine, ListChecks, BarChart3, Settings2,
   X, Play, RotateCcw, Info, Check, Pill, Sparkles, FlaskConical, AlertTriangle,
 } from 'lucide-react';
 import {
@@ -14,6 +14,7 @@ import { GOAL_TAG_META } from './nutritionEngine.js';
 export const TABS = [
   { key: 'home', label: 'Home', icon: Home },
   { key: 'plan', label: 'Plan', icon: CalendarDays },
+  { key: 'coach', label: 'Coach', icon: Brain, sidebarOnly: true },
   { key: 'train', label: 'Train', icon: Dumbbell },
   { key: 'fuel', label: 'Fuel', icon: UtensilsCrossed },
   { key: 'body', label: 'Body', icon: ScanLine },
@@ -26,7 +27,7 @@ export const TABS = [
 export function BottomNav({ tab, setTab }) {
   return (
     <nav className="bottom-nav" role="tablist" aria-label="Primary">
-      {TABS.map((t) => {
+      {TABS.filter((t) => !t.sidebarOnly || tab === t.key).map((t) => {
         const I = t.icon;
         const active = tab === t.key;
         return (

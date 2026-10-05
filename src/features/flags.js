@@ -7,9 +7,9 @@
 // ============================================================
 export const FLAGS = {
   accounts: false,        // Supabase login + cloud sync (needs a project; see docs/SETUP_SUPABASE.md)
-  scanUpload: false,      // PDF/image scan import with review screen
-  planUpload: false,      // CSV/JSON/PDF plan import with review screen
-  adaptiveCoach: false,   // proposals, overrides, undo
+  scanUpload: true,       // scan import with review screen (parsers + screen tested; OCR needs a browser check)
+  planUpload: true,       // plan import with review screen
+  adaptiveCoach: true,    // proposals, overrides, undo
   planSetup: true,        // questionnaire + generated plan (in More); working end to end
   aiExplanations: false,  // optional model-written explanations (also needs per-user opt-in)
 };

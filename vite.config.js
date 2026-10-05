@@ -7,6 +7,9 @@ import react from '@vitejs/plugin-react'
 export default defineConfig({
   plugins: [react()],
   base: './',
+  // Rendering the whole app in jsdom is slow when the suites run together;
+  // the default 5 s limit made two import-screen tests flaky without any defect.
+  test: { testTimeout: 20000 },
   build: {
     // recharts is a large but audited charting lib, isolated in its own cached chunk.
     chunkSizeWarningLimit: 700,

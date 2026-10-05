@@ -49,6 +49,12 @@ import { SaveStatusPill, SaveFailureBanner, UpdateBanner } from './features/acco
 import { downloadUnsavedState } from './store/quota.js';
 import PlanSetup from './features/onboarding/PlanSetup.jsx';
 import { flagOn } from './features/flags.js';
+import CoachTab from './features/coach/CoachTab.jsx';
+import SessionLoadInputs from './features/coach/SessionLoadInputs.jsx';
+import ScanImport from './features/uploads/ScanImport.jsx';
+import PlanImport from './features/uploads/PlanImport.jsx';
+import { generateProposals, recordProposals, applyProposal } from './coach/proposals.js';
+import { inputsHash } from './coach/metrics.js';
 import { buildBackup, backupFilename, parseBackup, importPreview } from './backup.js';
 import { canAutoPush, deriveSync, pullRemote, pushRemote } from './sync.js';
 import { screenWakeLockSupported, useScreenWakeLock } from './wakeLock.js';
@@ -228,8 +234,17 @@ function HomeTab({ ctx }) {
     { label: 'Sleep', value: sleep || '-', sub: '/7.5', pct: (sleep / 7.5) * 100, color: 'var(--green)' },
   ];
 
+  const pendingCoach = flagOn('adaptiveCoach', s)
+    ? Object.values((s.coach && s.coach.proposals) || {}).filter((p) => p.status === 'pending').length : 0;
+
   return (
     <div>
+      {pendingCoach ? (
+        <Banner tone="amber" icon={Sparkles}>
+          <b>Your coach has {pendingCoach} suggestion{pendingCoach === 1 ? '' : 's'} for upcoming sessions.</b> Nothing changes until you accept.
+          <div className="btn-row" style={{ marginTop: 8 }}><button className="btn xs" onClick={() => ctx.goto('coach')}>Review</button></div>
+        </Banner>
+      ) : null}
       <HeroGauge
         greeting={`${greetWord}, ${firstName}`}
         score={score.score}
@@ -672,6 +687,11 @@ export function TrainTab({ ctx }) {
               <Check size={15} /> {session.completed ? 'Completed' : 'Mark complete'}
             </button>
           </div>
+          {session.completed ? (
+            <SessionLoadInputs session={session} onChange={(next) => ctx.patchSession(date, (x) => {
+              ['sessionRpe', 'durationMin'].forEach((k) => { if (next[k] === undefined) delete x[k]; else x[k] = next[k]; });
+            })} />
+          ) : null}
 
           {(plan.conditioning.length || plan.mobility.length || plan.sport.length) ? (
             <>
@@ -969,6 +989,7 @@ function BodyTab({ ctx }) {
   const scanCountdown = nextScanCountdown(s);
   const scanVerdict = latest && scanCountdown.next && latest.date >= scanCountdown.next ? postScanCoaching(s) : null;
   const [editing, setEditing] = useState(null); // scan object or null
+  const [importingScan, setImportingScan] = useState(false);
   const [draft, setDraft] = useState(BLANK_SCAN());
 
   const series = scans.map((sc) => ({
@@ -1020,6 +1041,12 @@ function BodyTab({ ctx }) {
 
   return (
     <div>
+      {importingScan ? (
+        <Sheet title="Import a scan" onClose={() => setImportingScan(false)}>
+          <ScanImport state={s} units={s.settings.units === 'metric' ? 'metric' : 'imperial'} onCancel={() => setImportingScan(false)}
+            onSave={(record, meta) => { ctx.saveImportedScan(record, meta); setImportingScan(false); }} />
+        </Sheet>
+      ) : null}
       <div className="page-title">Body</div>
       <p className="page-sub">{scans.length ? `Your body composition scans. ${scans.length} recorded so far.` : 'No scans yet. Add your first one below to unlock trends and scan-driven targets.'}</p>
 
@@ -1087,7 +1114,7 @@ function BodyTab({ ctx }) {
         </div>
 
         <div>
-          <SectionTitle right={<button className="btn xs primary" onClick={openAdd}><Plus size={13} /> Scan</button>}>Previous vs latest</SectionTitle>
+          <SectionTitle right={<span className="btn-row">{flagOn('scanUpload', s) ? <button className="btn xs" onClick={() => setImportingScan(true)}><Upload size={13} /> From file</button> : null}<button className="btn xs primary" onClick={openAdd}><Plus size={13} /> Scan</button></span>}>Previous vs latest</SectionTitle>
           <Card>
             <div className="cmp" style={{ color: 'var(--faint)' }}>
               <div className="cmp-lab" style={{ fontFamily: 'var(--mono)', fontSize: 10, textTransform: 'uppercase' }}>Metric</div>
@@ -1827,6 +1854,7 @@ function MoreTab({ ctx }) {
   const s = ctx.state;
   const [importErr, setImportErr] = useState('');
   const [planSheet, setPlanSheet] = useState(false);
+  const [planImport, setPlanImport] = useState(false);
 
   const [pending, setPending] = useState(null); // a parsed, verified file awaiting a merge/replace choice
   const [confirmText, setConfirmText] = useState('');
@@ -1955,8 +1983,17 @@ function MoreTab({ ctx }) {
             {flagOn('planSetup', s) ? (
               <button className="btn sm" onClick={() => setPlanSheet(true)}><Sparkles size={14} /> Build a plan from my answers</button>
             ) : <div className="hint">Plan builder is not enabled.</div>}
+            {flagOn('planUpload', s) ? (
+              <button className="btn sm" style={{ marginLeft: 8 }} onClick={() => setPlanImport(true)}><Upload size={14} /> Import a plan</button>
+            ) : null}
             <div className="hint" style={{ marginTop: 8 }}>You review any proposed plan before it replaces yours. The previous plan is kept as a version, and logged workouts are never changed.</div>
           </Card>
+          {planImport ? (
+            <Sheet title="Import a plan" onClose={() => setPlanImport(false)}>
+              <PlanImport state={s} onCancel={() => setPlanImport(false)}
+                onSave={(program, meta) => { ctx.acceptProgram(program, { ...meta, source: 'import', fileSha256: meta && meta.fileSha256 }); setPlanImport(false); }} />
+            </Sheet>
+          ) : null}
           {planSheet ? (
             <Sheet title="Build a plan" onClose={() => setPlanSheet(false)}>
               <PlanSetup state={s} onCancel={() => setPlanSheet(false)} onKeep={() => setPlanSheet(false)}
@@ -2271,6 +2308,26 @@ export default function BodyRecompOS({ initialState, store = null, degraded = nu
     apply(store.getSaveStatus());
     return store.subscribe(apply);
   }, [store]);
+  const coachInputs = flagOn('adaptiveCoach', state) ? inputsHash(state, todayKey()) : '';
+  useEffect(() => {
+    if (!coachInputs) return;
+    setState((prev) => {
+      const nowMs = Date.now();
+      const asOf = todayKey();
+      const { proposals } = generateProposals(prev, asOf, nowMs);
+      if (!proposals.length) return prev;
+      const auto = prev.coach && prev.coach.settings && prev.coach.settings.mode === 'auto';
+      let next = prev;
+      proposals.forEach((p) => {
+        if (auto) {
+          const res = applyProposal(next, p, { todayKey: asOf, nowMs, mode: 'auto' });
+          if (res.ok) { next = res.state; return; }
+        }
+        next = recordProposals(next, p);
+      });
+      return next;
+    });
+  }, [coachInputs]); // eslint-disable-line react-hooks/exhaustive-deps
   const exportUnsaved = () => downloadUnsavedState(store || state, { fallbackState: state });
 
   // A new build was downloaded in the background; apply it only when asked.
@@ -2449,6 +2506,15 @@ export default function BodyRecompOS({ initialState, store = null, degraded = nu
     }
     if (meta.history) d.importHistory = [...(d.importHistory || []), { ...meta.history, acceptedOn: today }];
   });
+  const saveImportedScan = (record, meta = {}) => {
+    mutate((d) => {
+      const id = record.id || `scan-${Date.now()}`;
+      d.bodyScans = [...(d.bodyScans || []).filter((x) => x.id !== id), { ...record, id }];
+      d.importHistory = [...(d.importHistory || []), { kind: 'scan', fileSha256: (meta && meta.fileSha256) || null, acceptedOn: todayKey(), scanId: id }];
+    });
+    // The original stays private on this device (and goes to the account store later).
+    if (store && meta && meta.file && meta.fileSha256) store.putFile(meta.fileSha256, meta.file, { kind: 'scan', name: meta.file.name }).catch(() => {});
+  };
   const previewMerge = (obj) => mergeSyncedState(state, obj);
   const mergeImport = (obj) => setState((prev) => { snapshot('before-import-merge', prev); return mergeSyncedState(prev, obj); });
   // The file records the checksum of exactly what it holds, and is only offered
@@ -2614,7 +2680,7 @@ export default function BodyRecompOS({ initialState, store = null, degraded = nu
   const ctx = {
     state, setState, mutate, patchSession, mutateEntry, getSession,
     setMeal, setWatch, toggleHabit, setHabits, toggleSupplement, toggleBeverage, toggleActivity, setActivityField, setSatMode, setDayOverride, swapWorkoutDates, clearWorkoutSwap,
-    addScan, updateScan, deleteScan, setProfile, setSetting, setRestart, setExerciseNote, saveCustomExercise, deleteCustomExercise, restartCalendar, autoScanDate, recalcNow, replaceState, acceptProgram, previewMerge, mergeImport, exportBackup, resetAll, loadDemo,
+    addScan, updateScan, deleteScan, setProfile, setSetting, setRestart, setExerciseNote, saveCustomExercise, deleteCustomExercise, restartCalendar, autoScanDate, recalcNow, replaceState, acceptProgram, saveImportedScan, previewMerge, mergeImport, exportBackup, resetAll, loadDemo,
     doPull, doPush, syncStatus, syncBusy, syncPhase, syncLastAt, getSyncSecret,
     setSyncSecret: (value) => { setSyncSecret(value); setSyncCredentialVersion((version) => version + 1); },
     selDate, setSelDate, goto: setTab,
@@ -2634,7 +2700,7 @@ export default function BodyRecompOS({ initialState, store = null, degraded = nu
     );
   }
 
-  const tabTitle = { home: 'Dashboard', plan: 'Planner', train: 'Train', fuel: 'Fuel', body: 'Body', habits: 'Habits', stats: 'Stats', more: 'More' }[tab];
+  const tabTitle = { home: 'Dashboard', plan: 'Planner', coach: 'Coach', train: 'Train', fuel: 'Fuel', body: 'Body', habits: 'Habits', stats: 'Stats', more: 'More' }[tab];
 
   return (
     <div className="app">
@@ -2674,6 +2740,7 @@ export default function BodyRecompOS({ initialState, store = null, degraded = nu
         <main className="app-main">
           {tab === 'home' && <HomeTab ctx={ctx} />}
           {tab === 'plan' && <PlanTab ctx={ctx} />}
+          {tab === 'coach' && <CoachTab state={state} setState={setState} today={today} nowMs={Date.now()} />}
           {tab === 'train' && <TrainTab ctx={ctx} />}
           {tab === 'fuel' && <FuelTab ctx={ctx} />}
           {tab === 'body' && <BodyTab ctx={ctx} />}
