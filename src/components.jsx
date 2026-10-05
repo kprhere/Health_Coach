@@ -150,7 +150,7 @@ export function TargetsFromScan({ profile, targets, dayLabel }) {
       <div className="tfs-head">
         <div>
           <div className="tfs-title">Today's targets</div>
-          <div className="tfs-sub">{dayLabel} · built from your {profile.scanDate || 'latest'} scan</div>
+          <div className="tfs-sub">{dayLabel} · {profile.generic ? 'generic estimate: add your weight and body fat in Body' : `built from your ${profile.scanDate || 'latest'} scan`}</div>
         </div>
         <span className="chip cyan">{profile.deficitPct}% cut</span>
       </div>

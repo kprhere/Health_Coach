@@ -84,3 +84,25 @@ test('accepting a generated plan keeps the old plan as a version and never touch
   assert.ok(plan.rationale.length > 0);
   assert.equal(s.workoutSessions['2026-01-06'].notes, 'kept');
 });
+
+test('a new account shows no supplement habits, no lab values and flags generic nutrition targets', async () => {
+  const { habitStatus, nutritionProfile } = await import('../src/helpers.js');
+  const s = defaultState();
+  const keys = Object.keys(habitStatus('2026-08-05', s).status);
+  for (const k of ['creatine', 'fishoil', 'vitd', 'magnesium', 'biotin', 'swim', 'badminton', 'thu_fast', 'sat_veg']) {
+    assert.equal(keys.includes(k), false, `${k} should not apply to a new account`);
+  }
+  const p = nutritionProfile(s);
+  assert.equal(p.generic, true);
+  assert.ok(/generic estimates/i.test(p.explain[0]));
+  assert.equal(p.explain.join(' ').match(/LDL|badminton|HbA1c/i), null);
+  s.profile.startWeightLb = 150;
+  assert.equal(nutritionProfile(s).generic, false);
+});
+
+test('an existing install keeps its supplement tracking through migration', () => {
+  const old = defaultState();
+  old.version = 5; old.profile.name = 'Sample Person';
+  delete old.settings.supplementsEnabled;
+  assert.equal(migrateState(JSON.parse(JSON.stringify(old))).settings.supplementsEnabled, true);
+});

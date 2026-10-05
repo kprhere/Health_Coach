@@ -1209,3 +1209,8 @@ body::before {
 @keyframes spin { to { transform: rotate(360deg); } }
 .toast-actions { display: inline-flex; gap: 8px; margin-left: 10px; }
 .boot-screen { min-height: 100dvh; display: grid; place-items: center; color: var(--muted); font-family: var(--mono); font-size: var(--fs-sm); }
+
+@media (max-width: 480px) {
+  .save-pill.green { padding: 0 8px; }
+  .save-pill.green span { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+}

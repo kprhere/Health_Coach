@@ -245,6 +245,7 @@ const MIGRATIONS = {
       fill('puratasiStartDate', '2026-09-17');
       fill('puratasiEndDate', '2026-10-17');
       fill('timezone', 'America/Chicago');
+      fill('supplementsEnabled', true);
       fill('d3Dose', '2000 IU');
       fill('magElementalMg', '200 mg');
       fill('biotinDose', '50,000 mcg');
@@ -1196,7 +1197,15 @@ export function habitApplicability(key, state) {
   const flags = dayFlags(key, state);
   const tags = scheduleTagsOf(state);
   const satMode = (state.saturdayMode && state.saturdayMode[key]) || 'class';
+  const supps = !!(state.settings && state.settings.supplementsEnabled);
+  const act = (state.activity && state.activity[key]) || {};
+  // Until a person has told the app which days they swim or play, those habits
+  // only count on days they actually logged them.
+  const hasSport = (list) => list.length > 0;
   return {
+    creatine: supps, fishoil: supps, vitd: supps, magnesium: supps, biotin: supps,
+    swim: hasSport(tags.swimDows) || !!act.swim,
+    badminton: hasSport(tags.badmintonDows) || !!act.badminton,
     thu_fast: flags.fastDay,
     thu_veg: tags.fastDow === dow,
     sat_veg: tags.vegDow === dow,

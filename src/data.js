@@ -65,6 +65,7 @@ export const SETTINGS_DEFAULT = {
   onboardedAt: '',                     // set once this person has entered their own profile
   defaultRestartLoadPercent: 70,       // restart load % of old working weight
   // ---- supplement + lab settings (editable in More) ----
+  supplementsEnabled: false,           // shows the supplement list, doses and supplement habits
   d3Dose: '',                   // total daily D3 (track total across products)
   magElementalMg: '',            // elemental magnesium, not capsule weight
   biotinDose: '',            // high-dose
@@ -463,7 +464,7 @@ export const HABITS = [
   { key: 'calories_ok', label: 'Calories within target', group: 'Nutrition' },
   { key: 'steps_10k', label: '10,000 steps', group: 'Activity' },
   { key: 'zone2_walk', label: "Zone 2 walk (today's scheduled minutes)", group: 'Activity' },
-  { key: 'water_hit', label: '3.5-4 L water', group: 'Nutrition' },
+  { key: 'water_hit', label: 'Water goal reached', group: 'Nutrition' },
   { key: 'sleep_75', label: 'Sleep 7.5 hours', group: 'Recovery' },
   { key: 'creatine', label: 'Creatine', group: 'Supplements' },
   { key: 'fishoil', label: 'Fish oil', group: 'Supplements' },

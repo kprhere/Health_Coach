@@ -77,9 +77,16 @@ export function nutritionProfile(state) {
   const goalFat = profile.goalFatLossLb || 20;
   const weeksToGoal = lbPerWeek > 0 ? Math.round(goalFat / lbPerWeek) : null;
 
+  const genericNote = (!scan && !profile.startWeightLb)
+    ? ['No weight or body fat entered yet, so these are generic estimates, not your numbers. Add a scan in Body to personalise them.']
+    : [];
+
   return {
     scanDate: scan?.date || null,
     hasScan: !!scan,
+    // True when no weight or body fat has been entered: every number below is
+    // then a generic estimate, and the UI says so.
+    generic: !scan && !profile.startWeightLb,
     bw, bfPct, leanMass, bmr, tdee,
     deficitPct, baseCals, calFloor,
     protein, fat, waterL,
@@ -89,12 +96,13 @@ export function nutritionProfile(state) {
     goalWaistIn: profile.goalWaistIn || null,
     // human-readable rationale lines for the "targets from your scan" card
     explain: [
+      ...genericNote,
       activityFactor > 0
-        ? `Maintenance ${tdee} kcal is your ${bmr} BMR x ${activityFactor} activity, checked against real scale movement (the scan's own TEE assumes badminton you are not playing).`
+        ? `Maintenance ${tdee} kcal is your ${bmr} BMR x ${activityFactor} activity, checked against real scale movement.`
         : `Maintenance ${tdee} kcal comes from your ${scan?.date || 'latest'} scan (TEE${scan?.tee ? '' : ' est.'}).`,
-      `A ${deficitPct}% cut sets ${baseCals} kcal/day — about ${lbPerWeek} lb/week, a hair-safe pace.`,
-      `Protein ${protein} g is 1.45 g per lb of your ${leanMass} lb lean mass, to hold muscle and hair.`,
-      `Fat ${fat} g (~0.35 g/lb) supports hormones while staying LDL-friendly; carbs fill the rest.`,
+      `A ${deficitPct}% cut sets ${baseCals} kcal/day — about ${lbPerWeek} lb/week, a steady, sustainable pace.`,
+      `Protein ${protein} g is 1.45 g per lb of your ${leanMass} lb lean mass, to hold muscle in a deficit.`,
+      `Fat ${fat} g (~0.35 g/lb) supports hormones; carbs fill the rest.`,
     ],
   };
 }

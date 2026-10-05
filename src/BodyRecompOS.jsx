@@ -55,6 +55,13 @@ import ScanImport from './features/uploads/ScanImport.jsx';
 import PlanImport from './features/uploads/PlanImport.jsx';
 import { generateProposals, recordProposals, applyProposal } from './coach/proposals.js';
 import { inputsHash } from './coach/metrics.js';
+import { useCloudSync } from './cloud/useCloudSync.js';
+import { setActiveAccountId } from './cloud/activeAccount.js';
+import { createCloudClient } from './cloud/client.js';
+import { createLocalStore } from './store/localStore.js';
+import AccountPanel from './features/account/AccountPanel.jsx';
+import LoginScreen from './features/account/LoginScreen.jsx';
+import MoveDataFlow from './features/account/MoveDataFlow.jsx';
 import { buildBackup, backupFilename, parseBackup, importPreview } from './backup.js';
 import { canAutoPush, deriveSync, pullRemote, pushRemote } from './sync.js';
 import { screenWakeLockSupported, useScreenWakeLock } from './wakeLock.js';
@@ -316,7 +323,7 @@ function HomeTab({ ctx }) {
             </Card>
             <Card className="pad-sm">
               <div className="block-tag"><span className="bar" />Supplements</div>
-              {SUPPLEMENTS.map((sp) => (
+              {!s.settings.supplementsEnabled ? <div className="hint">Supplement tracking is off. Turn it on in More if you take any.</div> : SUPPLEMENTS.map((sp) => (
                 <div className="row" key={sp.key}>
                   <div className="row-main"><div className="row-title">{sp.name}</div><div className="row-sub">{sp.dose} · {sp.timing}</div></div>
                 </div>
@@ -338,8 +345,7 @@ function HomeTab({ ctx }) {
             if (s.settings.labWarningOn && dtl != null && dtl >= 0 && dtl <= 7) tips.push({ tone: 'amber', text: `Blood work in ${dtl} day${dtl === 1 ? '' : 's'}. High-dose biotin can skew results, pause it and tell the lab.` });
             // evergreen guidance only fills the leftover slots, so live/actionable tips win the top
             const evergreen = [
-              { tone: 'green', text: 'LDL 123 and HbA1c 5.6 are the watch items: keep paneer measured, skip fried food and sugary drinks, pair carbs with protein.' },
-              { tone: 'violet', text: 'Protect hair: hold protein steady and avoid crash dieting through the fat-loss phase.' },
+              { tone: 'green', text: 'Pair carbs with protein, keep fried food and sugary drinks occasional, and hold protein steady day to day.' },
             ];
             for (const e of evergreen) { if (tips.length >= 5) break; tips.push(e); }
             return (
@@ -904,7 +910,7 @@ function FuelTab({ ctx }) {
             </>
           ) : null}
 
-          {(() => {
+          {!s.settings.supplementsEnabled ? null : (() => {
             const supMap = (s.supplementLogs && s.supplementLogs[date]) || {};
             const dtl = daysToLab(s);
             const showBiotinWarn = s.settings.labWarningOn && (dtl == null || dtl >= 0);
@@ -1132,8 +1138,12 @@ function BodyTab({ ctx }) {
             <div className="hint" style={{ marginTop: 8 }}>{prev && latest ? `Since last scan: ${Math.round((latest.weight - prev.weight) * 10) / 10} lb weight, ${Math.round((latest.bodyFatPct - prev.bodyFatPct) * 10) / 10}% body fat.` : 'Add another scan to see month-over-month change.'}</div>
           </Card>
 
-          <SectionTitle>Labs</SectionTitle>
-          <Card><LabsCard labs={LABS} /></Card>
+          {s.settings.supplementsEnabled ? (
+            <>
+              <SectionTitle>Labs</SectionTitle>
+              <Card><LabsCard labs={LABS} /></Card>
+            </>
+          ) : null}
 
           <SectionTitle>All scans</SectionTitle>
           <Card>
@@ -1855,6 +1865,7 @@ function MoreTab({ ctx }) {
   const [importErr, setImportErr] = useState('');
   const [planSheet, setPlanSheet] = useState(false);
   const [planImport, setPlanImport] = useState(false);
+  const [login, setLogin] = useState(false);
 
   const [pending, setPending] = useState(null); // a parsed, verified file awaiting a merge/replace choice
   const [confirmText, setConfirmText] = useState('');
@@ -1977,6 +1988,24 @@ function MoreTab({ ctx }) {
             </button>
           </Card>
 
+          <SectionTitle>Account</SectionTitle>
+          <AccountPanel state={s} enabled={flagOn('accounts', s)} accountInfo={ctx.accountInfo} cloud={ctx.cloud}
+            saveStatus={ctx.saveInfo.status} outbox={ctx.store && ctx.store.outbox}
+            onExport={ctx.exportBackup} onExportAccount={ctx.exportBackup}
+            onDeleteAccount={ctx.deleteAccount}
+            onRestoreSnapshot={(key) => { const entry = readSnapshot(key); if (entry) ctx.replaceState(entry.state); }}
+            onOpenLogin={() => setLogin(true)} onStartMove={ctx.startMove}
+            onSignedOut={() => { setActiveAccountId('local'); window.location.reload(); }} />
+          {login ? (
+            <Sheet title="Sign in" onClose={() => setLogin(false)}>
+              <LoginScreen cloud={ctx.cloud} onCancel={() => setLogin(false)}
+                onSignedIn={(result) => {
+                  setLogin(false);
+                  if (result && result.switchRequired) { setActiveAccountId(result.accountId); window.location.reload(); }
+                }} />
+            </Sheet>
+          ) : null}
+
           <SectionTitle>Plan</SectionTitle>
           <Card>
             <div className="row-sub" style={{ marginBottom: 8 }}>Current: {programOf(s).name || 'Custom plan'}</div>
@@ -1988,6 +2017,15 @@ function MoreTab({ ctx }) {
             ) : null}
             <div className="hint" style={{ marginTop: 8 }}>You review any proposed plan before it replaces yours. The previous plan is kept as a version, and logged workouts are never changed.</div>
           </Card>
+          <SectionTitle>Tracking</SectionTitle>
+          <Card>
+            <label className="check-line">
+              <input type="checkbox" checked={!!s.settings.supplementsEnabled} onChange={(e) => ctx.setSetting('supplementsEnabled', e.target.checked)} />
+              Track supplements, lab reminders and hair-health checks
+            </label>
+            <div className="hint">Off by default. Nothing about supplements or lab values is shown until you turn this on.</div>
+          </Card>
+
           {planImport ? (
             <Sheet title="Import a plan" onClose={() => setPlanImport(false)}>
               <PlanImport state={s} onCancel={() => setPlanImport(false)}
@@ -2268,7 +2306,7 @@ function Onboarding({ onDone, onRestore }) {
   );
 }
 
-export default function BodyRecompOS({ initialState, store = null, degraded = null } = {}) {
+export default function BodyRecompOS({ initialState, store = null, degraded = null, accountId = 'local' } = {}) {
   const [state, setState] = useState(() => initialState || loadState());
   const [tab, setTab] = useState('home');
   const [selDate, setSelDate] = useState(todayKey());
@@ -2286,6 +2324,19 @@ export default function BodyRecompOS({ initialState, store = null, degraded = nu
   const [saveFailure, setSaveFailure] = useState(null);
   const [saveInfo, setSaveInfo] = useState({ status: 'saved', pending: 0 });
   const lastCommitted = useRef(state);
+
+  // Optional account sync. Off unless the `accounts` flag is on AND the person
+  // has signed in; signing in uploads nothing until they choose to move data.
+  const cloud = useCloudSync({
+    url: import.meta.env.VITE_SUPABASE_URL,
+    anonKey: import.meta.env.VITE_SUPABASE_ANON_KEY,
+    enabled: flagOn('accounts', state),
+    accountId,
+    store,
+    onRemoteApplied: (remote) => { lastCommitted.current = remote; setState(remote); },
+    onLoggedOut: () => {},
+  });
+  const accountMode = !!(cloud.session && cloud.session.userId === accountId);
   useEffect(() => {
     if (!store) {
       const res = saveState(state);
@@ -2296,9 +2347,11 @@ export default function BodyRecompOS({ initialState, store = null, degraded = nu
     const previous = lastCommitted.current;
     lastCommitted.current = state;
     if (previous === state) return;
-    store.commit(previous, state, { accountMode: false });
-    saveState(state);
-  }, [state, store]);
+    store.commit(previous, state, { accountMode });
+    // The device-local mirror is only for the local account; an account's data
+    // is never written into another account's localStorage copy.
+    if (accountId === 'local') saveState(state);
+  }, [state, store]); // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => {
     if (!store) return undefined;
     const apply = (s) => {
@@ -2328,6 +2381,21 @@ export default function BodyRecompOS({ initialState, store = null, degraded = nu
       return next;
     });
   }, [coachInputs]); // eslint-disable-line react-hooks/exhaustive-deps
+  const [move, setMove] = useState(null);
+  const startMove = async () => {
+    let localState = null;
+    try { const local = await createLocalStore('local').load(); localState = local.state; } catch { localState = null; }
+    setMove({ localState: localState || loadState() });
+  };
+  const deleteAccount = async () => {
+    const client = createCloudClient({ url: import.meta.env.VITE_SUPABASE_URL, anonKey: import.meta.env.VITE_SUPABASE_ANON_KEY });
+    const res = await client.deleteMyAccount();
+    if (res && res.ok === false) return res;
+    try { if (store) await store.outbox.clearAccount(accountId); } catch { /* the account is already gone */ }
+    setActiveAccountId('local');
+    window.location.reload();
+    return { ok: true };
+  };
   const exportUnsaved = () => downloadUnsavedState(store || state, { fallbackState: state });
 
   // A new build was downloaded in the background; apply it only when asked.
@@ -2680,7 +2748,7 @@ export default function BodyRecompOS({ initialState, store = null, degraded = nu
   const ctx = {
     state, setState, mutate, patchSession, mutateEntry, getSession,
     setMeal, setWatch, toggleHabit, setHabits, toggleSupplement, toggleBeverage, toggleActivity, setActivityField, setSatMode, setDayOverride, swapWorkoutDates, clearWorkoutSwap,
-    addScan, updateScan, deleteScan, setProfile, setSetting, setRestart, setExerciseNote, saveCustomExercise, deleteCustomExercise, restartCalendar, autoScanDate, recalcNow, replaceState, acceptProgram, saveImportedScan, previewMerge, mergeImport, exportBackup, resetAll, loadDemo,
+    addScan, updateScan, deleteScan, setProfile, setSetting, setRestart, setExerciseNote, saveCustomExercise, deleteCustomExercise, restartCalendar, autoScanDate, recalcNow, replaceState, cloud, accountId, accountInfo: { accountId, label: (cloud.session && cloud.session.userTag) || (accountId === 'local' ? 'This device' : accountId), userTag: cloud.session && cloud.session.userTag }, store, saveInfo, startMove, deleteAccount, acceptProgram, saveImportedScan, previewMerge, mergeImport, exportBackup, resetAll, loadDemo,
     doPull, doPush, syncStatus, syncBusy, syncPhase, syncLastAt, getSyncSecret,
     setSyncSecret: (value) => { setSyncSecret(value); setSyncCredentialVersion((version) => version + 1); },
     selDate, setSelDate, goto: setTab,
@@ -2730,7 +2798,7 @@ export default function BodyRecompOS({ initialState, store = null, degraded = nu
               <span>{phase.name} · Week {phase.programWeek} · Day {phase.programDay}</span>
             </div>
           </div>
-          <SaveStatusPill status={saveInfo.status} pending={saveInfo.pending} accountMode={false} />
+          <SaveStatusPill status={saveInfo.status} pending={cloud.pendingCount || saveInfo.pending} accountMode={accountMode} online={cloud.status !== 'offline'} />
           <div className="score-chip">
             <span className="day-badge" title="Program day (from your start date)">D{phase.programDay}</span>
             <MetricRing pct={score} value={score} color={score >= 70 ? 'var(--green)' : score >= 45 ? 'var(--cyan)' : 'var(--amber)'} size={40} stroke={5} />
@@ -2750,6 +2818,16 @@ export default function BodyRecompOS({ initialState, store = null, degraded = nu
         </main>
       </div>
       <BottomNav tab={tab} setTab={setTab} />
+      {move ? (
+        <Sheet title="Move my data to this account" onClose={() => setMove(null)}>
+          <MoveDataFlow localState={move.localState}
+            destination={{ accountId, label: (cloud.session && cloud.session.userTag) || accountId, userTag: cloud.session && cloud.session.userTag }}
+            destStore={store} cloud={cloud}
+            sameOwner={!!(state.settings.cloudMigration && state.settings.cloudMigration.accountId === accountId)}
+            onComplete={(completion) => setState((prev) => ({ ...prev, settings: { ...prev.settings, cloudMigration: completion } }))}
+            onCancel={() => setMove(null)} onExport={exportBackup} />
+        </Sheet>
+      ) : null}
       {noMoonReminder ? (
         <Sheet title="No-moon fast coming up" onClose={() => setNoMoonReminder(null)}>
           <Banner tone="amber" icon={Moon}>
