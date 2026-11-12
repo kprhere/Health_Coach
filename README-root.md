@@ -19,7 +19,7 @@ The repo includes vercel.json with an SPA rewrite. Import the project in Vercel 
 
 ## Why this split
 
-4-day Upper / Lower hybrid. After a 40-day layoff and in a fat-loss deficit, recovery is the limiter, so a 6-day PPL is too much volume too soon. Upper / Lower hits every muscle about twice a week at a volume you can recover from, which is what holds muscle while losing fat. Tuesday and Thursday evening swims plus optional morning badminton already cover conditioning. Thursday stays a true fast + recovery day. Saturday is the BodyBalance mobility slot with a full lifting fallback. This is a restart phase: lower load, better form, RPE control, no failure, roughly 70% of old working weight to start. It is not a beginner rehab plan. Every non-fasting lifting day has 7-8 blocks, and both upper days include direct biceps and direct triceps as their own sets plus an arm finisher.
+4-day Upper / Lower hybrid. After a 40-day layoff and in a fat-loss deficit, recovery is the limiter, so a 6-day PPL is too much volume too soon. Upper / Lower hits every muscle about twice a week at a volume you can recover from, which is what holds muscle while losing fat. Tuesday and Thursday evening swims plus optional morning badminton already cover conditioning. Thursday is a fed arms, shoulders and abs day (the fast was retired in state v5; see README.md). Saturday is the BodyBalance mobility slot with a full lifting fallback. This is a restart phase: lower load, better form, RPE control, no failure, roughly 70% of old working weight to start. It is not a beginner rehab plan. Every non-fasting lifting day has 7-8 blocks, and both upper days include direct biceps and direct triceps as their own sets plus an arm finisher.
 
 ## Restart load
 

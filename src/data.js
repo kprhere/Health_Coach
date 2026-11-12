@@ -6,27 +6,40 @@
 
 export const STORAGE_KEY = 'recomp-os-v1';
 
-// ---- profile / goal seeded from the latest Evolt 360 scan (07-08-2026) ----
+// ---- profile / goal reset from the 09-25-2026 Evolt 360 scan ----
+// Goal is whole-body definition: about 10% body fat while holding the 144 lb
+// of lean mass. 144.0 / 0.90 = 160 lb, so fat mass falls from 47.6 to about
+// 16 lb, a loss of roughly 32 lb. See DEFINITION_MILESTONES for the stages.
 export const PROFILE_DEFAULT = {
   name: 'Krishnaprasath',
   heightIn: 71,
   age: 34,
   gender: 'Male',
-  startWeightLb: 191.1,
-  startBodyFatPct: 24.3,
-  startFatMassLb: 46.5,
-  startWaistIn: 37.2,
-  goalBodyFatPct: 15,
-  goalFatLossLb: 22,
+  startWeightLb: 191.6,
+  startBodyFatPct: 24.8,
+  startFatMassLb: 47.6,
+  startWaistIn: 37.5,
+  goalBodyFatPct: 10,
+  goalFatLossLb: 32,
   goalWaistIn: 33,
-  timelineMonths: 11,
+  timelineMonths: 9,
 };
+
+// What becomes visible at each body-fat level for a man, used by the goal card.
+// Fat leaves in the body's own order; lower belly and thighs usually go last,
+// so training a spot shapes the muscle underneath but does not remove its fat.
+export const DEFINITION_MILESTONES = [
+  { bf: 15, label: 'Shoulders and arms take shape, upper abs faint' },
+  { bf: 12, label: 'Abs visible, arm separation, outer thigh line' },
+  { bf: 10, label: 'Full six-pack, thigh muscles separate' },
+  { bf: 9, label: 'Arm and lower-leg veins, inner thigh sharp' },
+];
 
 export const SETTINGS_DEFAULT = {
   units: 'imperial',
   proteinTarget: 205,
   waterTargetL: 3.75,
-  stepsTarget: 10000,
+  stepsTarget: 12000,
   sleepTargetH: 7.5,
   deficitPercent: 15,                  // fat-loss deficit vs maintenance (drives all calorie + food targets)
   // Maintenance = BMR x this, and it OVERRIDES the scan's own TEE. The Evolt
@@ -83,11 +96,13 @@ export const PROGRAM_RATIONALE =
   'Chosen split: 4-day Upper / Lower hybrid around swimming and one mobility class. ' +
   'After a 40-day layoff and while eating in a fat-loss deficit, recovery is the limiter, so a 6-day PPL is too much. ' +
   'Upper / Lower hits every muscle about 2x per week at moderate volume, which is the sweet spot for holding muscle while losing fat. ' +
-  'Conditioning is now SCHEDULED, not assumed: five zone 2 walks (20 min after Mon and Fri lifts, 20 min Wed, 25 min Sat, 15 min Sun) plus the Tuesday and Thursday swims. ' +
-  'Wednesday also carries the single hard cardio session of the week, 8 x 1 min bike intervals. It is there because Wednesday has no lifting and Thursday is a fast plus easy swim, so it costs the least recovery, and because zone 2 walking alone does not move VO2 max — which this app tracks but nothing else addresses. Bike over sprints keeps it non-impact. Cut this first if recovery slips. ' +
+  'Conditioning is now SCHEDULED, not assumed: five zone 2 walks (20 min after Mon and Fri lifts, 20 min Wed, 25 min Sat, 15 min Sun) plus the Tuesday and Thursday swims, and a 12,000 step target. ' +
+  'Wednesday also carries the single hard cardio session of the week, 8 x 1 min bike intervals. It sits there because Wednesday has no lifting, and zone 2 walking alone does not move VO2 max. Bike over sprints keeps it non-impact. Cut this first if recovery slips. ' +
   'The earlier version leaned on optional morning badminton to cover conditioning. That badminton never happened, so the real activity level came in far below what the Evolt scan assumed and the plan quietly stopped working. ' +
   'Badminton is still welcome as a bonus and simply replaces that day\'s walk when it happens, but nothing in the plan depends on it any more. ' +
-  'Thursday stays a true recovery day (fast + no heavy lifting + swim). Saturday is the BodyBalance mobility slot with a lifting fallback.';
+  'Goal: whole-body definition at about 10% body fat. The Thursday fast is gone. Thursday is now a fed arms, shoulders and abs session with the evening swim, so arms get a third direct day and abs are loaded three times a week. ' +
+  'The 09-25-2026 scan flagged upper and lower body as unbalanced and the left leg slightly behind, so both leg days add inner-thigh work and start single-leg sets on the left. ' +
+  'Saturday is the BodyBalance mobility slot with a lifting fallback.';
 
 // ============================================================
 // EXERCISE LIBRARY
@@ -138,6 +153,7 @@ export const EXERCISES = {
   'Dumbbell Curl': X('Biceps', 'Forearms', 'Dumbbells', 'Beginner', 'Balanced biceps', 'Cable Curl', 'Life Fitness Bicep Curl', 'Supinate hard at the top', 'Swinging and half reps'),
   'Incline DB Curl': X('Biceps (long head)', 'Forearms', 'Dumbbells', 'Beginner', 'Biceps stretch and peak', 'Dumbbell Curl', 'Life Fitness Bicep Curl', 'Arms behind body, full stretch', 'Coming forward and shortening range'),
   'Hammer Curl': X('Brachialis, Biceps', 'Forearms', 'Dumbbells', 'Beginner', 'Arm thickness and grip', 'Cable Curl', 'Life Fitness Bicep Curl', 'Neutral grip, elbows still', 'Swinging the weight up'),
+  'Reverse Curl': X('Brachialis, Brachioradialis', 'Forearms, Biceps', 'EZ Bar', 'Beginner', 'Forearm and brachialis size that pushes arm veins outward', 'Hammer Curl', 'Cable Reverse Curl', 'Overhand grip, wrists straight, elbows pinned', 'Curling the wrists or swinging'),
   'Cable Curl': X('Biceps', 'Forearms', 'Cable', 'Beginner', 'Constant-tension biceps', 'Dumbbell Curl', 'Life Fitness Bicep Curl', 'Keep tension at the bottom', 'Letting the stack rest each rep'),
   'Preacher Curl': X('Biceps (short head)', 'Forearms', 'Machine', 'Beginner', 'Strict lower biceps', 'Incline DB Curl', 'Life Fitness Bicep Curl', 'Do not fully lock out at the bottom', 'Bouncing out of the stretch'),
 
@@ -157,6 +173,7 @@ export const EXERCISES = {
   'Hack Squat': X('Quads', 'Glutes', 'Machine', 'Intermediate', 'Quad overload', 'Leg Press', 'Arsenal Inverted Leg Press', 'Full depth, push through mid-foot', 'Cutting depth short'),
   'Smith Squat': X('Quads, Glutes', 'Hamstrings', 'Smith Machine', 'Beginner', 'Fixed-path squat', 'Leg Press', 'Smith Machine Squat', 'Feet slightly forward, control down', 'Feet under bar straining knees'),
   'Leg Extension': X('Quads', '-', 'Machine', 'Beginner', 'Quad isolation and finisher', 'Smith Squat', 'Leg Extension Machine', 'Pause and squeeze at the top', 'Slamming reps with momentum'),
+  'Hip Adduction': X('Adductors (inner thigh)', 'Glutes', 'Machine', 'Beginner', 'Inner-thigh muscle and leg shape', 'Copenhagen Plank', 'Hip Adduction Machine', 'Sit tall, squeeze to the middle, slow return', 'Letting the stack slam on the way out'),
   'Bulgarian Split Squat': X('Quads, Glutes', 'Hamstrings, Core', 'Dumbbells', 'Intermediate', 'Unilateral leg strength', 'Reverse Lunge', 'Smith Machine Split Squat', 'Front shin vertical, torso tall', 'Pushing off the back foot'),
   'Walking Lunge': X('Quads, Glutes', 'Hamstrings, Core', 'Dumbbells', 'Beginner', 'Legs plus conditioning', 'Reverse Lunge', 'Smith Machine Split Squat', 'Long steps, knee tracks toe', 'Short steps hitting the knee'),
   'Reverse Lunge': X('Quads, Glutes', 'Hamstrings', 'Dumbbells', 'Beginner', 'Knee-friendly single leg', 'Bulgarian Split Squat', 'Smith Machine Split Squat', 'Step back, drop straight down', 'Leaning forward off balance'),
@@ -296,11 +313,12 @@ export const PROGRAM = {
         single('Hammer Strength Leg Press', 3, 10, 12, 8, 120, '2-0-1', 'Secondary quad and glute'),
         single('Seated Leg Curl', 3, 10, 12, 9, 90, '2-1-1', 'Direct hamstring'),
         single('Standing Calf Raise', 4, 12, 15, 9, 60, '2-1-2', 'Calves, full stretch and pause'),
-        single('Bulgarian Split Squat', 3, 10, 12, 8, 90, '2-0-1', 'Unilateral, per leg'),
-        circuit('Core Circuit', 3, 60, [
-          { name: 'Hanging Leg Raise', targetReps: '10-15', targetRpe: 8 },
-          { name: 'Cable Woodchop', targetReps: '10 / side', targetRpe: 8 },
-        ], 'Core before the pool'),
+        single('Bulgarian Split Squat', 3, 10, 12, 8, 90, '2-0-1', 'Per leg. Start with the left leg (scan shows it slightly behind), then match its reps on the right'),
+        single('Hip Adduction', 3, 12, 15, 8, 60, '2-1-2', 'Inner-thigh muscle for leg shape. It builds the muscle; total fat loss is what uncovers it'),
+        circuit('Loaded Abs', 3, 60, [
+          { name: 'Cable Crunch', targetReps: '10-15', targetRpe: 9 },
+          { name: 'Hanging Leg Raise', targetReps: '8-15', targetRpe: 8 },
+        ], 'Add weight to the crunch whenever all rounds hit 15. Abs grow like any muscle'),
       ],
       conditioning: [], mobility: [],
       sport: [{ name: 'Easy Laps', detail: 'Swimming class this evening. Technique-focused, legs already worked.' }],
@@ -326,19 +344,38 @@ export const PROGRAM = {
         { name: 'Foam Rolling', detail: 'Quads, back, calves' },
       ],
       sport: [{ name: 'Badminton', detail: 'Bonus, not required. If played, shorten the walk to 15 min so this stays a recovery day.' }],
-      notes: 'No lifting today, which is exactly why the week\'s one hard cardio session sits here — Thursday is a fast and swim, so there are two easy days before Sunday legs. Everything else stays deliberately easy: keep steps and water up.',
+      notes: 'No lifting today, which is why the week\'s one hard cardio session sits here. Thursday is an upper-body-only arm day, so legs still get two easy days before Sunday. Everything else stays deliberately easy: keep steps and water up.',
     },
     4: {
-      key: 'fastRest', title: 'Fast + Recovery', focus: 'Rest + Swim', dayType: 'fastThu', intensity: 'Recovery',
-      blocks: [],
+      key: 'armsAbs', title: 'Arms + Shoulders + Abs', focus: 'Hypertrophy', dayType: 'trainingVeg', intensity: 'Moderate',
+      blocks: [
+        single('Close Grip Bench', 3, 6, 10, 8, 120, '2-0-1', 'Heavy triceps. Elbows tucked, bar to low chest'),
+        single('Incline DB Curl', 3, 8, 12, 8, 90, '3-0-1', 'Long-head biceps stretch'),
+        single('Overhead Tricep Extension', 3, 10, 15, 9, 75, '2-1-2', 'Long head: this is the triceps horseshoe'),
+        single('Preacher Curl', 2, 10, 15, 9, 75, '2-0-1', 'Strict, no bounce out of the bottom'),
+        superset('Lateral + Rear Delt', 3, 60, [
+          { name: 'Arsenal Standing Lateral Raise', targetReps: '15-20', targetRpe: 9 },
+          { name: 'Rear Delt Fly', targetReps: '15-20', targetRpe: 9 },
+        ], 'Wider shoulders make the waist read smaller'),
+        dropset('Rope Pushdown', 2, 12, 15, 10, 60, '2-0-1', [
+          { label: 'Drop 1 (-25%)', targetReps: 'to failure' },
+        ], 'Top set about 1 rep shy, then drop once'),
+        superset('Hammer + Reverse Curl', 2, 60, [
+          { name: 'Hammer Curl', targetReps: '10-12', targetRpe: 9 },
+          { name: 'Reverse Curl', targetReps: '12-15', targetRpe: 9 },
+        ], 'Brachialis and forearms push the biceps veins outward'),
+        circuit('Loaded Abs', 3, 60, [
+          { name: 'Cable Crunch', targetReps: '10-15', targetRpe: 9 },
+          { name: 'Hanging Leg Raise', targetReps: '8-15', targetRpe: 8 },
+          { name: 'Ab Wheel', targetReps: '8-12', targetRpe: 8 },
+        ], 'Abs loaded three times a week: Tuesday, Thursday, Sunday'),
+      ],
       conditioning: [{ name: 'Easy Laps', detail: 'Swimming class this evening, easy to moderate.' }],
       mobility: [
-        { name: 'Shoulder Mobility', detail: '2 x 10 slow passes' },
-        { name: 'Hamstring Stretch', detail: '2 x 30s per side' },
-        { name: 'Foam Rolling', detail: 'Full body, gentle' },
+        { name: 'Shoulder Mobility', detail: '2 x 10 slow passes after lifting' },
       ],
       sport: [],
-      notes: 'Fasting until 6 PM: water, black coffee, green tea only. Emergency = one fruit OR one glass of milk. No heavy lifting. Break the fast gently, protein first.',
+      notes: 'No more Thursday fast. Eat every meal; the extra carbs go before and after this session so the arms train full. Vegetarian day. If elbows ache or Friday arms stall two weeks running, drop the Monday and Friday arm finishers first.',
     },
     5: {
       key: 'upperB', title: 'Upper Body B', focus: 'Hypertrophy', dayType: 'training', intensity: 'Hard',
@@ -398,17 +435,18 @@ export const PROGRAM = {
         single('Life Fitness Leg Press', 3, 12, 15, 8, 90, '2-0-1', 'Secondary quad and glute'),
         superset('Leg Curl + Leg Extension', 3, 75, [
           { name: 'Lying Leg Curl', targetReps: '12-15', targetRpe: 9 },
-          { name: 'Leg Extension', targetReps: '15', targetRpe: 9 },
-        ], 'Hamstring then quad, no rest between'),
+          { name: 'Leg Extension', targetReps: '12-15', targetRpe: 9 },
+        ], 'Hamstring then quad, no rest between. Hold each leg extension 1 second at the top for quad separation'),
         dropset('Seated Calf Raise', 3, 12, 15, 10, 45, '2-1-2', [
           { label: 'Drop 1 (-20%)', targetReps: 'to failure' },
           { label: 'Drop 2 (-20%)', targetReps: 'to failure' },
         ], 'Top set ~1 rep shy, then strip the weight twice and keep going'),
-        single('Bulgarian Split Squat', 3, 10, 12, 8, 90, '2-0-1', 'Unilateral, per leg'),
-        circuit('Core Circuit', 3, 45, [
+        single('Bulgarian Split Squat', 3, 10, 12, 8, 90, '2-0-1', 'Per leg. Left leg first, then match its reps on the right'),
+        single('Hip Adduction', 2, 12, 15, 8, 60, '2-1-2', 'Inner thigh. Slow return, full squeeze'),
+        circuit('Loaded Abs', 3, 45, [
           { name: 'Cable Woodchop', targetReps: '10 / side', targetRpe: 8 },
-          { name: 'Lying Leg Raise', targetReps: '12-15', targetRpe: 8 },
-        ]),
+          { name: 'Ab Wheel', targetReps: '8-12', targetRpe: 8 },
+        ], 'Obliques and anti-extension. Add range on the wheel before adding reps'),
       ],
       conditioning: [{ name: 'Incline Walk', detail: '15 min easy, low incline. Short on purpose — legs were just worked.' }],
       mobility: [],
@@ -445,13 +483,13 @@ export const NUTRITION = {
   // and deficitPercent. Kept in step with that engine (maintenance 2547 from
   // BMR 1769 x 1.44, 15% cut, 205 g protein) so the two cannot contradict.
   targets: {
-    training: { kcal: 2360, protein: 205, carbs: 240, fat: 65, fiber: 35, waterL: 3.25 },
-    trainingVeg: { kcal: 2360, protein: 205, carbs: 240, fat: 65, fiber: 35, waterL: 3.25 },
-    rest: { kcal: 2070, protein: 205, carbs: 165, fat: 65, fiber: 31, waterL: 3.0 },
-    restVeg: { kcal: 2070, protein: 205, carbs: 165, fat: 65, fiber: 31, waterL: 3.0 },
-    // Protein is 165 here, not 205: a 6 PM to 10 PM eating window physically
-    // cannot hold the full target. The other six days stay at 205 and the
-    // weekly average still lands at 199 g/day (1.06 g per lb bodyweight).
+    training: { kcal: 2290, protein: 205, carbs: 220, fat: 65, fiber: 34, waterL: 3.25 },
+    trainingVeg: { kcal: 2290, protein: 205, carbs: 220, fat: 65, fiber: 34, waterL: 3.25 },
+    rest: { kcal: 2010, protein: 205, carbs: 150, fat: 65, fiber: 30, waterL: 3.0 },
+    restVeg: { kcal: 2010, protein: 205, carbs: 150, fat: 65, fiber: 30, waterL: 3.0 },
+    // Legacy: the Thursday fast was retired in state v5. The day type stays
+    // defined so an imported backup or a hand-built program that still uses it
+    // resolves instead of throwing. Nothing in the template schedules it.
     fastThu: { kcal: 1970, protein: 165, carbs: 195, fat: 60, fiber: 30, waterL: 3.25 },
     noMoonFast: { kcal: 2070, protein: 205, carbs: 180, fat: 60, fiber: 31, waterL: 3.25 },
     vegSat: { kcal: 2120, protein: 205, carbs: 190, fat: 60, fiber: 32, waterL: 3.0 },
@@ -552,7 +590,8 @@ export const HABITS = [
   { key: 'workout_logged', label: 'Workout logged', group: 'Training' },
   { key: 'protein_hit', label: 'Protein goal reached', group: 'Nutrition' },
   { key: 'calories_ok', label: 'Calories within target', group: 'Nutrition' },
-  { key: 'steps_10k', label: '10,000 steps', group: 'Activity' },
+  // key kept as steps_10k so older habit logs still count; the bar is settings.stepsTarget
+  { key: 'steps_10k', label: 'Daily step target', group: 'Activity' },
   { key: 'zone2_walk', label: "Zone 2 walk (today's scheduled minutes)", group: 'Activity' },
   { key: 'water_hit', label: '3.5-4 L water', group: 'Nutrition' },
   { key: 'sleep_75', label: 'Sleep 7.5 hours', group: 'Recovery' },
@@ -567,7 +606,6 @@ export const HABITS = [
   { key: 'badminton', label: 'Badminton (if played)', group: 'Activity' },
   { key: 'no_junk', label: 'No junk food', group: 'Nutrition' },
   { key: 'no_sugary', label: 'No sugary drinks', group: 'Nutrition' },
-  { key: 'thu_fast', label: 'Thursday fast completed', group: 'Rules' },
   { key: 'thu_veg', label: 'Thursday vegetarian followed', group: 'Rules' },
   { key: 'sat_veg', label: 'Saturday vegetarian followed', group: 'Rules' },
   { key: 'bodybalance', label: 'BodyBalance completed (if selected)', group: 'Rules' },
@@ -582,6 +620,19 @@ export const SEED_SCANS = [
   { id: 'seed-2026-04-20', date: '2026-04-20', weight: 189.4, bodyFatPct: 24.8, fatMass: 47.0, leanMass: 142.4, skeletalMuscle: 78.9, protein: 28.9, mineral: 11.0, bodyWater: 102.5, subcutFat: 40.6, visceralFatLevel: 9, visceralFatArea: 80, waist: 37.3, waistHip: 0.83, bmr: 1765, tee: 2718, bioAge: 36, bwi: 6.9 },
   { id: 'seed-2026-07-08', date: '2026-07-08', weight: 191.1, bodyFatPct: 24.3, fatMass: 46.5, leanMass: 144.6, skeletalMuscle: 80.2, protein: 29.5, mineral: 10.8, bodyWater: 104.3, subcutFat: 40.1, visceralFatLevel: 9, visceralFatArea: 78, waist: 37.2, waistHip: 0.83, bmr: 1786, tee: 2750, bioAge: 36, bwi: 6.9 },
   { id: 'seed-2026-08-13', date: '2026-08-13', weight: 187.8, bodyFatPct: 24.0, fatMass: 45.0, leanMass: 142.9, skeletalMuscle: 79.1, protein: 29.1, mineral: 11.0, bodyWater: 102.7, subcutFat: 38.8, visceralFatLevel: 9, visceralFatArea: 77, waist: 36.8, waistHip: 0.83, bmr: 1769, tee: 2724, bioAge: 35, bwi: 7.2 },
+  { id: 'seed-2026-09-25', date: '2026-09-25', weight: 191.6, bodyFatPct: 24.8, fatMass: 47.6, leanMass: 144.0, skeletalMuscle: 79.8, protein: 29.3, mineral: 11.0, bodyWater: 103.6, subcutFat: 41.0, visceralFatLevel: 9, visceralFatArea: 81, waist: 37.5, waistHip: 0.83, bmr: 1780, tee: 2741, bioAge: 36, bwi: 6.9,
+    armLLean: 8.18, armLFat: 2.82, armRLean: 8.11, armRFat: 2.56, trunkLean: 62.48, trunkFat: 27.95, legLLean: 20.61, legLFat: 7.30, legRLean: 20.99, legRFat: 7.01 },
+];
+
+// Evolt 360 segmental analysis (lb). Kept apart from SCAN_FIELDS so the main
+// comparison stays short; older scans simply have these blank. The Evolt
+// normal ranges for this profile are printed beside each value on the sheet.
+export const SEGMENT_FIELDS = [
+  { key: 'armLLean', fat: 'armLFat', label: 'Left arm', fatRange: [1.59, 2.38] },
+  { key: 'armRLean', fat: 'armRFat', label: 'Right arm', fatRange: [1.59, 2.38] },
+  { key: 'trunkLean', fat: 'trunkFat', label: 'Torso', fatRange: [13.03, 19.53] },
+  { key: 'legLLean', fat: 'legLFat', label: 'Left leg', fatRange: [4.10, 6.15] },
+  { key: 'legRLean', fat: 'legRFat', label: 'Right leg', fatRange: [4.10, 6.15] },
 ];
 
 export const SCAN_FIELDS = [
@@ -699,14 +750,14 @@ export const SWIMMING_FUEL = {
       ],
     },
   ],
-  thursdayRule: 'Thursday is fasted until 6 PM. Break the fast gently at 6 PM, swim, then a high-protein vegetarian dinner. Do not overload the stomach before the pool.',
+  thursdayRule: 'Thursday is a normal eating day: arms in the morning, swim in the evening. Keep the pre-swim snack light and get a high-protein vegetarian dinner after class.',
   coachNote: 'Do not underfuel recovery. If the swim runs late, get 30g protein in within the hour after class.',
 };
 
 // day-type -> short human reason the diet differs that day
 export const DAY_VARIANTS = {
   training: { label: 'Training day', tone: 'cyan', why: 'Highest carbs and calories to fuel lifting and refill glycogen.' },
-  trainingVeg: { label: 'Puratasi training day', tone: 'green', why: 'Same calories and same protein as any training day, vegetarian only. Lead every plate with soya chunks, whey and paneer — dal and rice alone will not reach the target.' },
+  trainingVeg: { label: 'Vegetarian training day', tone: 'green', why: 'Same calories and same protein as any training day, vegetarian only (Thursdays and Puratasi). Lead every plate with soya chunks, whey and paneer; dal and rice alone will not reach the target.' },
   rest:     { label: 'Rest day', tone: 'violet', why: 'Lower carbs, protein held high to keep recovery and muscle up.' },
   restVeg:  { label: 'Puratasi rest day', tone: 'green', why: 'Same calories and same protein as any rest day, vegetarian only. Protein is the hard part today, so front-load it.' },
   fastThu:  { label: 'Fast plus swim', tone: 'amber', why: 'Fasted until 6 PM, then a gentle break and a high-protein veg dinner around the swim.' },

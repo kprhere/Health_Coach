@@ -41,6 +41,9 @@ test('parses the privacy-safe Health fragment and legacy query format', () => {
 
 test('a completed 40-minute evening walk satisfies but does not double-count the scheduled walk', () => {
   const state = defaultState();
+  // The progress window starts at the latest scan; keep this case in the
+  // 08-13 scan window it was written for, before the 09-25 seed scan.
+  state.bodyScans = state.bodyScans.filter((sc) => sc.date <= '2026-08-13');
   const date = '2026-08-17';
   const target = plannedWalkingMinutes(date, state);
   assert.equal(target, 20);
@@ -168,9 +171,12 @@ test('any date can override its nutrition plan to vegetarian or a 1 PM no-moon f
   delete state.dayOverrides[date];
   assert.equal(nutritionDayType(date, state), scheduledWorkout.dayType);
 
+  // Since v5 Thursday is a fed vegetarian training day: no fast window, every
+  // meal slot offered, and still no eggs, chicken or fish.
   const scheduledThursday = '2026-08-06';
-  assert.equal(nutritionDayType(scheduledThursday, state), 'fastThu');
-  assert.deepEqual(fastEndTime(scheduledThursday, state), { hour: 18, label: '6 PM', noMoon: false });
+  assert.equal(nutritionDayType(scheduledThursday, state), 'trainingVeg');
+  assert.equal(fastEndTime(scheduledThursday, state), null);
+  assert.ok(resolveNutrition(scheduledThursday, state).meals.every((meal) => !meal.fasting));
   assert.ok(resolveNutrition(scheduledThursday, state).meals.flatMap((meal) => meal.options).flatMap((option) => option.items).every((item) => !/egg/i.test(item)));
 });
 

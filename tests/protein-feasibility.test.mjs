@@ -29,6 +29,11 @@ const baseState = () => ({
   activity: {},
 });
 
+// The activity-factor audit cases were written against the 07-08 to 08-13
+// scan window and log meals across exactly those dates, so they pin the scan
+// history to it. Later seed scans would move the audited window elsewhere.
+const auditState = () => ({ ...baseState(), bodyScans: SEED_SCANS.filter((sc) => sc.date <= '2026-08-13') });
+
 // Highest protein the day can reach at all, ignoring calories.
 function bestProtein(slots) {
   return slots.reduce(
@@ -159,10 +164,11 @@ test('Puratasi dates switch food but never the workout', () => {
   assert.equal(nutritionDayType(inside, state), 'trainingVeg');
   assert.equal(nutritionDayType(outside, state), 'training');
 
-  // Wednesday inside the window becomes restVeg, Thursday and Saturday are
-  // already vegetarian and must be left exactly as they are.
+  // Wednesday inside the window becomes restVeg, Thursday (a vegetarian
+  // training day since v5) and Saturday are already vegetarian and must be
+  // left exactly as they are.
   assert.equal(nutritionDayType('2026-09-23', state), 'restVeg');
-  assert.equal(nutritionDayType('2026-09-24', state), 'fastThu');
+  assert.equal(nutritionDayType('2026-09-24', state), 'trainingVeg');
   assert.equal(nutritionDayType('2026-09-26', state), 'vegSat');
 });
 
@@ -215,7 +221,7 @@ function withLoggedIntake(state, kcalPerDay) {
 }
 
 test('the activity factor is audited against the scan history', () => {
-  const state = withLoggedIntake(baseState(), 2264);
+  const state = withLoggedIntake(auditState(), 2264);
   const r = observedActivityFactor(state);
   assert.equal(r.ok, true);
   assert.equal(r.from, '2026-07-08');
@@ -242,7 +248,7 @@ test('the audit refuses to run on prescribed targets alone', () => {
 });
 
 test('the audit flags an overstated activity factor and suggests a real one', () => {
-  const state = withLoggedIntake(baseState(), 2264);
+  const state = withLoggedIntake(auditState(), 2264);
   state.settings.activityFactor = 1.9; // wildly optimistic
   const r = observedActivityFactor(state);
   assert.equal(r.drifting, true);
@@ -254,14 +260,14 @@ test('the audit flags an overstated activity factor and suggests a real one', ()
 test('the audit verdict does not move with the factor it is auditing', () => {
   // The whole point: logged intake is independent of activityFactor, so the
   // measured answer must be identical no matter what the setting claims.
-  const a = observedActivityFactor({ ...withLoggedIntake(baseState(), 2264), settings: { ...SETTINGS_DEFAULT, activityFactor: 1.2 } });
-  const b = observedActivityFactor({ ...withLoggedIntake(baseState(), 2264), settings: { ...SETTINGS_DEFAULT, activityFactor: 1.9 } });
+  const a = observedActivityFactor({ ...withLoggedIntake(auditState(), 2264), settings: { ...SETTINGS_DEFAULT, activityFactor: 1.2 } });
+  const b = observedActivityFactor({ ...withLoggedIntake(auditState(), 2264), settings: { ...SETTINGS_DEFAULT, activityFactor: 1.9 } });
   assert.equal(a.factor, b.factor);
   assert.equal(a.tee, b.tee);
 });
 
 test('the audit stays quiet when the factor matches reality', () => {
-  const state = withLoggedIntake(baseState(), 2264);
+  const state = withLoggedIntake(auditState(), 2264);
   const probe = observedActivityFactor(state);
   state.settings.activityFactor = probe.factor;
   const r = observedActivityFactor(state);

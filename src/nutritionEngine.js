@@ -100,16 +100,20 @@ export function nutritionProfile(state) {
 }
 
 // day-type calorie multipliers around the personal base (calorie cycling)
-// trainingVeg / restVeg are the Puratasi twins of training / rest: identical
-// calories and identical protein, vegetarian food only. Going pure veg must not
-// quietly become a calorie cut, and the deficit percentage stays where it is.
-const DAY_CAL_MULT = { training: 1.09, trainingVeg: 1.09, rest: 0.955, restVeg: 0.955, fastThu: 0.91, noMoonFast: 0.955, vegSat: 0.977 };
+// trainingVeg / restVeg are the vegetarian twins of training / rest (Thursday
+// and Puratasi): identical calories and identical protein, vegetarian food only.
+// Going veg must not quietly become a calorie cut.
+//
+// v5 retired the Thursday fast (0.91) and made Thursday a trainingVeg day.
+// Training and rest were trimmed so the template week still sums to the same
+// total: old 4 x 1.09 + 0.955 + 0.91 + 0.977 = 7.202, new 5 x 1.06 + 0.93 +
+// 0.977 = 7.207. Removing the fast must not raise weekly intake.
+// A test locks this.
+export const DAY_CAL_MULT = { training: 1.06, trainingVeg: 1.06, rest: 0.93, restVeg: 0.93, fastThu: 0.91, noMoonFast: 0.955, vegSat: 0.977 };
 const DAY_FAT_MULT = { training: 1.0, trainingVeg: 1.0, rest: 1.0, restVeg: 1.0, fastThu: 0.9, noMoonFast: 0.9, vegSat: 0.95 };
-// Protein normally never flexes with the day. The Thursday fast is the one
-// physical exception: a 6 PM to 10 PM eating window cannot hold 205 g without
-// stacking four whey servings, so it carries 80% (165 g) and the other six days
-// stay at the full target. The weekly average still lands near 199 g/day, which
-// is 1.06 g per lb of bodyweight — the muscle-protecting level is a weekly one.
+// Protein never flexes with the day in the current template. fastThu (legacy,
+// unscheduled since v5) kept its 80% because a 4-hour eating window cannot
+// hold the full target.
 const DAY_PROTEIN_MULT = { fastThu: 0.8 };
 
 // ============================================================

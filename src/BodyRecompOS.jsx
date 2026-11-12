@@ -13,7 +13,7 @@ import {
 import {
   programDay, NUTRITION, SUPPLEMENTS, HABITS, SCAN_FIELDS, WATCH_FIELDS, DAY_SHORT,
   EXERCISES, PROGRAM_RATIONALE, BADMINTON_FUEL, SWIMMING_FUEL, DAY_VARIANTS,
-  LABS, HAIR_HEALTH, DAILY_BEVERAGES, MUSCLE_GROUPS,
+  LABS, HAIR_HEALTH, DAILY_BEVERAGES, MUSCLE_GROUPS, SEGMENT_FIELDS,
 } from './data.js';
 import {
   todayKey, addDays, prettyDate, shortDate, dowOf, clone, fastEndTime,
@@ -30,6 +30,7 @@ import {
   customExercisePlanFits, workoutSwapPartner, workoutSessionHasData,
   observedActivityFactor, plannedWalkingMinutes, progressWindowSummary, postScanCoaching, nextNoMoonReminder,
   exerciseProgressSeries, recentPersonalRecords, trainingActivity, trainingConsistency, volumeByMuscleWindow,
+  definitionGoal, segmentSummary,
 } from './helpers.js';
 import {
   Sidebar, BottomNav, Card, Chip, SectionTitle, MetricRing, ScoreRing, ProgressBar,
@@ -177,6 +178,100 @@ function EveningWalkCard({ date, ctx }) {
 // =====================================================================
 // HOME
 // =====================================================================
+// Whole-body definition goal: the milestone ladder from the latest scan's lean
+// mass, plus the real fat pace between the last two scans.
+const PACE_COPY = {
+  on: { tone: 'green', chip: 'On pace' },
+  slow: { tone: 'amber', chip: 'Slower than plan' },
+  off: { tone: 'red', chip: 'Off pace' },
+  unknown: { tone: 'cyan', chip: 'Needs 2 scans' },
+};
+
+function DefinitionGoalCard({ goal, onOpenBody }) {
+  if (!goal) return null;
+  const pace = PACE_COPY[goal.pace] || PACE_COPY.unknown;
+  const sign = (n) => `${n > 0 ? '+' : ''}${n}`;
+  return (
+    <Card className="defgoal">
+      <div className="card-head">
+        <div className="lead"><Target size={17} color="var(--cyan)" /><h3>Whole-body definition</h3></div>
+        <Chip tone={pace.tone}>{pace.chip}</Chip>
+      </div>
+      <div className="defgoal-hero">
+        <div className="defgoal-num"><span className="k">Body fat now</span><b className="num">{goal.bf}<small>%</small></b></div>
+        <div className="defgoal-arrow" aria-hidden="true">→</div>
+        <div className="defgoal-num"><span className="k">Goal</span><b className="num cyan">{goal.goalBf}<small>%</small></b></div>
+        <div className="defgoal-num"><span className="k">To lose</span><b className="num">{goal.fatToGoal}<small> lb</small></b></div>
+        <div className="defgoal-num"><span className="k">At plan pace</span><b className="num">{goal.weeksToGoal ?? '-'}<small> wk</small></b></div>
+      </div>
+      <ol className="defgoal-ladder">
+        {goal.milestones.map((m) => {
+          const step = m.reached ? 'done' : goal.next && goal.next.bf === m.bf ? 'next' : '';
+          return (
+            <li key={m.bf} className={step}>
+              <span className="dot" aria-hidden="true" />
+              <span className="bf num">{m.bf}%</span>
+              <span className="what">{m.label}</span>
+              <span className="at num">{m.weight} lb{m.reached ? '' : <em> · {m.toLose} to go</em>}</span>
+            </li>
+          );
+        })}
+      </ol>
+      <div className={`defgoal-pace ${pace.tone}`}>
+        {goal.fatPerWeek == null
+          ? 'Add a second scan to measure your real pace.'
+          : `Since ${shortDate(goal.priorDate)}: ${sign(goal.fatPerWeek)} lb of fat a week. The plan needs about -${goal.planned} lb a week.`}
+        {goal.pace === 'off' || goal.pace === 'slow'
+          ? ' Log every meal for two weeks and check the activity factor in More before cutting food further.'
+          : ''}
+      </div>
+      <div className="hint">Lean mass held at {goal.lean} lb (scan {shortDate(goal.scanDate)}). It comes off in your body's own order; thighs and lower belly usually go last.</div>
+      {onOpenBody ? <div className="btn-row" style={{ marginTop: 10 }}><button className="btn ghost sm" onClick={onOpenBody}>See it by body region</button></div> : null}
+    </Card>
+  );
+}
+
+const pctStr = (n) => `${Math.round(n * 1000) / 10}%`;
+
+function SegRow({ r }) {
+  const band = { left: pctStr(r.lo), width: pctStr(r.hi + r.lo * -1) };
+  const mark = { left: pctStr(r.pos) };
+  const desc = [r.label, r.lbs, 'lb, normal', r.range[0], 'to', r.range[1], 'lb'].join(' ');
+  return (
+    <div className="seg-row">
+      <div className="seg-lab">{r.label}<small className="num">{r.share}%</small></div>
+      <div className="seg-bar" role="img" aria-label={desc}>
+        <span className="seg-norm" style={band} />
+        <span className={r.over ? 'seg-mark over' : 'seg-mark'} style={mark} />
+      </div>
+      <div className="seg-val num">{r.lbs}<SegDelta d={r.delta} /></div>
+    </div>
+  );
+}
+
+function SegDelta({ d }) {
+  if (d == null) return null;
+  const tone = d < 0 ? 'good' : d === 0 ? '' : 'bad';
+  return <small className={tone}> {d > 0 ? '+' : ''}{d}</small>;
+}
+
+// Evolt 360 segmental analysis: one bar per region with the normal range shaded.
+function SegmentCard({ seg }) {
+  if (!seg) return <Card><div className="hint">Enter the segmental numbers from your next Evolt sheet (arms, torso, legs) to see each region.</div></Card>;
+  return (
+    <Card className="segcard">
+      <div className="seg-head">
+        <span>By region · {shortDate(seg.date)}</span>
+        <span className="num">{seg.total} lb total</span>
+      </div>
+      {seg.rows.map((r) => <SegRow key={r.key} r={r} />)}
+      <div className="hint" style={{ marginTop: 8 }}>
+        Shaded band is the Evolt normal range. Torso and thigh numbers drop as total body weight comes down; leg training builds the muscle that shows once they do.
+      </div>
+    </Card>
+  );
+}
+
 function HomeTab({ ctx }) {
   const date = todayKey();
   const s = ctx.state;
@@ -196,7 +291,10 @@ function HomeTab({ ctx }) {
   const prog = session ? workoutProgress(session) : { done: 0, total: plan.blocks.length };
 
   const steps = parseFloat(w.steps) || 0;
+  const stepsGoal = Number(s.settings.stepsTarget) || 10000;
+  const stepsSub = `/${(stepsGoal * 0.001).toFixed(stepsGoal % 1000 ? 1 : 0)}k`;
   const sleep = parseFloat(w.sleepH) || 0;
+  const defGoal = definitionGoal(s);
 
   // new premium "meaningful numbers" (all derived from existing data)
   const recomp = recompSignal(s);
@@ -213,7 +311,7 @@ function HomeTab({ ctx }) {
   const goalRings = [
     { label: 'Protein', value: Math.round(a.protein), sub: `/${nut.targets.protein}`, pct: (a.protein / nut.targets.protein) * 100, color: 'var(--cyan)' },
     { label: 'Water L', value: a.water, sub: `/${nut.targets.waterL}`, pct: (a.water / nut.targets.waterL) * 100, color: 'var(--violet)' },
-    { label: 'Steps', value: steps >= 1000 ? (steps / 1000).toFixed(1) + 'k' : steps, sub: '/10k', pct: (steps / 10000) * 100, color: 'var(--amber)' },
+    { label: 'Steps', value: steps >= 1000 ? (steps / 1000).toFixed(1) + 'k' : steps, sub: stepsSub, pct: (steps / stepsGoal) * 100, color: 'var(--amber)' },
     { label: 'Sleep', value: sleep || '-', sub: '/7.5', pct: (sleep / 7.5) * 100, color: 'var(--green)' },
   ];
 
@@ -229,6 +327,7 @@ function HomeTab({ ctx }) {
 
       <div className="split">
         <div className="split-main">
+          <DefinitionGoalCard goal={defGoal} onOpenBody={() => ctx.goto('body')} />
           <RecompSignalCard signal={recomp} />
 
           <SectionTitle>Today goals</SectionTitle>
@@ -945,7 +1044,8 @@ function FuelTab({ ctx }) {
 // =====================================================================
 // BODY
 // =====================================================================
-const BLANK_SCAN = () => { const o = { date: todayKey() }; SCAN_FIELDS.forEach((f) => { o[f.key] = ''; }); return o; };
+const SEGMENT_KEYS = SEGMENT_FIELDS.flatMap((f) => [f.key, f.fat]);
+const BLANK_SCAN = () => { const o = { date: todayKey() }; SCAN_FIELDS.forEach((f) => { o[f.key] = ''; }); SEGMENT_KEYS.forEach((k) => { o[k] = ''; }); return o; };
 
 function BodyTab({ ctx }) {
   const s = ctx.state;
@@ -970,6 +1070,11 @@ function BodyTab({ ctx }) {
   const save = () => {
     const clean = { ...draft };
     SCAN_FIELDS.forEach((f) => { clean[f.key] = clean[f.key] === '' ? 0 : parseFloat(clean[f.key]); });
+    // Segments are optional: a blank stays absent rather than becoming a measured 0.
+    SEGMENT_KEYS.forEach((k) => {
+      const v = parseFloat(clean[k]);
+      if (Number.isFinite(v)) clean[k] = v; else delete clean[k];
+    });
     if (editing === 'new') ctx.addScan(clean); else ctx.updateScan(editing, clean);
     setEditing(null);
   };
@@ -994,7 +1099,7 @@ function BodyTab({ ctx }) {
   return (
     <div>
       <div className="page-title">Body</div>
-      <p className="page-sub">Your Evolt 360 scans. Four are seeded from your result sheets. Add the next comparison scan around August 31.</p>
+      <p className="page-sub">Your Evolt 360 scans, including the segmental arms, torso and legs breakdown. Add each new result sheet here.</p>
 
       <SectionTitle right={<Chip tone="cyan">{Math.max(0, progress.daysUntilScan)} days</Chip>}>Next Scan / 14-Day Progress</SectionTitle>
       <Card>
@@ -1063,6 +1168,9 @@ function BodyTab({ ctx }) {
             <div className="hint" style={{ marginTop: 8 }}>{prev && latest ? `Since last scan: ${Math.round((latest.weight - prev.weight) * 10) / 10} lb weight, ${Math.round((latest.bodyFatPct - prev.bodyFatPct) * 10) / 10}% body fat.` : 'Add another scan to see month-over-month change.'}</div>
           </Card>
 
+          <SectionTitle>Where it sits</SectionTitle>
+          <SegmentCard seg={segmentSummary(s)} />
+
           <SectionTitle>Labs</SectionTitle>
           <Card><LabsCard labs={LABS} /></Card>
 
@@ -1094,6 +1202,21 @@ function BodyTab({ ctx }) {
                 <label>{f.label}{f.unit ? ` (${f.unit})` : ''}</label>
                 <input className="input mono" inputMode="decimal" value={draft[f.key]} onChange={(e) => setDraft({ ...draft, [f.key]: e.target.value })} />
               </div>
+            ))}
+          </div>
+          <div className="block-tag" style={{ marginTop: 8 }}><span className="bar" />Segmental analysis (optional, lb)</div>
+          <div className="field-row cols-2">
+            {SEGMENT_FIELDS.map((f) => (
+              <React.Fragment key={f.key}>
+                <div className="field">
+                  <label htmlFor={`seg-${f.key}`}>{f.label} lean</label>
+                  <input id={`seg-${f.key}`} className="input mono" inputMode="decimal" value={draft[f.key] ?? ''} onChange={(e) => setDraft({ ...draft, [f.key]: e.target.value })} />
+                </div>
+                <div className="field">
+                  <label htmlFor={`seg-${f.fat}`}>{f.label} body fat</label>
+                  <input id={`seg-${f.fat}`} className="input mono" inputMode="decimal" value={draft[f.fat] ?? ''} onChange={(e) => setDraft({ ...draft, [f.fat]: e.target.value })} />
+                </div>
+              </React.Fragment>
             ))}
           </div>
           <button className="btn primary block" onClick={save} style={{ marginTop: 6 }}><Save size={15} /> Save scan</button>

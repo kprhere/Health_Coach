@@ -5,6 +5,7 @@
 import {
   PROGRAM, programOf, programDay, NUTRITION, EXERCISES, SEED_SCANS, HABITS,
   PROFILE_DEFAULT, SETTINGS_DEFAULT, STORAGE_KEY, HEALTH_PARAM_MAP, DAILY_BEVERAGES, NO_MOON_DATES,
+  DEFINITION_MILESTONES, SEGMENT_FIELDS,
 } from './data.js';
 import { targetsWithFallback, mealPlanFor, nutritionProfile } from './nutritionEngine.js';
 
@@ -12,7 +13,7 @@ export { nutritionProfile };
 
 export const PROGRAM_START = '2026-07-08'; // start of the current fat-loss phase (latest scan)
 export const PHASE_NAME = 'Fat Loss Phase 1';
-export const STATE_VERSION = 4;
+export const STATE_VERSION = 5;
 
 // ---------- date utils ----------
 export const pad = (n) => String(n).padStart(2, '0');
@@ -111,6 +112,36 @@ const MIGRATIONS = {
     const migrated = mergeState(defaultState(), state);
     if (!migrated.program || !migrated.program.days) migrated.program = clone(PROGRAM);
     return { ...migrated, version: 4 };
+  },
+  5: (state) => {
+    // Whole-body definition rebuild (2026-11). The app has one user, so the
+    // saved program is replaced outright with the new template: the Thursday
+    // fast becomes an arms, shoulders and abs day and both leg days change.
+    // Logs, scans, overrides and custom equipment are untouched.
+    const migrated = mergeState(defaultState(), state);
+    migrated.program = clone(PROGRAM);
+    // The goal moves from 15% to about 10% body fat, measured from the
+    // 09-25-2026 scan. Only the goal and baseline fields change.
+    for (const k of ['startWeightLb', 'startBodyFatPct', 'startFatMassLb', 'startWaistIn', 'goalBodyFatPct', 'goalFatLossLb', 'timelineMonths']) {
+      migrated.profile[k] = PROFILE_DEFAULT[k];
+    }
+    if (!state.settings || state.settings.stepsTarget === undefined || state.settings.stepsTarget === 10000) {
+      migrated.settings.stepsTarget = SETTINGS_DEFAULT.stepsTarget;
+    }
+    // Add the 09-25-2026 scan with its segmental numbers. If that scan was
+    // already entered by hand, fill in only the segment fields it lacks.
+    const seed = SEED_SCANS.find((sc) => sc.date === '2026-09-25');
+    const scans = Array.isArray(migrated.bodyScans) ? migrated.bodyScans : [];
+    const existing = scans.find((sc) => sc && sc.date === seed.date);
+    if (existing) {
+      SEGMENT_FIELDS.forEach((f) => {
+        [f.key, f.fat].forEach((k) => { if (!(Number(existing[k]) > 0)) existing[k] = seed[k]; });
+      });
+    } else {
+      scans.push({ ...seed });
+    }
+    migrated.bodyScans = scans;
+    return { ...migrated, version: 5 };
   },
 };
 
@@ -1023,16 +1054,14 @@ export function recoveryScore(key, state) {
 const NON_VEG_RE = /chicken|fish|mutton|prawn|shrimp|turkey|meat|beef|pork|salmon|tuna|\begg\b/i;
 
 // ---------- habits ----------
-// Which Rules-group habits even apply today. Only Thursday needs the fast +
-// its own veg rule, only Saturday needs its veg rule + BodyBalance (and only
-// when BodyBalance itself was picked over the lifting fallback) - a rule
-// that doesn't apply today must not drag the score down.
+// Which Rules-group habits even apply today. Only Thursday needs its veg rule,
+// only Saturday needs its veg rule + BodyBalance (and only when BodyBalance
+// itself was picked over the lifting fallback) - a rule that doesn't apply
+// today must not drag the score down. The Thursday fast was retired in v5.
 export function habitApplicability(key, state) {
   const dow = dowOf(key);
-  const flags = dayFlags(key, state);
   const satMode = (state.saturdayMode && state.saturdayMode[key]) || 'class';
   return {
-    thu_fast: flags.fastDay,
     thu_veg: dow === 4,
     sat_veg: dow === 6,
     bodybalance: dow === 6 && satMode === 'class',
@@ -1056,7 +1085,7 @@ export function habitStatus(key, state) {
     protein_hit: a.protein >= t.protein * 0.95,
     calories_ok: a.kcal > 0 && Math.abs(a.kcal - t.kcal) <= t.kcal * 0.1,
     water_hit: a.water >= t.waterL * 0.9,
-    steps_10k: parseFloat(w.steps) >= 10000,
+    steps_10k: parseFloat(w.steps) >= (Number(state.settings && state.settings.stepsTarget) || 10000),
     zone2_walk: plannedWalkingMinutes(key, state) > 0 && !!act.eveningWalk
       && (Number(act.eveningWalkMin) || 40) >= plannedWalkingMinutes(key, state),
     sleep_75: parseFloat(w.sleepH) >= 7.5,
@@ -1067,10 +1096,9 @@ export function habitStatus(key, state) {
     vitd: !!supp.vitd,
     magnesium: !!supp.magnesium,
     biotin: !!supp.biotin,
-    // fasting/veg are enforced structurally by the app (fast days only offer
-    // the post-fast meal; veg days hide non-veg meal options), so default to
-    // compliant and only flip false if a logged extra breaks the rule.
-    thu_fast: !extras.some((e) => NON_VEG_RE.test(e.name || '')) && extras.length < 3,
+    // veg is enforced structurally by the app (veg days hide non-veg meal
+    // options), so default to compliant and only flip false if a logged extra
+    // breaks the rule.
     thu_veg: !extras.some((e) => NON_VEG_RE.test(e.name || '')),
     sat_veg: !extras.some((e) => NON_VEG_RE.test(e.name || '')),
     bodybalance: !!(s && s.completed),
@@ -1117,6 +1145,7 @@ export function muscleGroupOf(name, state) {
   if (/Hamstring/i.test(p)) return 'Hamstrings';
   if (/Glute/i.test(p)) return 'Glutes';
   if (/Calf|Calves/i.test(p)) return 'Calves';
+  if (/Adductor/i.test(p)) return 'Quads'; // inner thigh counts toward thigh volume
   if (/Ab|Oblique/i.test(p)) return 'Core';
   if (/Cardio/i.test(p)) return 'Conditioning';
   return 'Other';
@@ -1816,6 +1845,74 @@ export function monthlyTargetProgress(state) {
   if (!last) return { lost: 0, goal: goalLoss, pct: 0 };
   const lost = Math.max(0, startFat - last.fatMass);
   return { lost: Math.round(lost * 10) / 10, goal: goalLoss, pct: Math.min(100, Math.round((lost / goalLoss) * 100)) };
+}
+
+// ---------- whole-body definition goal ----------
+// Body weight at which each definition milestone shows, assuming lean mass is
+// held: weight = lean divided by (1 - bf). Pace comes from the last two scans
+// so the card reports what actually happened, not what the plan intended.
+export function definitionGoal(state) {
+  const last = latestScan(state);
+  if (!last || !(Number(last.leanMass) > 0)) return null;
+  const lean = Number(last.leanMass);
+  const bf = Number(last.bodyFatPct);
+  const weight = Number(last.weight);
+  const round1 = (n) => Math.round(n * 10) / 10;
+  const milestones = DEFINITION_MILESTONES.map((m) => {
+    const target = round1(lean / (1 - m.bf / 100));
+    return { ...m, weight: target, toLose: Math.max(0, round1(weight - target)), reached: bf <= m.bf };
+  });
+  const next = milestones.find((m) => !m.reached) || null;
+  const scans = sortedScans(state);
+  const prior = scans.length >= 2 ? scans[scans.length - 2] : null;
+  const fatLb = (sc) => Number(sc && sc.fatMass) || 0;
+  let fatPerWeek = null;
+  const pair = prior ? [fatLb(prior), fatLb(last)] : [0, 0];
+  const span = prior ? Math.max(7, daysBetween(prior.date, last.date)) : 7;
+  const both = pair.every((v) => v > 0);
+  const delta = pair[1] + pair[0] * -1;
+  if (both) fatPerWeek = Math.round((delta * 700) / span) / 100;
+  const planned = nutritionProfile(state).lbPerWeek;
+  // On pace means losing at least half the planned rate between scans.
+  let pace = 'unknown';
+  if (fatPerWeek != null) pace = fatPerWeek <= planned * -0.5 ? 'on' : fatPerWeek < 0 ? 'slow' : 'off';
+  const goalBf = Number(state.profile ? state.profile.goalBodyFatPct : 0) || 10;
+  const goalWeight = round1(lean / (1 - goalBf / 100));
+  const fatToGoal = Math.max(0, round1(weight + goalWeight * -1));
+  const weeksToGoal = planned > 0 ? Math.ceil(fatToGoal / planned) : null;
+  return {
+    scanDate: last.date, lean, bf, weight, milestones, next, priorDate: prior ? prior.date : null,
+    fatPerWeek, planned, pace, goalBf, goalWeight, fatToGoal, weeksToGoal,
+  };
+}
+
+// Segmental fat from the latest scan that has it, compared with the previous
+// scan that also has it. Older scans without segments are skipped.
+export function segmentSummary(state) {
+  const hasSeg = (sc) => SEGMENT_FIELDS.every((f) => Number(sc[f.fat]) > 0);
+  const withSeg = sortedScans(state).filter(hasSeg);
+  if (!withSeg.length) return null;
+  const last = withSeg[withSeg.length - 1];
+  const prior = withSeg.length >= 2 ? withSeg[withSeg.length - 2] : null;
+  const total = SEGMENT_FIELDS.reduce((sum, f) => sum + Number(last[f.fat]), 0);
+  const round2 = (n) => Math.round(n * 100) / 100;
+  const rowFor = (f) => {
+    const fat = Number(last[f.fat]);
+    const hi = f.fatRange[1];
+    const scaleMax = hi * 1.6;
+    const excess = Math.max(0, round2(fat + hi * -1));
+    const before = prior ? Number(prior[f.fat]) : 0;
+    const delta = prior ? round2(fat + before * -1) : null;
+    const share = Math.round(fat * (100 / total));
+    const segLb = fat;
+    const pos = Math.min(1, segLb / scaleMax);
+    return {
+      key: f.key, label: f.label, lbs: segLb, lean: Number(last[f.key]) || null, range: f.fatRange,
+      share, over: excess, delta, pos, lo: f.fatRange[0] / scaleMax, hi: hi / scaleMax,
+    };
+  };
+  const rows = SEGMENT_FIELDS.map(rowFor);
+  return { date: last.date, priorDate: prior ? prior.date : null, rows, total: round2(total) };
 }
 
 // ---------- workout CSV ----------
