@@ -23,6 +23,22 @@
     />
 
     <title>Body Recomp OS</title>
+
+    <!-- If a stale page asks for an app bundle a newer deploy removed, the
+         script fails to load and the screen stays blank. Reload once to pick
+         up the current page; the timestamp stops a reload loop. -->
+    <script>
+      window.addEventListener('error', function (event) {
+        var el = event.target;
+        if (!el || el.tagName !== 'SCRIPT' || !el.src || el.src.indexOf('/assets/') === -1) return;
+        try {
+          var last = Number(sessionStorage.getItem('recomp-reload-at')) || 0;
+          if (Date.now() - last < 30000) return;
+          sessionStorage.setItem('recomp-reload-at', String(Date.now()));
+        } catch (e) { return; }
+        location.reload();
+      }, true);
+    </script>
   </head>
   <body>
     <div id="root"></div>
