@@ -14,6 +14,7 @@ import { NUTRITION, programOf } from './data.js';
 
 const clamp = (v, lo, hi) => Math.max(lo, Math.min(hi, v));
 const LB_PER_KG = 2.20462;
+const PROTEIN_CEILING_G = 210;
 
 // local, dependency-free "latest scan" so we never import helpers
 function pickLatestScan(state) {
@@ -62,8 +63,12 @@ export function nutritionProfile(state) {
   // Raised from 1.3 after the 08-13-2026 scan: at 1.3 (190 g) more than half
   // the weight lost came off lean mass, so the anchor was too low to protect
   // muscle at this training load. 1.45 also matches Evolt's own 204-212 g call.
+  // Capped at 210 g: the 11-13-2026 scan's lean mass (149.9 lb) is about
+  // 4 lb of water, which would push the target to 215 g. Past ~1 g per lb of
+  // bodyweight extra protein protects no more muscle, and 215 g is out of
+  // reach on the no-moon fast day's meal plan.
   const bwKg = bw / LB_PER_KG;
-  const protein = Math.round(clamp(leanMass * 1.45, bwKg * 1.7, bwKg * 2.6) / 5) * 5;
+  const protein = Math.min(PROTEIN_CEILING_G, Math.round(clamp(leanMass * 1.45, bwKg * 1.7, bwKg * 2.6) / 5) * 5);
 
   // ---- fat: 0.35 g/lb bodyweight (hormones), kept moderate for LDL 123 ----
   const fat = Math.round((bw * 0.35) / 5) * 5;

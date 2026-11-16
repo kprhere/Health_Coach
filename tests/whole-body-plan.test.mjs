@@ -61,6 +61,9 @@ test('single-leg work starts on the left and both leg days train the inner thigh
 });
 
 const scansThroughAugust = () => SEED_SCANS.filter((sc) => sc.date <= '2026-08-13');
+// The goal and segment cases were written against the 09-25-2026 scan, so pin
+// the history there; later seed scans are covered by their own tests below.
+const throughSeptember = () => ({ ...defaultState(), bodyScans: SEED_SCANS.filter((sc) => sc.date <= '2026-09-25') });
 const scanOn = (list, date) => list.filter((sc) => sc.date === date);
 
 test('the v5 upgrade replaces the fast-day program and resets the goal, keeping logs', () => {
@@ -103,7 +106,7 @@ test('a custom step target survives the upgrade', () => {
 });
 
 test('the definition goal is measured from the latest scan and reports the real pace', () => {
-  const goal = definitionGoal(defaultState());
+  const goal = definitionGoal(throughSeptember());
   assert.equal(goal.scanDate, '2026-09-25');
   assert.equal(goal.lean, 144);
   assert.equal(goal.goalWeight, 160);
@@ -117,7 +120,7 @@ test('the definition goal is measured from the latest scan and reports the real 
 });
 
 test('the goal reports on pace once body fat falls fast enough', () => {
-  const state = defaultState();
+  const state = throughSeptember();
   state.bodyScans = [
     ...state.bodyScans,
     { id: 'later', date: '2026-10-23', weight: 187.6, bodyFatPct: 23.2, fatMass: 43.6, leanMass: 144 },
@@ -128,7 +131,7 @@ test('the goal reports on pace once body fat falls fast enough', () => {
 });
 
 test('segment data shows the torso holds most of it and both legs sit above range', () => {
-  const seg = segmentSummary(defaultState());
+  const seg = segmentSummary(throughSeptember());
   assert.equal(seg.date, '2026-09-25');
   const byLabel = Object.fromEntries(seg.rows.map((row) => [row.label, row]));
   assert.equal(byLabel.Torso.share, 59);
@@ -136,4 +139,37 @@ test('segment data shows the torso holds most of it and both legs sit above rang
   assert.equal(byLabel['Right leg'].over, 0.86);
   assert.equal(byLabel.Torso.delta, null);
   assert.equal(segmentSummary({ bodyScans: scansThroughAugust() }), null);
+});
+
+test('the 11-13-2026 scan is the latest seed and fat mass moved down from 09-25', () => {
+  const goal = definitionGoal(defaultState());
+  assert.equal(goal.scanDate, '2026-11-13');
+  assert.ok(goal.fatPerWeek < 0);
+  const seg = segmentSummary(defaultState());
+  assert.equal(seg.date, '2026-11-13');
+});
+
+test('v6 upgrade adds the 11-13 scan and the posture warm-up without touching logs or swaps', () => {
+  const v5 = migrateState({ version: 4 });
+  v5.version = 5;
+  v5.bodyScans = v5.bodyScans.filter((sc) => sc.date !== '2026-11-13');
+  v5.program.days[1].mobility = [];
+  v5.program.days[1].blocks[0].exercises[0].name = 'Barbell Bench Press';
+  v5.workoutSessions = { '2026-11-09': { entries: { a: 1 } } };
+  const after = migrateState(v5);
+  assert.equal(after.version, STATE_VERSION);
+  assert.equal(after.bodyScans.filter((sc) => sc.date === '2026-11-13').length, 1);
+  assert.equal(after.program.days[1].blocks[0].exercises[0].name, 'Barbell Bench Press');
+  assert.deepEqual(after.program.days[1].mobility.map((m) => m.name), ['Half-Kneeling Hip Flexor Stretch', 'Dead Bug', 'Glute Bridge']);
+  assert.deepEqual(after.workoutSessions, { '2026-11-09': { entries: { a: 1 } } });
+  // Rest and class days do not get the lifting warm-up.
+  assert.ok(!after.program.days[6].mobility.some((m) => m.name === 'Glute Bridge'));
+  // Running the upgrade again never duplicates the warm-up.
+  const again = migrateState({ ...after, version: 5 });
+  assert.equal(again.program.days[1].mobility.filter((m) => m.name === 'Dead Bug').length, 1);
+});
+
+test('protein target is capped at 210 g even when scan lean mass is water-heavy', () => {
+  const t = personalTargets('training', defaultState());
+  assert.ok(t.protein <= 210);
 });

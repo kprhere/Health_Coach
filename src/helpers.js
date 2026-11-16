@@ -5,7 +5,7 @@
 import {
   PROGRAM, programOf, programDay, NUTRITION, EXERCISES, SEED_SCANS, HABITS,
   PROFILE_DEFAULT, SETTINGS_DEFAULT, STORAGE_KEY, HEALTH_PARAM_MAP, DAILY_BEVERAGES, NO_MOON_DATES,
-  DEFINITION_MILESTONES, SEGMENT_FIELDS,
+  DEFINITION_MILESTONES, SEGMENT_FIELDS, POSTURE_WARMUP, POSTURE_DAY_KEYS,
 } from './data.js';
 import { targetsWithFallback, mealPlanFor, nutritionProfile } from './nutritionEngine.js';
 
@@ -13,7 +13,7 @@ export { nutritionProfile };
 
 export const PROGRAM_START = '2026-07-08'; // start of the current fat-loss phase (latest scan)
 export const PHASE_NAME = 'Fat Loss Phase 1';
-export const STATE_VERSION = 5;
+export const STATE_VERSION = 6;
 
 // ---------- date utils ----------
 export const pad = (n) => String(n).padStart(2, '0');
@@ -142,6 +142,32 @@ const MIGRATIONS = {
     }
     migrated.bodyScans = scans;
     return { ...migrated, version: 5 };
+  },
+  6: (state) => {
+    // 2026-11-15 update, additive only: the 11-13-2026 scan and a posture
+    // warm-up on lifting days. The saved program is patched, not replaced,
+    // so any exercise swaps made since v5 survive.
+    const migrated = mergeState(defaultState(), state);
+    const scans = Array.isArray(migrated.bodyScans) ? migrated.bodyScans : [];
+    const seed = SEED_SCANS.find((sc) => sc.date === '2026-11-13');
+    const existing = scans.find((sc) => sc && sc.date === seed.date);
+    if (existing) {
+      SEGMENT_FIELDS.forEach((f) => {
+        [f.key, f.fat].forEach((k) => { if (!(Number(existing[k]) > 0)) existing[k] = seed[k]; });
+      });
+    } else {
+      scans.push({ ...seed });
+    }
+    migrated.bodyScans = scans;
+    const days = (migrated.program && migrated.program.days) || {};
+    Object.values(days).forEach((day) => {
+      if (!day || !POSTURE_DAY_KEYS.includes(day.key)) return;
+      const current = Array.isArray(day.mobility) ? day.mobility : [];
+      const have = new Set(current.map((m) => m && m.name));
+      const missing = POSTURE_WARMUP.filter((m) => !have.has(m.name)).map((m) => ({ ...m }));
+      day.mobility = [...missing, ...current];
+    });
+    return { ...migrated, version: 6 };
   },
 };
 
