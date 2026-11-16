@@ -276,6 +276,16 @@ const circuit = (name, rounds, restAfterRoundSec, exercises, note = '') =>
 const finisher = (name, cfg, exercises, note = '') =>
   ({ blockType: 'finisher', name, rounds: cfg.rounds || null, restAfterRoundSec: cfg.restAfterRoundSec || null, durationSec: cfg.durationSec || null, exercises, note });
 
+// Before-lifting posture block, added 2026-11 after progress photos showed
+// the hips tipping forward (anterior pelvic tilt), which pushes the lower
+// belly out. Put on every lifting day; the migration adds it to saved programs.
+export const POSTURE_WARMUP = [
+  { name: 'Half-Kneeling Hip Flexor Stretch', detail: 'Before lifting: 2 x 45s per side. Squeeze the back-leg glute, tuck the tailbone' },
+  { name: 'Dead Bug', detail: 'Before lifting: 2 x 10 per side, lower back pressed flat to the floor' },
+  { name: 'Glute Bridge', detail: 'Before lifting: 2 x 15 with a 2s squeeze at the top. All day cue: tailbone tucked, ribs down' },
+];
+export const POSTURE_DAY_KEYS = ['upperA', 'lowerA', 'armsAbs', 'upperB', 'lowerB'];
+
 // ============================================================
 // PROGRAM  (day index = JS getDay: 0 Sun ... 6 Sat)
 // ============================================================
@@ -301,7 +311,7 @@ export const PROGRAM = {
         ], 'Biceps then triceps, back to back'),
       ],
       conditioning: [{ name: 'Incline Walk', detail: '20 min zone 2 after lifting, incline 8-12%. Skip only if badminton actually happened.' }],
-      mobility: [],
+      mobility: [...POSTURE_WARMUP],
       sport: [{ name: 'Badminton', detail: 'Bonus, not required. 5:30-7:00 AM. If played it REPLACES today\'s walk: lift after and add electrolytes + 30-50g carbs.' }],
       notes: 'First hard upper session. Quality reps over load. Direct biceps and triceps included. Log everything so next targets auto-calc. The walk is part of the plan, not an extra.',
     },
@@ -320,7 +330,7 @@ export const PROGRAM = {
           { name: 'Hanging Leg Raise', targetReps: '8-15', targetRpe: 8 },
         ], 'Add weight to the crunch whenever all rounds hit 15. Abs grow like any muscle'),
       ],
-      conditioning: [], mobility: [],
+      conditioning: [], mobility: [...POSTURE_WARMUP],
       sport: [{ name: 'Easy Laps', detail: 'Swimming class this evening. Technique-focused, legs already worked.' }],
       notes: 'Swim class tonight. Fuel carbs around the swim and hydrate well.',
     },
@@ -371,7 +381,7 @@ export const PROGRAM = {
         ], 'Abs loaded three times a week: Tuesday, Thursday, Sunday'),
       ],
       conditioning: [{ name: 'Easy Laps', detail: 'Swimming class this evening, easy to moderate.' }],
-      mobility: [
+      mobility: [...POSTURE_WARMUP,
         { name: 'Shoulder Mobility', detail: '2 x 10 slow passes after lifting' },
       ],
       sport: [],
@@ -396,7 +406,7 @@ export const PROGRAM = {
         ]),
       ],
       conditioning: [{ name: 'Incline Walk', detail: '20 min zone 2 after lifting, incline 8-12%. Skip only if badminton actually happened.' }],
-      mobility: [],
+      mobility: [...POSTURE_WARMUP],
       sport: [{ name: 'Badminton', detail: 'Bonus, not required. If played it REPLACES today\'s walk: lift after and refuel.' }],
       notes: 'Pump-focused with direct arms. Controlled tempo, add reps before adding weight. Finish with the walk.',
     },
@@ -449,7 +459,7 @@ export const PROGRAM = {
         ], 'Obliques and anti-extension. Add range on the wheel before adding reps'),
       ],
       conditioning: [{ name: 'Incline Walk', detail: '15 min easy, low incline. Short on purpose — legs were just worked.' }],
-      mobility: [],
+      mobility: [...POSTURE_WARMUP],
       sport: [],
       notes: 'Last hard session of the week. If performance has stalled two weeks running, take an easy deload next week. Progressive overload is what protects muscle in a deficit, so beat last week on something: reps, load or a cleaner tempo.',
     },
@@ -604,6 +614,7 @@ export const HABITS = [
   { key: 'mobility', label: 'Stretching or mobility', group: 'Recovery' },
   { key: 'swim', label: 'Swim completed (if scheduled)', group: 'Activity' },
   { key: 'badminton', label: 'Badminton (if played)', group: 'Activity' },
+  { key: 'oil_measured', label: 'Cooking oil measured (1 tsp per meal)', group: 'Nutrition' },
   { key: 'no_junk', label: 'No junk food', group: 'Nutrition' },
   { key: 'no_sugary', label: 'No sugary drinks', group: 'Nutrition' },
   { key: 'thu_veg', label: 'Thursday vegetarian followed', group: 'Rules' },
@@ -622,7 +633,14 @@ export const SEED_SCANS = [
   { id: 'seed-2026-08-13', date: '2026-08-13', weight: 187.8, bodyFatPct: 24.0, fatMass: 45.0, leanMass: 142.9, skeletalMuscle: 79.1, protein: 29.1, mineral: 11.0, bodyWater: 102.7, subcutFat: 38.8, visceralFatLevel: 9, visceralFatArea: 77, waist: 36.8, waistHip: 0.83, bmr: 1769, tee: 2724, bioAge: 35, bwi: 7.2 },
   { id: 'seed-2026-09-25', date: '2026-09-25', weight: 191.6, bodyFatPct: 24.8, fatMass: 47.6, leanMass: 144.0, skeletalMuscle: 79.8, protein: 29.3, mineral: 11.0, bodyWater: 103.6, subcutFat: 41.0, visceralFatLevel: 9, visceralFatArea: 81, waist: 37.5, waistHip: 0.83, bmr: 1780, tee: 2741, bioAge: 36, bwi: 6.9,
     armLLean: 8.18, armLFat: 2.82, armRLean: 8.11, armRFat: 2.56, trunkLean: 62.48, trunkFat: 27.95, legLLean: 20.61, legLFat: 7.30, legRLean: 20.99, legRFat: 7.01 },
+  // 11-13-2026: fat mass -0.4 lb and protein +1.3 lb since 09-25, but body
+  // water +4.4 lb, so most of the +5.9 lb lean jump is water (creatine, carbs,
+  // hydration). Visceral 9 -> 11 does not fit flat torso fat and flat waist;
+  // treat it as unconfirmed until the next scan under the same conditions.
+  { id: 'seed-2026-11-13', date: '2026-11-13', weight: 197.1, bodyFatPct: 23.9, fatMass: 47.2, leanMass: 149.9, skeletalMuscle: 83.1, protein: 30.6, mineral: 11.2, bodyWater: 108.0, subcutFat: 40.6, visceralFatLevel: 11, visceralFatArea: 100, waist: 37.4, waistHip: 0.88, bmr: 1838, tee: 2830, bioAge: 36, bwi: 7.2,
+    armLLean: 8.64, armLFat: 2.67, armRLean: 8.55, armRFat: 2.51, trunkLean: 65.06, trunkFat: 28.00, legLLean: 21.36, legLFat: 7.10, legRLean: 21.74, legRFat: 6.92 },
 ];
+
 
 // Evolt 360 segmental analysis (lb). Kept apart from SCAN_FIELDS so the main
 // comparison stays short; older scans simply have these blank. The Evolt
