@@ -314,6 +314,16 @@ label.btn:focus-within { outline: 3px solid rgba(52, 208, 222, 0.72); outline-of
 .plate-panel .field { margin: 0; }
 .plate-result { color: var(--green); font: 11px/1.5 'IBM Plex Mono', monospace; }
 .plate-result.warn { color: var(--amber); }
+.plate-tabs { display: flex; gap: 6px; margin-bottom: 10px; }
+.plate-tabs button { flex: 1; min-height: 36px; border: 1px solid var(--border); border-radius: 8px; background: transparent; color: var(--muted); font: inherit; font-size: 12px; }
+.plate-tabs button.on { border-color: var(--cyan); color: var(--text); background: rgba(52,208,222,0.10); }
+.plate-label { font-size: 11px; color: var(--muted); margin-bottom: 6px; text-transform: uppercase; letter-spacing: 0.04em; }
+.plate-chips { display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); gap: 6px; margin-bottom: 10px; }
+.plate-chip { min-height: 44px; border: 1px solid var(--border); border-radius: 10px; background: var(--surface); color: var(--text); font: 600 14px 'IBM Plex Mono', monospace; }
+.plate-chip:active { background: rgba(52,208,222,0.16); }
+.plate-stack { margin-top: 8px; font: 12px/1.5 'IBM Plex Mono', monospace; color: var(--muted); display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
+.plate-total { margin-top: 10px; display: flex; align-items: center; justify-content: space-between; gap: 8px; flex-wrap: wrap; font-family: 'IBM Plex Mono', monospace; }
+.plate-total b { font-size: 18px; color: var(--green); }
 .stat {
   background: var(--surface-2); border: 1px solid var(--line-soft);
   border-radius: var(--radius-sm); padding: 10px 11px;
