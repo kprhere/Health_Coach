@@ -4,7 +4,7 @@ import { cleanup, render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, describe, expect, test } from 'vitest';
 
-import { cellDone, defaultState, initSession, makeCell, makeSet, plateBreakdown, resolveWorkout } from '../src/helpers.js';
+import { cellDone, defaultState, initSession, makeCell, makeSet, plateBreakdown, resolveWorkout, totalFromOneSide, nextSetToFill, loadingKind } from '../src/helpers.js';
 import { TrainTab } from '../src/BodyRecompOS.jsx';
 import { RoundsLogger, SingleLogger } from '../src/loggers.jsx';
 
@@ -95,6 +95,29 @@ test('plate calculator never reports a weight it cannot load as exact', () => {
   expect(odd.plates).toEqual([]);
   // Bar-only is a real, exactly loadable answer: no plates.
   expect(plateBreakdown(45, 45)).toMatchObject({ perSide: 0, plates: [], exact: true, reason: null });
+});
+
+test('one side of plates doubles and adds the bar', () => {
+  expect(totalFromOneSide(70, 45).total).toBe(185);
+  expect(totalFromOneSide(90, 45).total).toBe(225);
+  expect(totalFromOneSide(47.5, 45).total).toBe(140);
+  // Plate-loaded machine: plates only.
+  expect(totalFromOneSide(90, 0).total).toBe(180);
+  expect(totalFromOneSide('', 45).reason).toBe('empty');
+  expect(totalFromOneSide('x', 45).reason).toBe('invalid');
+});
+
+test('the loaded weight goes to the first empty working set, never a warm-up', () => {
+  expect(nextSetToFill([{ weight: '', isWarmup: true }, { weight: '135' }, { weight: '' }])).toBe(2);
+  expect(nextSetToFill([{ weight: '135' }])).toBe(-1);
+});
+
+test('plate loader shows on barbells, Smith and plate-loaded machines only', () => {
+  expect(loadingKind('Back Squat', 'Barbell')).toBe('barbell');
+  expect(loadingKind('Smith Machine Split Squat', 'Machine')).toBe('smith');
+  expect(loadingKind('Hammer Strength High Row', 'Hammer Strength')).toBe('machine');
+  expect(loadingKind('Arsenal Standing Lateral Raise', 'Arsenal')).toBe('machine');
+  expect(loadingKind('Lat Pulldown', 'Cable')).toBe(null);
 });
 
 test('plate calculator says why a bad entry has no answer', () => {
@@ -272,7 +295,7 @@ function BarbellHarness() {
   return <SingleLogger block={barbellBlock} entry={entry} plan={{}} state={defaultState()} onMutate={onMutate} />;
 }
 
-test('the plate calculator seeds the working weight and explains a blank bar', async () => {
+test('the plate loader reverse tab seeds the working weight and explains a blank bar', async () => {
   const user = userEvent.setup();
   const view = render(<BarbellHarness />);
 
@@ -280,14 +303,36 @@ test('the plate calculator seeds the working weight and explains a blank bar', a
   // either exists, so the seed has to happen when the panel is opened.
   await user.type(screen.getByLabelText('Set 1 weight'), '135');
   await user.type(screen.getByLabelText('Set 2 weight'), '225');
-  await user.click(screen.getByRole('button', { name: /plate calculator/i }));
+  await user.click(screen.getByRole('button', { name: /plate loader/i }));
+  await user.click(screen.getByRole('tab', { name: /total → plates/i }));
 
   expect(screen.getByLabelText('Plate calculator target').value).toBe('225');
   expect(view.container.querySelector('.plate-result').textContent).toContain('2 × 45');
 
   // A blank bar field is a missing answer, not a 0 lb bar, and must not be
   // reported as an exact load.
-  await user.clear(screen.getByLabelText('Bar weight'));
+  await user.clear(screen.getByLabelText('Bar weight for target'));
   expect(view.container.querySelector('.plate-result')).toBeNull();
   expect(view.container.querySelector('.plate-panel .hint').textContent).toContain('not a 0 lb bar');
+  await user.type(screen.getByLabelText('Bar weight for target'), '45');
 });
+
+test('tapping one side of plates fills the next empty set with the full total', async () => {
+  const user = userEvent.setup();
+  render(<BarbellHarness />);
+  await user.type(screen.getByLabelText('Set 1 weight'), '135');
+  await user.click(screen.getByRole('button', { name: /plate loader/i }));
+
+  // One side: 45 + 25 = 70. Total = 70 x 2 + 45 bar = 185.
+  await user.click(screen.getByRole('button', { name: 'Add 45 lb plate' }));
+  await user.click(screen.getByRole('button', { name: 'Add 25 lb plate' }));
+  expect(screen.getByText('185 lb')).toBeTruthy();
+  await user.click(screen.getByRole('button', { name: /use for set 2/i }));
+  expect(screen.getByLabelText('Set 2 weight').value).toBe('185');
+
+  // Typing one side works too, and fills the next empty set.
+  await user.type(screen.getByLabelText('One side weight'), '90');
+  await user.click(screen.getByRole('button', { name: /use for set 3/i }));
+  expect(screen.getByLabelText('Set 3 weight').value).toBe('225');
+});
+

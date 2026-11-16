@@ -12,7 +12,7 @@ import {
   makeSet, makeCell, cellDone, roundDone, getLastSession, getBestPerformance,
   getNextTarget, rxForExercise, e1rm, restartSuggestion, exerciseMeta, exerciseNames,
   duplicateLastSet, recommendedCustomAlternates,
-  isTimedExercise, plateBreakdown,
+  isTimedExercise, plateBreakdown, totalFromOneSide, nextSetToFill, loadingKind, STANDARD_PLATES,
 } from './helpers.js';
 import { RestTimer } from './components.jsx';
 
@@ -142,7 +142,7 @@ function ExerciseNote({ name, state, setExerciseNote }) {
 // every bad input as "0 lb per side cannot be loaded with standard plates".
 const PLATE_HINTS = {
   empty: 'Enter the total weight, including the bar.',
-  'no-bar': 'Enter the bar weight — a blank field is not a 0 lb bar.',
+  'no-bar': 'Enter the bar weight. A blank field is not a 0 lb bar.',
   invalid: 'Enter the total and the bar as numbers.',
   'below-bar': 'That total is lighter than the bar on its own.',
 };
@@ -157,30 +157,103 @@ function heaviestLogged(sets = []) {
   return top ? String(top) : '';
 }
 
-function PlateCalculator({ initialWeight = '' }) {
+// Starting weight for what the plates sit on. Barbell is the standard 45 lb
+// Olympic bar; Smith bars are counterbalanced and vary by machine; a
+// plate-loaded machine logs plates only, so it starts at 0.
+const BASE_DEFAULT = { barbell: '45', smith: '15', machine: '0' };
+const BASE_LABEL = { barbell: 'Bar (lb)', smith: 'Smith bar (lb)', machine: 'Machine start (lb)' };
+const BASE_HINT = {
+  barbell: 'Standard Olympic bar is 45 lb. Change it for an EZ or lighter bar.',
+  smith: 'Smith bars weigh less than 45. Check the label on the machine and enter it once; it is remembered.',
+  machine: 'Logs plates only (machine start 0) so your numbers stay comparable week to week.',
+};
+const baseKey = (name) => `hc.plateBase.${name}`;
+function readBase(name, kind) {
+  try { const saved = localStorage.getItem(baseKey(name)); if (saved !== null && saved !== '') return saved; } catch (e) { /* storage blocked */ }
+  return BASE_DEFAULT[kind];
+}
+function saveBase(name, value) {
+  try { localStorage.setItem(baseKey(name), value); } catch (e) { /* storage blocked */ }
+}
+const fmtLb = (n) => String(Math.round(n * 100) / 100);
+
+function PlateCalculator({ name, kind, initialWeight = '', sets = [], onUse }) {
   const [open, setOpen] = useState(false);
+  const [mode, setMode] = useState('side');
+  const [stack, setStack] = useState([]);
+  const [side, setSide] = useState('');
+  const [base, setBaseState] = useState(() => readBase(name, kind));
   const [target, setTarget] = useState(initialWeight);
-  const [bar, setBar] = useState('45');
-  const result = plateBreakdown(target, bar);
-  // Seed on the way open rather than at mount: the logger mounts before any
-  // set has a weight, so a mount-time seed was always empty. Only fills a
-  // blank field, so a typed target is never clobbered.
+  const setBase = (value) => { setBaseState(value); saveBase(name, value); };
+
+  const sideWeight = stack.length ? stack.reduce((sum, plate) => sum + plate, 0) : side;
+  const loaded = totalFromOneSide(sideWeight, base);
+  const reverse = plateBreakdown(target, kind === 'machine' ? (base || '0') : base);
+  const fillIdx = nextSetToFill(sets);
+  const useLabel = fillIdx >= 0 ? `Use for set ${fillIdx + 1}` : 'Add as new set';
+
+  const tap = (plate) => { setSide(''); setStack((cur) => [...cur, plate]); };
+  const clear = () => { setStack([]); setSide(''); };
   const toggle = () => {
     if (!open && !target && initialWeight) setTarget(String(initialWeight));
     setOpen((value) => !value);
   };
+  const use = () => {
+    if (loaded.total === null) return;
+    onUse(fmtLb(loaded.total));
+    clear();
+  };
+
   return (
     <div className="plate-calculator">
-      <button className="btn xs ghost" onClick={toggle} aria-expanded={open}><Calculator size={13} /> Plate calculator</button>
+      <button className="btn xs ghost" onClick={toggle} aria-expanded={open}><Calculator size={13} /> Plate loader</button>
       {open ? (
         <div className="plate-panel">
-          <div className="field-row cols-2">
-            <div className="field"><label>Target total (lb)</label><input aria-label="Plate calculator target" className="input mono" inputMode="decimal" value={target} onChange={(event) => setTarget(event.target.value)} placeholder="225" /></div>
-            <div className="field"><label>Bar weight (lb)</label><input aria-label="Bar weight" className="input mono" inputMode="decimal" value={bar} onChange={(event) => setBar(event.target.value)} /></div>
+          <div className="plate-tabs" role="tablist">
+            <button role="tab" aria-selected={mode === 'side'} className={mode === 'side' ? 'on' : ''} onClick={() => setMode('side')}>One side → total</button>
+            <button role="tab" aria-selected={mode === 'total'} className={mode === 'total' ? 'on' : ''} onClick={() => setMode('total')}>Total → plates</button>
           </div>
-          {result.reason
-            ? <div className="hint">{PLATE_HINTS[result.reason]}</div>
-            : <div className={`plate-result ${result.exact ? '' : 'warn'}`}><b>Each side:</b> {result.plates.length ? result.plates.map(({ plate, count }) => `${count} × ${plate}`).join(' + ') : 'no plates'}{result.exact ? '' : ` · ${result.remainder} lb per side cannot be loaded with standard plates`}</div>}
+
+          {mode === 'side' ? (
+            <>
+              <div className="plate-label">Tap the plates on ONE side</div>
+              <div className="plate-chips">
+                {STANDARD_PLATES.map((plate) => (
+                  <button key={plate} className="plate-chip" onClick={() => tap(plate)} aria-label={`Add ${plate} lb plate`}>{plate}</button>
+                ))}
+              </div>
+              <div className="field-row cols-2">
+                <div className="field">
+                  <label htmlFor={`side-${name}`}>One side (lb)</label>
+                  <input id={`side-${name}`} aria-label="One side weight" className="input mono" inputMode="decimal"
+                    value={stack.length ? fmtLb(sideWeight) : side}
+                    onChange={(event) => { setStack([]); setSide(event.target.value); }} placeholder="70" />
+                </div>
+                <div className="field">
+                  <label htmlFor={`base-${name}`}>{BASE_LABEL[kind]}</label>
+                  <input id={`base-${name}`} aria-label="Bar weight" className="input mono" inputMode="decimal" value={base} onChange={(event) => setBase(event.target.value)} />
+                </div>
+              </div>
+              {stack.length ? <div className="plate-stack">One side: {stack.join(' + ')} <button className="btn xs ghost" onClick={() => setStack((cur) => cur.slice(0, -1))}>Undo</button> <button className="btn xs ghost" onClick={clear}>Clear</button></div> : null}
+              <div className="plate-total">
+                {loaded.total === null
+                  ? <span className="faint">{loaded.reason === 'invalid' ? 'Enter numbers only.' : 'Tap plates or type one side.'}</span>
+                  : <><span className="faint">{fmtLb(Number(sideWeight))} × 2{Number(base) > 0 ? ` + ${fmtLb(Number(base))}` : ''} =</span> <b>{fmtLb(loaded.total)} lb</b></>}
+                <button className="btn xs primary" disabled={loaded.total === null} onClick={use}>{useLabel}</button>
+              </div>
+              <div className="hint">{BASE_HINT[kind]}</div>
+            </>
+          ) : (
+            <>
+              <div className="field-row cols-2">
+                <div className="field"><label>Target total (lb)</label><input aria-label="Plate calculator target" className="input mono" inputMode="decimal" value={target} onChange={(event) => setTarget(event.target.value)} placeholder="225" /></div>
+                <div className="field"><label>{BASE_LABEL[kind]}</label><input aria-label="Bar weight for target" className="input mono" inputMode="decimal" value={base} onChange={(event) => setBase(event.target.value)} /></div>
+              </div>
+              {reverse.reason
+                ? <div className="hint">{PLATE_HINTS[reverse.reason]}</div>
+                : <div className={`plate-result ${reverse.exact ? '' : 'warn'}`}><b>Each side:</b> {reverse.plates.length ? reverse.plates.map(({ plate, count }) => `${count} × ${plate}`).join(' + ') : 'no plates'}{reverse.exact ? '' : ` · ${reverse.remainder} lb per side cannot be loaded with standard plates`}</div>}
+            </>
+          )}
         </div>
       ) : null}
     </div>
@@ -201,7 +274,12 @@ export function SingleLogger({ block, entry, plan, state, onMutate, setRestart, 
   const rw = (state.restartWeights && state.restartWeights[name]) || { old: '', pct: '' };
   const smartAlternates = recommendedCustomAlternates(ex.name, state, 2);
   const timed = isTimedExercise(name, state, `${ex.repLow || ''}-${ex.repHigh || ''}`);
-  const usesBarbell = /barbell|smith/i.test(`${meta.eq || ''} ${name}`);
+  const plateKind = timed ? null : loadingKind(name, meta.eq || '');
+  const useLoaded = (weight) => onMutate((e) => {
+    const i = nextSetToFill(e.sets);
+    if (i >= 0) e.sets[i].weight = weight;
+    else e.sets.push({ ...makeSet(), weight });
+  });
   const addWarmup = () => onMutate((e) => { e.sets.unshift({ ...makeSet(), isWarmup: true }); });
 
   const setField = (i, f, v) => onMutate((e) => { e.sets[i][f] = v; });
@@ -260,7 +338,7 @@ export function SingleLogger({ block, entry, plan, state, onMutate, setRestart, 
       ) : null}
 
       <ExerciseNote name={name} state={state} setExerciseNote={setExerciseNote} />
-      {usesBarbell ? <PlateCalculator initialWeight={heaviestLogged(entry.sets)} /> : null}
+      {plateKind ? <PlateCalculator key={name} name={name} kind={plateKind} initialWeight={heaviestLogged(entry.sets)} sets={entry.sets} onUse={useLoaded} /> : null}
       {!timed ? <HistoryGrid name={name} state={state} rx={rx} /> : <div className="hint">Timed hold: enter the completed seconds for each set. Weight is optional.</div>}
 
       <div className="set-head">

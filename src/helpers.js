@@ -1349,6 +1349,37 @@ export function plateBreakdown(totalWeight, barWeight = 45, plates = [45, 35, 25
   };
 }
 
+// ---------- one side in, total out ----------
+// At the rack it is easier to count the plates on ONE side than to work out a
+// total. Both sides carry the same plates, so total = 2 x one side + the bar
+// (or 0 on a plate-loaded machine, whose sled weight the app cannot know).
+export const STANDARD_PLATES = [45, 35, 25, 10, 5, 2.5];
+
+export function totalFromOneSide(oneSide, base = 0) {
+  if (!hasEnteredValue(oneSide)) return { total: null, reason: 'empty' };
+  const side = Number(oneSide);
+  const bar = hasEnteredValue(base) ? Number(base) : 0;
+  if (!Number.isFinite(side) || !Number.isFinite(bar) || side < 0 || bar < 0) return { total: null, reason: 'invalid' };
+  return { total: Math.round(cents(side * 2 + bar)) / 100, reason: null };
+}
+
+// Which sets to fill when the loaded weight is used: the first working set with
+// no weight yet; when every working set has one, signal a new set instead.
+export function nextSetToFill(sets = []) {
+  const idx = sets.findIndex((set) => !set.isWarmup && !hasEnteredValue(set.weight));
+  return idx;
+}
+
+// Plate-loaded machines (most Hammer Strength and Arsenal stations) take
+// plates but have no bar to count. Selectorized pin-stack machines do not.
+export function loadingKind(name = '', equipment = '') {
+  const text = `${equipment} ${name}`;
+  if (/smith/i.test(text)) return 'smith';
+  if (/barbell/i.test(text)) return 'barbell';
+  if (/hammer strength|arsenal|plate/i.test(text)) return 'machine';
+  return null;
+}
+
 // ---------- week-over-week training volume improvement ----------
 // The current week is usually mid-progress, so the headline compares the
 // last COMPLETED week with the one before it (a clean full-vs-full number),
