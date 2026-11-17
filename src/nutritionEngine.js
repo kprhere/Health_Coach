@@ -178,6 +178,12 @@ export const FOODS = {
   whey2:     F('Whey', '2 scoops', 48, 6, 2, 240, true, ['lean', 'gi']),
   // carbs
   oats:      F('Oats (in almond milk)', '50 g', 6, 30, 3, 170, true, ['gi']),
+  // The overnight-oats bowl as it is actually made: 80 g oats soaked in
+  // 200 ml unsweetened almond milk, 1.5 scoops whey, 10 g chia, 10 g flax,
+  // 100 g berries, eaten after training with the creatine stirred in.
+  oats80:    F('Rolled oats in 200 ml almond milk', '80 g', 11, 55, 8, 330, true, ['gi', 'ldl']),
+  seeds20:   F('Chia 10 g + flax 10 g', '', 4, 7, 7, 102, true, ['omega', 'ldl']),
+  berries100:F('Mixed berries', '100 g', 1, 12, 0, 50, true, ['gi']),
   brownrice: F('Brown rice', '200 g cooked', 5, 45, 2, 215, true, ['gi']),
   sweetpotato:F('Sweet potato', '200 g cooked', 4, 41, 0, 180, true, ['ldl']),
   quinoa:    F('Quinoa', '1 cup', 8, 39, 4, 220, true, ['gi']),
@@ -212,11 +218,12 @@ function sumFoods(keys) {
 
 // short chip name for the option switcher, taken from the headline food
 const SHORT = {
-  chicken: 'Chicken', chickenEgg: 'Chicken + whites', fish: 'Fish', paneer: 'Paneer', tofu: 'Tofu', eggmix: 'Eggs',
+  chicken: 'Chicken', chickenEgg: 'Chicken', fish: 'Fish', paneer: 'Paneer', tofu: 'Tofu', eggmix: 'Eggs',
   whey15: 'Whey', whey1: 'Whey', gyog: 'Yogurt', rajma: 'Rajma', dal: 'Dal',
-  oats: 'Oats', banana: 'Fruit', buttermilk: 'Chaas', berries: 'Berries', chiaflax: 'Seeds',
+  oats: 'Oats', oats80: 'Oats', banana: 'Fruit', soya: 'Soya', soya90: 'Soya', salmon: 'Salmon',
+  paneer150: 'Paneer', gyog250: 'Yogurt', whey2: 'Whey', fastDrinks: 'Coffee / tea', buttermilk: 'Chaas', berries: 'Berries', chiaflax: 'Seeds',
 };
-const HEADLINE_ORDER = ['chickenEgg', 'chicken', 'fish', 'paneer', 'tofu', 'eggmix', 'whey15', 'whey1', 'gyog', 'rajma', 'dal', 'oats', 'banana', 'buttermilk', 'berries', 'chiaflax'];
+const HEADLINE_ORDER = ['oats80', 'chickenEgg', 'chicken', 'fish', 'salmon', 'soya90', 'soya', 'paneer', 'paneer150', 'tofu', 'eggmix', 'whey2', 'whey15', 'whey1', 'gyog250', 'gyog', 'rajma', 'dal', 'oats', 'banana', 'buttermilk', 'berries', 'chiaflax'];
 
 // build one option object from a list of food keys
 function opt(keys, extraTags = []) {
@@ -229,6 +236,7 @@ function opt(keys, extraTags = []) {
     items: keys.map((k) => `${FOODS[k].label}${FOODS[k].per ? ` (${FOODS[k].per})` : ''}`),
     keys,
     short: SHORT[headline] || FOODS[headline].label.split(' ')[0],
+    headline,
     veg: s.veg,
     p: s.p, c: s.c, f: s.f, kcal: s.kcal,
     tags: [...tags],
@@ -241,8 +249,44 @@ function opt(keys, extraTags = []) {
 // Every option is filtered by the day's rules (veg days hide chicken /
 // fish) and tagged so the UI can show WHY it fits: high-protein for the
 // fat-loss goal, LDL-smart, or low-GI for HbA1c.
+// When two options in a slot share a headline ("Chicken" with rice and
+// "Chicken" with sweet potato), the chips looked identical. Add the starch
+// that tells them apart, or "low-carb" when the plate has none.
+const STARCH_SHORT = {
+  brownrice: 'rice', sweetpotato: 'sweet potato', quinoa: 'quinoa', millet2: 'millet roti',
+  roti2: 'roti', idli2: 'idli', oats: 'oats', oats80: 'oats', banana: 'banana',
+};
+// Longer names used only when a shorter one would collide.
+const FULL_SHORT = { chickenEgg: 'Chicken + whites' };
+// Vegetable sides are on most plates, so they never name an option.
+const VEG_SIDES = new Set(['steamedVeg', 'sabzi', 'broccoli', 'asparagus']);
+const nameOf = (k) => (STARCH_SHORT[k] || SHORT[k] || FOODS[k].label.split(' ').slice(0, 2).join(' ')).toLowerCase();
+function distinctShorts(options) {
+  const groups = options.reduce((m, o) => m.set(o.short, [...(m.get(o.short) || []), o]), new Map());
+  const used = new Set();
+  return options.map((o, i) => {
+    const dups = groups.get(o.short);
+    if (dups.length < 2) return o;
+    const others = dups.filter((d) => d !== o);
+    const starch = o.keys.find((k) => STARCH_SHORT[k]);
+    const othersHaveStarch = others.some((d) => d.keys.some((k) => STARCH_SHORT[k]));
+    const tell = o.keys.find((k) => k !== o.headline && !VEG_SIDES.has(k) && others.every((d) => !d.keys.includes(k)));
+    const lightest = others.every((d) => d.kcal > o.kcal);
+    let short;
+    if (starch && starch !== 'banana') short = `${o.short} + ${STARCH_SHORT[starch]}`;
+    else if (tell) short = `${o.short} + ${nameOf(tell)}`;
+    else if (othersHaveStarch) short = `${o.short} (low-carb)`;
+    else if (others.every((d) => d.headline !== o.headline)) short = FULL_SHORT[o.headline] || o.short;
+    else if (lightest) short = `${o.short} (lighter)`;
+    else short = `${o.short} ${i + 1}`;
+    if (used.has(short)) short = `${short} ${i + 1}`;
+    used.add(short);
+    return { ...o, short };
+  });
+}
+
 function slot(name, time, optionKeyLists) {
-  return { name, time, options: optionKeyLists.map((k) => opt(k)) };
+  return { name, time, options: distinctShorts(optionKeyLists.map((k) => opt(k))) };
 }
 
 export function mealPlanFor(dayType, state) {
@@ -292,13 +336,12 @@ export function mealPlanFor(dayType, state) {
     ];
   } else {
     const wake = isTraining
-      ? slot('Pre-workout (existing whey serving)', '7:00-7:15 AM', [['whey1'], ['whey1', 'banana']])
+      ? slot('Pre-workout', '7:00-7:15 AM', [['banana'], ['fastDrinks']])
       : slot('On waking', '6:00 AM', [['chiaflax', 'almonds'], ['banana', 'almonds'], ['buttermilk']]);
     const breakfast = slot(isTraining ? 'Post-workout breakfast' : 'Breakfast',
       isTraining ? '9:00-9:30 AM' : '8:00 AM', [
-        isVegDay
-          ? ['oats', isTraining ? 'whey1' : 'whey2', 'chiaflax', 'berries']
-          : ['oats', isTraining ? 'whey05' : 'whey15', 'chiaflax', 'berries'],
+        // Same bowl every day; all 1.5 scoops go in it, none pre-workout.
+        ['oats80', 'whey15', 'seeds20', 'berries100'],
         isVegDay ? ['gyog250', 'idli2', 'berries', 'whey1'] : ['eggmix', 'idli2', 'berries'],
         ['gyog', 'oats', 'berries', 'almonds'],
       ]);

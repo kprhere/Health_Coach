@@ -941,10 +941,10 @@ export function getNextTarget(name, state, rx) {
   const hitTop = last.sets.every((s) => s.reps >= repHigh) && (top.rpe == null || top.rpe <= targetRpe + 0.5);
   if (hitTop) {
     const nw = top.weight + increment(name, state);
-    return { text: `${nw} lb x ${repLow} for ${setsN} sets`, note: `Hit top reps last time. Add ${increment(name, state)} lb and reset to the bottom of the range.` };
+    return { text: `${nw} lb x ${repLow} for ${setsN} ${setsN === 1 ? 'set' : 'sets'}`, note: `Hit top reps last time. Add ${increment(name, state)} lb and reset to the bottom of the range.` };
   }
   const targetReps = Math.min(repHigh, Math.max(...last.sets.map((s) => s.reps)) + 1);
-  return { text: `${top.weight} lb x ${targetReps} for ${setsN} sets`, note: 'Keep the weight and add a rep per set toward the top of the range.' };
+  return { text: `${top.weight} lb x ${targetReps} for ${setsN} ${setsN === 1 ? 'set' : 'sets'}`, note: 'Keep the weight and add a rep per set toward the top of the range.' };
 }
 
 // prescription lookup for an exercise name in a resolved plan (for next-target ranges)

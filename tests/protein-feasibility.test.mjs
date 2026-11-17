@@ -102,18 +102,32 @@ test('protein target is reachable inside the calorie budget', () => {
   }
 });
 
-test('the existing whey serving is split around training instead of stacked', () => {
+test('the post-workout bowl is the real overnight-oats recipe with all the whey in it', () => {
   const state = baseState();
   const training = mealPlanFor('training', state);
   const pre = training.find((slot) => slot.name.startsWith('Pre-workout'));
   const breakfast = training.find((slot) => slot.name === 'Post-workout breakfast');
 
-  assert.deepEqual(pre.options[0].keys, ['whey1']);
+  // No whey before training: all 1.5 scoops go in the oats with the creatine.
+  assert.ok(pre.options.every((o) => !o.keys.some((k) => k.startsWith('whey'))));
   assert.equal(pre.time, '7:00-7:15 AM');
   assert.equal(breakfast.time, '9:00-9:30 AM');
-  assert.ok(breakfast.options[0].keys.includes('whey05'));
-  assert.equal(pre.options[0].p + FOODS.whey05.p, FOODS.whey15.p);
-  assert.equal(pre.options[0].kcal + FOODS.whey05.kcal, FOODS.whey15.kcal);
+  assert.deepEqual(breakfast.options[0].keys, ['oats80', 'whey15', 'seeds20', 'berries100']);
+  assert.equal(breakfast.options[0].short, 'Oats');
+  assert.equal(breakfast.options[0].kcal, 662);
+  assert.equal(breakfast.options[0].p, 52);
+});
+
+test('no two options in a meal slot share a label', () => {
+  const state = baseState();
+  for (const day of ['training', 'rest', 'trainingVeg', 'restVeg', 'vegSat', 'noMoonFast']) {
+    for (const slot of mealPlanFor(day, state)) {
+      const labels = slot.options.map((o) => o.short);
+      assert.equal(new Set(labels).size, labels.length, `${day} ${slot.name}: ${labels.join(', ')}`);
+    }
+  }
+  const lunch = mealPlanFor('training', state).find((slot) => slot.name === 'Lunch');
+  assert.deepEqual(lunch.options.map((o) => o.short), ['Chicken + rice', 'Chicken + sweet potato', 'Fish', 'Chicken (low-carb)']);
 });
 
 test('lunch portions use cooked gram weights and keep whey as a snack option', () => {
