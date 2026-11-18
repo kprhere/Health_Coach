@@ -146,7 +146,9 @@ label.btn:focus-within { outline: 3px solid rgba(52, 208, 222, 0.72); outline-of
 .bottom-nav {
   position: fixed;
   left: 50%;
-  transform: translateX(-50%);
+  /* --nav-lift is set by viewportGuard.js: how far the real screen bottom is
+     below where iOS thinks the page ends (0 when the layout is correct). */
+  transform: translate(-50%, var(--nav-lift, 0px));
   bottom: 0;
   width: 100%;
   max-width: 640px;
@@ -1274,7 +1276,6 @@ body::before {
    the fixed nav ends up mid-screen. This keeps every field at 16px whatever a
    component rule above says. */
 input:not([type='checkbox']):not([type='radio']), select, textarea { font-size: max(16px, 1em) !important; }
-html { overflow-x: hidden; }
 /* While typing, the keyboard pushes the fixed nav up over the fields being
    filled in. Hide it until the keyboard closes. */
 html.kb-open .bottom-nav { display: none; }
