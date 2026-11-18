@@ -13,7 +13,7 @@ export { nutritionProfile };
 
 export const PROGRAM_START = '2026-07-08'; // start of the current fat-loss phase (latest scan)
 export const PHASE_NAME = 'Fat Loss Phase 1';
-export const STATE_VERSION = 6;
+export const STATE_VERSION = 7;
 
 // ---------- date utils ----------
 export const pad = (n) => String(n).padStart(2, '0');
@@ -168,6 +168,28 @@ const MIGRATIONS = {
       day.mobility = [...missing, ...current];
     });
     return { ...migrated, version: 6 };
+  },
+  7: (state) => {
+    // 2026-11-18: this EOS has no Body Builder Standing Press. Swap it for a
+    // standing barbell Overhead Press in the saved program, keeping the sets,
+    // reps and rest that were planned. Logs are not touched.
+    const migrated = mergeState(defaultState(), state);
+    const swap = (name) => (name === 'Body Builder Standing Press' ? 'Overhead Press' : name);
+    const days = (migrated.program && migrated.program.days) || {};
+    Object.values(days).forEach((day) => {
+      (day && Array.isArray(day.blocks) ? day.blocks : []).forEach((block) => {
+        if (!block) return;
+        block.name = swap(block.name);
+        (Array.isArray(block.exercises) ? block.exercises : []).forEach((ex) => {
+          if (!ex || ex.name !== 'Body Builder Standing Press') return;
+          ex.name = 'Overhead Press';
+          if (!ex.note || ex.note === 'Overhead shoulder press') {
+            ex.note = 'Standing barbell press, set up yourself: bar in the rack at upper-chest height, squeeze glutes, ribs down';
+          }
+        });
+      });
+    });
+    return { ...migrated, version: 7 };
   },
 };
 
@@ -378,7 +400,12 @@ export function exerciseLibrary(state) {
   return { ...EXERCISES, ...safeCustom };
 }
 
-export const exerciseNames = (state) => Object.keys(exerciseLibrary(state)).sort((a, b) => a.localeCompare(b));
+// Retired exercises (equipment this gym does not have) stay in the library so
+// old logs keep their details, but are never offered for new work.
+export const isRetired = (name, state) => !!(exerciseLibrary(state)[name] || {}).retired;
+export const exerciseNames = (state) => Object.keys(exerciseLibrary(state))
+  .filter((name) => !isRetired(name, state))
+  .sort((a, b) => a.localeCompare(b));
 export const exerciseMeta = (name, state) => exerciseLibrary(state)[name] || {};
 
 export const isTimedExercise = (name, state, target = '') => (
@@ -514,7 +541,7 @@ export function suggestedReplacements(targetName, state, limit = 8) {
   const lib = exerciseLibrary(state);
   const meta = lib[targetName] || {};
   const out = [];
-  const add = (name) => { if (name && lib[name] && name !== targetName && !out.includes(name)) out.push(name); };
+  const add = (name) => { if (name && lib[name] && !lib[name].retired && name !== targetName && !out.includes(name)) out.push(name); };
   // sub and eos describe equipment in words ("Hammer Strength Chest Press");
   // when that is not an exact library name, use the closest search match.
   const resolve = (text) => (text && (lib[text] ? text : searchExercises(text, state, targetName, 1)[0])) || null;
@@ -543,7 +570,7 @@ export function searchExercises(query, state, targetName = '', limit = 30) {
   const lib = exerciseLibrary(state);
   const scored = [];
   Object.entries(lib).forEach(([name, meta]) => {
-    if (name === targetName) return;
+    if (name === targetName || meta.retired) return;
     const n = name.toLowerCase();
     const main = String(meta.p || '').toLowerCase();
     const other = `${meta.s || ''} ${meta.eq || ''}`.toLowerCase();
