@@ -22,7 +22,7 @@ test('Thursday is a fed vegetarian arms, shoulders and abs session', () => {
   assert.equal(nutritionDayType(THURSDAY, state), 'trainingVeg');
   assert.equal(fastEndTime(THURSDAY, state), null);
   const names = plan.blocks.flatMap((b) => (b.exercises || []).map((e) => e.name));
-  for (const required of ['Close Grip Bench', 'Overhead Tricep Extension', 'Incline DB Curl', 'Hammer Curl', 'Reverse Curl', 'Cable Crunch']) {
+  for (const required of ['Close Grip Bench', 'Overhead Tricep Extension', 'Incline DB Curl', 'Hammer Curl', 'Reverse Curl', 'Weighted Decline Crunch']) {
     assert.ok(names.includes(required), `${required} should be on Thursday`);
   }
   assert.ok(resolveNutrition(THURSDAY, state).meals.every((meal) => !meal.fasting));

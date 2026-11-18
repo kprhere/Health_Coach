@@ -13,7 +13,7 @@ export { nutritionProfile };
 
 export const PROGRAM_START = '2026-07-08'; // start of the current fat-loss phase (latest scan)
 export const PHASE_NAME = 'Fat Loss Phase 1';
-export const STATE_VERSION = 7;
+export const STATE_VERSION = 8;
 
 // ---------- date utils ----------
 export const pad = (n) => String(n).padStart(2, '0');
@@ -190,6 +190,25 @@ const MIGRATIONS = {
       });
     });
     return { ...migrated, version: 7 };
+  },
+  8: (state) => {
+    // 2026-11-18: Cable Crunch comes out of the plan. In the light Wednesday
+    // core circuit it becomes a Reverse Crunch; in the loaded ab circuits a
+    // Weighted Decline Crunch. Planned reps and RPE are kept; logs untouched.
+    const migrated = mergeState(defaultState(), state);
+    const days = (migrated.program && migrated.program.days) || {};
+    Object.values(days).forEach((day) => {
+      (day && Array.isArray(day.blocks) ? day.blocks : []).forEach((block) => {
+        if (!block || !Array.isArray(block.exercises)) return;
+        const light = day.dayType === 'rest' || /core circuit/i.test(block.name || '');
+        block.exercises.forEach((ex) => {
+          if (ex && ex.name === 'Cable Crunch') ex.name = light ? 'Reverse Crunch' : 'Weighted Decline Crunch';
+        });
+        if (block.name === 'Cable Crunch') block.name = light ? 'Reverse Crunch' : 'Weighted Decline Crunch';
+        if (typeof block.note === 'string') block.note = block.note.replace('Add weight to the crunch whenever', 'Add a heavier plate to the decline crunch whenever');
+      });
+    });
+    return { ...migrated, version: 8 };
   },
 };
 
