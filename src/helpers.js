@@ -506,6 +506,64 @@ export function recommendedCustomAlternates(targetName, state, limit = 4) {
     .slice(0, limit);
 }
 
+// ---------- Replace-with search ----------
+// Before anything is typed: the best swaps for the planned exercise, in this
+// order: the library's own substitute and EOS machine for it, matching custom
+// equipment, then other exercises for the same main muscle.
+export function suggestedReplacements(targetName, state, limit = 8) {
+  const lib = exerciseLibrary(state);
+  const meta = lib[targetName] || {};
+  const out = [];
+  const add = (name) => { if (name && lib[name] && name !== targetName && !out.includes(name)) out.push(name); };
+  // sub and eos describe equipment in words ("Hammer Strength Chest Press");
+  // when that is not an exact library name, use the closest search match.
+  const resolve = (text) => (text && (lib[text] ? text : searchExercises(text, state, targetName, 1)[0])) || null;
+  add(resolve(meta.sub));
+  add(resolve(meta.eos));
+  recommendedCustomAlternates(targetName, state).forEach(({ name }) => add(name));
+  if (meta.p) {
+    Object.keys(lib)
+      .filter((name) => lib[name].p === meta.p)
+      .sort((a, b) => a.localeCompare(b))
+      .forEach(add);
+  }
+  // An exercise not in the library (renamed or custom): suggest whatever its
+  // own name finds, e.g. "Bench Press" -> Barbell / Dumbbell Bench Press.
+  if (!out.length && targetName) searchExercises(targetName, state, targetName, limit).forEach(add);
+  return out.slice(0, limit);
+}
+
+// Typed search over name, main muscle, secondary muscles and equipment. Every
+// word typed must match somewhere ("hammer row" finds Hammer Strength rows).
+// Name matches rank above muscle or equipment matches; a name that starts
+// with the query ranks first.
+export function searchExercises(query, state, targetName = '', limit = 30) {
+  const words = String(query || '').toLowerCase().trim().split(/\s+/).filter(Boolean);
+  if (!words.length) return [];
+  const lib = exerciseLibrary(state);
+  const scored = [];
+  Object.entries(lib).forEach(([name, meta]) => {
+    if (name === targetName) return;
+    const n = name.toLowerCase();
+    const main = String(meta.p || '').toLowerCase();
+    const other = `${meta.s || ''} ${meta.eq || ''}`.toLowerCase();
+    let score = 0;
+    for (const w of words) {
+      if (n.startsWith(w)) score += 4;
+      else if (new RegExp(`(^|[^a-z])${w.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}`).test(n)) score += 3;
+      else if (n.includes(w)) score += 2;
+      else if (main.includes(w)) score += 1.5;
+      else if (other.includes(w)) score += 1;
+      else return;
+    }
+    scored.push({ name, score });
+  });
+  return scored
+    .sort((a, b) => b.score - a.score || a.name.localeCompare(b.name))
+    .slice(0, limit)
+    .map((item) => item.name);
+}
+
 export function exportJSON(state) { return JSON.stringify(state, null, 2); }
 
 export function download(filename, text, type = 'application/json') {
