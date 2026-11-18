@@ -202,6 +202,9 @@ export const EXERCISES = {
 
   // ---- Core ----
   'Cable Crunch': X('Abs', 'Obliques', 'Cable', 'Beginner', 'Weighted ab flexion', 'Hanging Leg Raise', 'Cable Rope Crunch', 'Crunch ribs to pelvis, hips fixed', 'Pulling with arms and hips'),
+  // Replaced Cable Crunch in the plan 2026-11-18 (user asked for something else).
+  'Weighted Decline Crunch': X('Abs', 'Obliques', 'Decline Bench', 'Beginner', 'Weighted ab flexion, loaded with a plate', 'Reverse Crunch', 'Decline bench + plate', 'Hook the feet, plate on the chest, curl ribs toward hips one vertebra at a time, lower over 2s', 'Sitting all the way up with the hip flexors instead of curling the spine'),
+  'Reverse Crunch': X('Abs', 'Lower Abs', 'Bodyweight', 'Beginner', 'Lower abs and posterior pelvic tilt', 'Lying Leg Raise', 'Flat bench, hold the bench behind your head', 'Curl the hips up off the bench toward the ribs, tuck the tailbone, lower slowly', 'Swinging the legs for momentum instead of curling the pelvis'),
   'Hanging Leg Raise': X('Abs', 'Hip Flexors', 'Bodyweight', 'Intermediate', 'Lower ab strength', 'Lying Leg Raise', 'Captains Chair Leg Raise', 'Posterior tilt, control the swing', 'Swinging and using momentum'),
   'Lying Leg Raise': X('Abs', 'Hip Flexors', 'Bodyweight', 'Beginner', 'Lower ab control', 'Hanging Leg Raise', 'Bench Leg Raise', 'Press low back down, slow lower', 'Arching the lower back'),
   'Ab Wheel': X('Abs', 'Obliques, Lats', 'Wheel', 'Advanced', 'Anti-extension strength', 'Plank', 'Ab Wheel', 'Ribs down, roll only as far as control', 'Letting the hips sag'),
@@ -331,9 +334,9 @@ export const PROGRAM = {
         single('Bulgarian Split Squat', 3, 10, 12, 8, 90, '2-0-1', 'Per leg. Start with the left leg (scan shows it slightly behind), then match its reps on the right'),
         single('Hip Adduction', 3, 12, 15, 8, 60, '2-1-2', 'Inner-thigh muscle for leg shape. It builds the muscle; total fat loss is what uncovers it'),
         circuit('Loaded Abs', 3, 60, [
-          { name: 'Cable Crunch', targetReps: '10-15', targetRpe: 9 },
+          { name: 'Weighted Decline Crunch', targetReps: '10-15', targetRpe: 9 },
           { name: 'Hanging Leg Raise', targetReps: '8-15', targetRpe: 8 },
-        ], 'Add weight to the crunch whenever all rounds hit 15. Abs grow like any muscle'),
+        ], 'Add a heavier plate to the decline crunch whenever all rounds hit 15. Abs grow like any muscle'),
       ],
       conditioning: [], mobility: [...POSTURE_WARMUP],
       sport: [{ name: 'Easy Laps', detail: 'Swimming class this evening. Technique-focused, legs already worked.' }],
@@ -343,7 +346,7 @@ export const PROGRAM = {
       key: 'coreRecovery', title: 'Core + Recovery', focus: 'Active Recovery', dayType: 'rest', intensity: 'Light',
       blocks: [
         circuit('Core Circuit', 3, 60, [
-          { name: 'Cable Crunch', targetReps: '12-15', targetRpe: 8 },
+          { name: 'Reverse Crunch', targetReps: '12-15', targetRpe: 8 },
           { name: 'Pallof Press', targetReps: '10 / side', targetRpe: 7 },
           { name: 'Dead Bug', targetReps: '8-10', targetRpe: 6 },
           { name: 'Plank', targetReps: '30-45s', targetRpe: 6 },
@@ -380,7 +383,7 @@ export const PROGRAM = {
           { name: 'Reverse Curl', targetReps: '12-15', targetRpe: 9 },
         ], 'Brachialis and forearms push the biceps veins outward'),
         circuit('Loaded Abs', 3, 60, [
-          { name: 'Cable Crunch', targetReps: '10-15', targetRpe: 9 },
+          { name: 'Weighted Decline Crunch', targetReps: '10-15', targetRpe: 9 },
           { name: 'Hanging Leg Raise', targetReps: '8-15', targetRpe: 8 },
           { name: 'Ab Wheel', targetReps: '8-12', targetRpe: 8 },
         ], 'Abs loaded three times a week: Tuesday, Thursday, Sunday'),
