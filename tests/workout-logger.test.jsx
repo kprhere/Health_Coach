@@ -209,12 +209,42 @@ describe('single-set workout controls', () => {
     const user = userEvent.setup();
     render(<SingleHarness initialSets={[{ ...makeSet(), weight: '185', reps: '8', rpe: '8' }]} />);
 
-    await user.selectOptions(screen.getByLabelText('Replacement exercise'), 'Dumbbell Bench Press');
+    await user.click(screen.getByRole('button', { name: 'Replacement exercise' }));
+    await user.type(screen.getByLabelText('Search replacement exercise'), 'dumbbell bench');
+    await user.click(screen.getByRole('option', { name: /Dumbbell Bench Press/ }));
     await user.click(screen.getByRole('button', { name: /^skip$/i }));
     expect(readEntry()).toMatchObject({ replacedWith: 'Dumbbell Bench Press', skipped: true });
     expect(readEntry().sets[0]).toMatchObject({ weight: '185', reps: '8', rpe: '8' });
     await user.click(screen.getByRole('button', { name: /un-skip/i }));
     expect(readEntry().skipped).toBe(false);
+  });
+
+  test('replace with: best swaps show before typing, search narrows them, and the swap can be undone', async () => {
+    const user = userEvent.setup();
+    render(<SingleHarness initialSets={[{ ...makeSet(), weight: '185', reps: '8' }]} />);
+
+    await user.click(screen.getByRole('button', { name: 'Replacement exercise' }));
+    const before = screen.getAllByRole('option').map((o) => o.textContent);
+    expect(before.length).toBeGreaterThan(0);
+    expect(before.some((t) => t.startsWith('Dumbbell Bench Press'))).toBe(true);
+
+    await user.type(screen.getByLabelText('Search replacement exercise'), 'hammer chest');
+    const found = screen.getAllByRole('option').map((o) => o.textContent);
+    expect(found[0]).toMatch(/^Hammer Strength Bench Press/);
+
+    await user.clear(screen.getByLabelText('Search replacement exercise'));
+    await user.type(screen.getByLabelText('Search replacement exercise'), 'zzzz');
+    expect(screen.getByText(/No match/)).toBeTruthy();
+
+    // Enter picks the top match.
+    await user.clear(screen.getByLabelText('Search replacement exercise'));
+    await user.type(screen.getByLabelText('Search replacement exercise'), 'incline dumbbell{Enter}');
+    expect(readEntry().replacedWith).toBe('Incline Dumbbell Press');
+    expect(screen.getByRole('button', { name: 'Replacement exercise' }).textContent).toContain('Replaced with Incline Dumbbell Press');
+    expect(readEntry().sets[0]).toMatchObject({ weight: '185', reps: '8' });
+
+    await user.click(screen.getByRole('button', { name: /use planned exercise/i }));
+    expect(readEntry().replacedWith).toBe('');
   });
 });
 

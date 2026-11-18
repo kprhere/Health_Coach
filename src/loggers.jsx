@@ -13,6 +13,7 @@ import {
   getNextTarget, rxForExercise, e1rm, restartSuggestion, exerciseMeta, exerciseNames,
   duplicateLastSet, recommendedCustomAlternates,
   isTimedExercise, plateBreakdown, totalFromOneSide, nextSetToFill, loadingKind, STANDARD_PLATES,
+  suggestedReplacements, searchExercises, exerciseLibrary,
 } from './helpers.js';
 import { RestTimer } from './components.jsx';
 
@@ -28,22 +29,58 @@ function PainScale({ value, onChange }) {
   );
 }
 
+// Replace-with picker: a search box instead of a long dropdown. Before typing
+// it shows the best swaps for this exercise; typing searches name, main
+// muscle, other muscles and equipment ("lat", "hammer row", "triceps").
 function ReplaceSelect({ value, onChange, state, targetName }) {
-  const recommended = targetName ? recommendedCustomAlternates(targetName, state) : [];
-  const recommendedNames = new Set(recommended.map((item) => item.name));
-  const remaining = exerciseNames(state).filter((name) => !recommendedNames.has(name));
+  const [open, setOpen] = useState(false);
+  const [query, setQuery] = useState('');
+  const suggested = targetName ? suggestedReplacements(targetName, state) : [];
+  const results = query.trim() ? searchExercises(query, state, targetName) : [];
+  const pick = (name) => { onChange(name); setOpen(false); setQuery(''); };
+  const lib = exerciseLibrary(state);
+  const sub = (name) => [lib[name] && lib[name].p, lib[name] && lib[name].eq].filter(Boolean).join(' · ');
+
+  if (!open) {
+    return (
+      <div className="replace-closed">
+        <button className="btn xs" onClick={() => setOpen(true)} aria-label="Replacement exercise" aria-expanded="false">
+          <Search size={13} /> {value ? `Replaced with ${value}` : 'Replace with...'}
+        </button>
+        {value ? <button className="btn xs ghost" onClick={() => onChange('')}>Use planned exercise</button> : null}
+      </div>
+    );
+  }
+
+  const list = query.trim() ? results : suggested;
   return (
-    <select aria-label="Replacement exercise" className="select" value={value || ''} onChange={(e) => onChange(e.target.value)} style={{ maxWidth: 200 }}>
-      <option value="">Replace with...</option>
-      {recommended.length ? (
-        <optgroup label="Recommended custom equipment">
-          {recommended.map(({ name }) => <option key={name} value={name}>{name}</option>)}
-        </optgroup>
-      ) : null}
-      <optgroup label="Exercise library">
-        {remaining.map((n) => <option key={n} value={n}>{n}</option>)}
-      </optgroup>
-    </select>
+    <div className="replace-picker">
+      <div className="replace-search">
+        <Search size={15} />
+        <input
+          aria-label="Search replacement exercise" className="input" autoFocus enterKeyHint="search"
+          value={query} onChange={(event) => setQuery(event.target.value)}
+          onKeyDown={(event) => { if (event.key === 'Enter' && list.length) pick(list[0]); if (event.key === 'Escape') setOpen(false); }}
+          placeholder="Search: lat, hammer row, triceps, cable"
+        />
+        <button className="btn xs ghost" onClick={() => { setOpen(false); setQuery(''); }}>Cancel</button>
+      </div>
+      <div className="replace-label">{query.trim() ? `${results.length} match${results.length === 1 ? '' : 'es'}` : 'Best swaps for this exercise'}</div>
+      {list.length ? (
+        <ul className="replace-list" role="listbox" aria-label="Replacement options">
+          {list.map((name) => (
+            <li key={name}>
+              <button role="option" aria-selected={value === name} className={value === name ? 'on' : ''} onClick={() => pick(name)}>
+                <span>{name}</span>
+                <small>{sub(name)}</small>
+              </button>
+            </li>
+          ))}
+        </ul>
+      ) : (
+        <div className="hint">{query.trim() ? 'No match. Try a muscle like "back" or equipment like "cable".' : 'Type to search the exercise library.'}</div>
+      )}
+    </div>
   );
 }
 

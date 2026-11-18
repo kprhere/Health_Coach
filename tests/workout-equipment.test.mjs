@@ -185,3 +185,22 @@ test('Chest-Assisted Dip is a chest machine movement in the current Upper B plan
   assert.ok(upperBExercises.includes('Chest-Assisted Dip'));
   assert.ok(!upperBExercises.includes('Arsenal Laying Pec Fly'), 'the dip replaces chest volume instead of adding more sets');
 });
+
+test('replace-with search matches name, muscle and equipment, every word must match', async () => {
+  const { searchExercises, suggestedReplacements, defaultState } = await import('../src/helpers.js');
+  const state = defaultState();
+  assert.deepEqual(searchExercises('hammer row', state), ['Hammer Strength High Row', 'Hammer Strength Row']);
+  assert.equal(searchExercises('lat', state)[0], 'Lat Pulldown');
+  // Main-muscle matches rank above exercises that only list it as secondary.
+  const triceps = searchExercises('triceps', state, 'Close Grip Bench');
+  assert.ok(triceps.slice(0, 5).every((n) => !/Bench Press|Arnold/.test(n)));
+  assert.deepEqual(searchExercises('zzzz', state), []);
+  assert.deepEqual(searchExercises('   ', state), []);
+  assert.ok(!searchExercises('close grip', state, 'Close Grip Bench').includes('Close Grip Bench'));
+  const swaps = suggestedReplacements('Barbell Bench Press', state);
+  assert.equal(swaps[0], 'Dumbbell Bench Press');
+  // The EOS note says "Hammer Strength Chest Press"; the library calls it
+  // Hammer Strength Bench Press. It is found by search and ranked second.
+  assert.equal(swaps[1], 'Hammer Strength Bench Press');
+  assert.ok(!swaps.includes('Barbell Bench Press'));
+});

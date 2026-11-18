@@ -1281,3 +1281,15 @@ input:not([type='checkbox']):not([type='radio']), select, textarea { font-size: 
 html.kb-open .bottom-nav { display: none; }
 /* Four meal options fit as a 2 x 2 grid instead of 3 + 1. */
 .opt-switch:has(> button:nth-child(4)) button { flex: 1 1 calc(50% - 4px); }
+
+/* Replace-with picker */
+.replace-closed { display: flex; flex-wrap: wrap; gap: 6px; }
+.replace-picker { width: 100%; border: 1px solid var(--line); border-radius: 12px; background: var(--surface-2); padding: 10px; }
+.replace-search { display: flex; align-items: center; gap: 8px; color: var(--muted); }
+.replace-search .input { flex: 1 1 auto; min-width: 0; }
+.replace-label { margin: 10px 2px 6px; font-size: 11px; letter-spacing: 0.06em; text-transform: uppercase; color: var(--faint); }
+.replace-list { list-style: none; margin: 0; padding: 0; max-height: 280px; overflow-y: auto; -webkit-overflow-scrolling: touch; display: grid; gap: 4px; }
+.replace-list button { width: 100%; min-height: 48px; display: flex; flex-direction: column; align-items: flex-start; justify-content: center; gap: 2px; padding: 8px 12px; border-radius: 10px; border: 1px solid transparent; background: var(--surface); color: var(--text); text-align: left; font: inherit; }
+.replace-list button span { font-size: 14px; font-weight: 600; }
+.replace-list button small { font-size: 11.5px; color: var(--muted); }
+.replace-list button.on, .replace-list button:focus-visible { border-color: var(--cyan); }
