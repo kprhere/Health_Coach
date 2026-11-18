@@ -138,11 +138,11 @@ export const EXERCISES = {
   'Face Pull': X('Rear Delts', 'Traps, Rotator Cuff', 'Cable', 'Beginner', 'Shoulder health and posture', 'Rear Delt Fly', 'Cable Rope Face Pull', 'Pull to forehead, thumbs back', 'Going too heavy and shrugging'),
 
   // ---- Shoulders ----
-  'Overhead Press': X('Front Delts', 'Triceps, Upper Chest', 'Barbell', 'Intermediate', 'Pressing strength overhead', 'Dumbbell Shoulder Press', 'Body Builder Standing Press', 'Squeeze glutes, bar over mid-foot, head through', 'Leaning back into the lower spine'),
+  'Overhead Press': X('Front Delts', 'Triceps, Upper Chest', 'Barbell', 'Intermediate', 'Pressing strength overhead', 'Dumbbell Shoulder Press', 'Hammer Strength Iso Shoulder Press', 'Squeeze glutes, bar over mid-foot, head through', 'Leaning back into the lower spine'),
   'Dumbbell Shoulder Press': X('Front Delts', 'Triceps', 'Dumbbells', 'Beginner', 'Shoulder hypertrophy', 'Machine Shoulder Press', 'Hammer Strength Iso Shoulder Press', 'Elbows slightly forward, no lockout slam', 'Arching back and flaring elbows wide'),
   'Machine Shoulder Press': X('Front Delts', 'Triceps', 'Machine', 'Beginner', 'Low-fatigue shoulder volume', 'Dumbbell Shoulder Press', 'Hammer Strength Iso Shoulder Press', 'Seat so handles at shoulder height', 'Seat too low, wrists bend back'),
   'Arnold Press': X('Front Delts', 'Side Delts, Triceps', 'Dumbbells', 'Intermediate', 'Full-delt pressing', 'Dumbbell Shoulder Press', 'Hammer Strength Iso Shoulder Press', 'Rotate palms out as you press', 'Rushing the rotation and losing control'),
-  'Landmine Press': X('Front Delts', 'Upper Chest, Triceps', 'Barbell', 'Beginner', 'Shoulder-friendly pressing', 'Machine Shoulder Press', 'Body Builder Standing Press', 'Press up and slightly in, ribs down', 'Leaning away from the bar'),
+  'Landmine Press': X('Front Delts', 'Upper Chest, Triceps', 'Barbell', 'Beginner', 'Shoulder-friendly pressing', 'Machine Shoulder Press', 'Hammer Strength Iso Shoulder Press', 'Press up and slightly in, ribs down', 'Leaning away from the bar'),
   'Lateral Raise': X('Side Delts', '-', 'Dumbbells', 'Beginner', 'Delt width', 'Cable Lateral Raise', 'Arsenal Standing Lateral Raise', 'Lead with elbows, pour-the-jug tilt', 'Swinging and using traps'),
   'Cable Lateral Raise': X('Side Delts', '-', 'Cable', 'Beginner', 'Constant-tension side delts', 'Lateral Raise', 'Arsenal Standing Lateral Raise', 'Cable behind body, smooth arc', 'Yanking with body English'),
   'Rear Delt Fly': X('Rear Delts', 'Traps', 'Dumbbells', 'Beginner', 'Rear delt balance', 'Reverse Pec Deck', 'Arsenal Reverse Fly', 'Hinge over, pinkies up, wide arc', 'Using back instead of rear delts'),
@@ -151,10 +151,13 @@ export const EXERCISES = {
   // ---- Biceps ----
   'Barbell Curl': X('Biceps', 'Forearms', 'Barbell', 'Beginner', 'Overloaded biceps', 'Dumbbell Curl', 'EZ-Bar Curl', 'Elbows pinned, no swing', 'Rocking the torso to lift'),
   'Dumbbell Curl': X('Biceps', 'Forearms', 'Dumbbells', 'Beginner', 'Balanced biceps', 'Cable Curl', 'Life Fitness Bicep Curl', 'Supinate hard at the top', 'Swinging and half reps'),
-  'Incline DB Curl': X('Biceps (long head)', 'Forearms', 'Dumbbells', 'Beginner', 'Biceps stretch and peak', 'Dumbbell Curl', 'Life Fitness Bicep Curl', 'Arms behind body, full stretch', 'Coming forward and shortening range'),
+  'Incline DB Curl': X('Biceps (long head)', 'Forearms', 'Dumbbells', 'Beginner', 'Biceps stretch and peak', 'Dumbbell Curl', 'Dual Pulley Bayesian Curl', 'Arms behind body, full stretch', 'Coming forward and shortening range'),
   'Hammer Curl': X('Brachialis, Biceps', 'Forearms', 'Dumbbells', 'Beginner', 'Arm thickness and grip', 'Cable Curl', 'Life Fitness Bicep Curl', 'Neutral grip, elbows still', 'Swinging the weight up'),
   'Reverse Curl': X('Brachialis, Brachioradialis', 'Forearms, Biceps', 'EZ Bar', 'Beginner', 'Forearm and brachialis size that pushes arm veins outward', 'Hammer Curl', 'Cable Reverse Curl', 'Overhand grip, wrists straight, elbows pinned', 'Curling the wrists or swinging'),
-  'Cable Curl': X('Biceps', 'Forearms', 'Cable', 'Beginner', 'Constant-tension biceps', 'Dumbbell Curl', 'Life Fitness Bicep Curl', 'Keep tension at the bottom', 'Letting the stack rest each rep'),
+  'Cable Curl': X('Biceps', 'Forearms', 'Cable', 'Beginner', 'Constant-tension biceps', 'Dumbbell Curl', 'Dual Low Pulley Curl', 'Keep tension at the bottom', 'Letting the stack rest each rep'),
+  // EOS dual low pulley station (two low cable stacks side by side).
+  'Dual Low Pulley Curl': X('Biceps', 'Forearms', 'Cable', 'Beginner', 'Constant-tension biceps, both arms at once or one at a time', 'Cable Curl', 'Dual low pulley station', 'Stand between the low pulleys, elbows pinned at your sides, curl both handles and squeeze 1s at the top', 'Elbows drifting forward or leaning back to finish the rep'),
+  'Dual Pulley Bayesian Curl': X('Biceps', 'Forearms', 'Cable', 'Intermediate', 'Long-head biceps stretch, cable version of the incline curl', 'Incline DB Curl', 'Dual low pulley station', 'Face away from one low pulley, arm slightly behind the body, curl without letting the elbow swing forward', 'Turning it into a front raise by moving the elbow'),
   'Preacher Curl': X('Biceps (short head)', 'Forearms', 'Machine', 'Beginner', 'Strict lower biceps', 'Incline DB Curl', 'Life Fitness Bicep Curl', 'Do not fully lock out at the bottom', 'Bouncing out of the stretch'),
 
   // ---- Triceps ----
@@ -247,7 +250,9 @@ export const EXERCISES = {
   'Arsenal Inverted Leg Press': X('Quads', 'Glutes', 'Arsenal', 'Beginner', 'Quad overload, hip-friendly', 'Hack Squat', 'Arsenal Inverted Leg Press', 'Control the descent, full range', 'Bouncing out of the bottom'),
   'Life Fitness Bicep Curl': X('Biceps', 'Forearms', 'Life Fitness', 'Beginner', 'Machine biceps, strict', 'Dumbbell Curl', 'Life Fitness Bicep Curl', 'Pin elbows, squeeze at top', 'Using momentum'),
   'Life Fitness Leg Press': X('Quads, Glutes', 'Hamstrings', 'Life Fitness', 'Beginner', 'Machine leg press volume', 'Leg Press', 'Life Fitness Leg Press', 'Feet shoulder width, no knee lock', 'Partial depth'),
-  'Body Builder Standing Press': X('Front Delts', 'Triceps, Upper Chest', 'Body Builder', 'Intermediate', 'Standing overhead press', 'Overhead Press', 'Body Builder Standing Press', 'Ribs down, squeeze glutes', 'Leaning back into the spine'),
+  // Not at this EOS (2026-11). Kept only so older logs still show their
+  // details; retired exercises are left out of search, swaps and new plans.
+  'Body Builder Standing Press': { ...X('Front Delts', 'Triceps, Upper Chest', 'Body Builder', 'Intermediate', 'Standing overhead press', 'Overhead Press', 'Body Builder Standing Press', 'Ribs down, squeeze glutes', 'Leaning back into the spine'), retired: true },
 };
 
 export const EXERCISE_NAMES = Object.keys(EXERCISES).sort();
@@ -393,7 +398,7 @@ export const PROGRAM = {
         single('Hammer Strength Incline Press', 4, 8, 10, 8, 120, '3-1-1', 'Main upper chest press'),
         single('Hammer Strength Row', 4, 10, 12, 8, 90, '2-1-1', 'Back thickness'),
         single('Chest-Assisted Dip', 3, 10, 12, 8, 90, '3-1-1', 'Lower-chest machine press. Keep 2 reps in reserve and use a pain-free depth'),
-        single('Body Builder Standing Press', 3, 10, 12, 8, 90, '2-0-1', 'Overhead shoulder press'),
+        single('Overhead Press', 3, 8, 10, 8, 120, '2-0-1', 'Standing barbell press, set up yourself: bar in the rack at upper-chest height, squeeze glutes, ribs down'),
         single('Incline DB Curl', 3, 10, 12, 9, 75, '2-0-1', 'Direct biceps, long-head stretch'),
         single('Overhead Tricep Extension', 3, 12, 15, 9, 75, '2-1-2', 'Direct triceps, long head'),
         superset('Lateral + Rear Delt', 3, 60, [

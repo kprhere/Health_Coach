@@ -204,3 +204,41 @@ test('replace-with search matches name, muscle and equipment, every word must ma
   assert.equal(swaps[1], 'Hammer Strength Bench Press');
   assert.ok(!swaps.includes('Barbell Bench Press'));
 });
+
+test('equipment at this EOS: no Body Builder Standing Press anywhere in the plan, dual low pulley curls available', async () => {
+  const { searchExercises, suggestedReplacements, exerciseNames, defaultState, migrateState, STATE_VERSION } = await import('../src/helpers.js');
+  const state = defaultState();
+  // Never planned, searched, suggested, or offered in the add-exercise list.
+  const planned = Object.values(PROGRAM.days).flatMap((day) => (day.blocks || []).flatMap((b) => [b.name, ...(b.exercises || []).map((e) => e.name)]));
+  assert.ok(!planned.includes('Body Builder Standing Press'));
+  assert.ok(planned.every((name) => !EXERCISES[name] || !EXERCISES[name].retired), 'no retired exercise in the template plan');
+  assert.ok(!exerciseNames(state).includes('Body Builder Standing Press'));
+  assert.deepEqual(searchExercises('body builder', state), []);
+  for (const name of Object.keys(EXERCISES)) assert.ok(!suggestedReplacements(name, state).includes('Body Builder Standing Press'), name);
+  // Friday's overhead press is the standing barbell press (plate loader works on it).
+  const friday = PROGRAM.days[5].blocks.map((b) => b.name);
+  assert.ok(friday.includes('Overhead Press'));
+  assert.equal(EXERCISES['Overhead Press'].eq, 'Barbell');
+  // Dual low pulley: searchable and offered as a curl swap.
+  assert.deepEqual(searchExercises('pulley', state), ['Dual Low Pulley Curl', 'Dual Pulley Bayesian Curl']);
+  assert.ok(suggestedReplacements('Cable Curl', state).includes('Dual Low Pulley Curl'));
+  assert.ok(suggestedReplacements('Incline DB Curl', state).includes('Dual Pulley Bayesian Curl'));
+
+  // A saved v6 program that still has the machine is upgraded in place;
+  // planned sets, reps and rest are kept, and logs are untouched.
+  const v6 = migrateState({ version: 4 });
+  v6.version = 6;
+  const blk = v6.program.days[5].blocks.find((b) => b.name === 'Overhead Press');
+  blk.name = 'Body Builder Standing Press';
+  blk.exercises[0] = { ...blk.exercises[0], name: 'Body Builder Standing Press', sets: 4, repLow: 6, note: 'Overhead shoulder press' };
+  v6.workoutSessions = { '2026-11-13': { entries: { press: { name: 'Body Builder Standing Press', sets: [{ weight: '50', reps: '10' }] } } } };
+  const after = migrateState(v6);
+  assert.equal(after.version, STATE_VERSION);
+  const up = after.program.days[5].blocks.find((b) => b.name === 'Overhead Press');
+  assert.ok(up, 'block renamed');
+  assert.equal(up.exercises[0].name, 'Overhead Press');
+  assert.equal(up.exercises[0].sets, 4);
+  assert.equal(up.exercises[0].repLow, 6);
+  assert.match(up.exercises[0].note, /barbell/i);
+  assert.deepEqual(after.workoutSessions, v6.workoutSessions);
+});
