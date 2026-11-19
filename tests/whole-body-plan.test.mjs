@@ -44,20 +44,56 @@ test('removing the fast does not raise weekly calories', () => {
   // The old template week: four 1.09 training days, the 0.955 Wednesday rest,
   // the 0.91 Thursday fast and the 0.977 vegetarian Saturday.
   const oldWeek = [1.09, 1.09, 1.09, 1.09, 0.955, 0.91, 0.977].reduce((a, b) => a + b, 0);
+  // Since 2026-11-19 Sunday is an optional extra eaten at rest-day calories,
+  // so the week is one training day (1.09) lighter by a rest day (0.955).
+  const expected = oldWeek - DAY_CAL_MULT.training + DAY_CAL_MULT.rest;
   const newWeek = Object.values(PROGRAM.days).reduce((sum, day) => sum + DAY_CAL_MULT[day.dayType], 0);
-  assert.ok(Math.abs(newWeek + -oldWeek) <= 0.01, `weekly multiplier moved from ${oldWeek} to ${newWeek}`);
+  assert.ok(Math.abs(newWeek - expected) <= 0.01, `weekly multiplier ${newWeek}, expected ${expected}`);
+  assert.ok(newWeek <= oldWeek);
 });
 
-test('single-leg work starts on the left and both leg days train the inner thigh', () => {
+test('single-leg work starts on the left and every leg day trains the inner thigh', () => {
   for (const dow of [2, 0]) {
-    const blocks = PROGRAM.days[dow].blocks;
-    const names = blocks.flatMap((b) => (b.exercises || []).map((e) => e.name));
+    const names = PROGRAM.days[dow].blocks.flatMap((b) => (b.exercises || []).map((e) => e.name));
     assert.ok(names.includes('Hip Adduction'), `day ${dow} should include Hip Adduction`);
-    const bss = blocks.find((b) => b.name === 'Bulgarian Split Squat');
-    assert.match(bss.exercises[0].note, /left/i);
   }
+  const bss = PROGRAM.days[2].blocks.find((b) => b.name === 'Bulgarian Split Squat');
+  assert.match(bss.exercises[0].note, /left/i);
   assert.equal(muscleGroupOf('Hip Adduction', defaultState()), 'Quads');
   assert.equal(muscleGroupOf('Reverse Curl', defaultState()), 'Biceps');
+});
+
+test('weekdays carry the whole plan: one complete leg day, weekends optional', () => {
+  const day = (dow) => PROGRAM.days[dow];
+  const names = (dow) => day(dow).blocks.flatMap((b) => (b.exercises || []).map((e) => e.name));
+  const legDays = [1, 2, 3, 4, 5].filter((dow) => /lower/i.test(day(dow).title));
+  assert.deepEqual(legDays, [2], 'exactly one leg day Monday to Friday, on Tuesday');
+  for (const lift of ['Back Squat', 'Romanian Deadlift', 'Hip Thrust', 'Hammer Strength Leg Press', 'Bulgarian Split Squat', 'Seated Leg Curl', 'Leg Extension', 'Standing Calf Raise']) {
+    assert.ok(names(2).includes(lift), `${lift} on Tuesday`);
+  }
+  for (const dow of [1, 2, 3, 4, 5]) assert.ok(!day(dow).optional, `day ${dow} is required`);
+  for (const dow of [6, 0]) assert.equal(day(dow).optional, true, `day ${dow} is optional`);
+  assert.equal(day(0).dayType, 'rest', 'Sunday eats at rest-day calories');
+  // A skipped weekend is never a missed habit.
+  const sunday = '2026-11-22';
+  const monday = '2026-11-23';
+  assert.equal(habitApplicability(sunday, defaultState()).workout_done, false);
+  assert.equal(habitApplicability(monday, defaultState()).workout_done, true);
+});
+
+test('v9 upgrade rebuilds Tuesday and Sunday only, keeps other days and every log', () => {
+  const v8 = migrateState({ version: 4 });
+  v8.version = 8;
+  v8.program.days[1].blocks[0].exercises[0].name = 'Barbell Bench Press';
+  delete v8.program.days[6].optional;
+  v8.workoutSessions = { '2026-11-15': { entries: { hack: { name: 'Hack Squat' } } } };
+  const after = migrateState(v8);
+  assert.equal(after.version, STATE_VERSION);
+  assert.equal(after.program.days[1].blocks[0].exercises[0].name, 'Barbell Bench Press', 'Monday swap kept');
+  assert.deepEqual(after.program.days[2], PROGRAM.days[2]);
+  assert.deepEqual(after.program.days[0], PROGRAM.days[0]);
+  assert.equal(after.program.days[6].optional, true);
+  assert.deepEqual(after.workoutSessions, v8.workoutSessions);
 });
 
 const scansThroughAugust = () => SEED_SCANS.filter((sc) => sc.date <= '2026-08-13');

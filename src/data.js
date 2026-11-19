@@ -93,10 +93,11 @@ export const NO_MOON_DATES = [
 
 // shown on Home + README
 export const PROGRAM_RATIONALE =
+  'Weekdays carry the whole plan (2026-11-19): weekend gym is unreliable, so Monday to Friday holds every essential session, with ONE complete leg day on Tuesday. Saturday and Sunday are optional extras and are never counted as missed. ' +
   'Chosen split: 4-day Upper / Lower hybrid around swimming and one mobility class. ' +
   'After a 40-day layoff and while eating in a fat-loss deficit, recovery is the limiter, so a 6-day PPL is too much. ' +
   'Upper / Lower hits every muscle about 2x per week at moderate volume, which is the sweet spot for holding muscle while losing fat. ' +
-  'Conditioning is now SCHEDULED, not assumed: five zone 2 walks (20 min after Mon and Fri lifts, 20 min Wed, 25 min Sat, 15 min Sun) plus the Tuesday and Thursday swims, and a 12,000 step target. ' +
+  'Conditioning is now SCHEDULED, not assumed: zone 2 walks after the Monday and Friday lifts and on Wednesday (weekend walks are a bonus) plus the Tuesday and Thursday swims, and a 12,000 step target. ' +
   'Wednesday also carries the single hard cardio session of the week, 8 x 1 min bike intervals. It sits there because Wednesday has no lifting, and zone 2 walking alone does not move VO2 max. Bike over sprints keeps it non-impact. Cut this first if recovery slips. ' +
   'The earlier version leaned on optional morning badminton to cover conditioning. That badminton never happened, so the real activity level came in far below what the Evolt scan assumed and the plan quietly stopped working. ' +
   'Badminton is still welcome as a bonus and simply replaces that day\'s walk when it happens, but nothing in the plan depends on it any more. ' +
@@ -324,15 +325,22 @@ export const PROGRAM = {
       notes: 'First hard upper session. Quality reps over load. Direct biceps and triceps included. Log everything so next targets auto-calc. The walk is part of the plan, not an extra.',
     },
     2: {
-      key: 'lowerA', title: 'Lower Body A', focus: 'Strength', dayType: 'training', intensity: 'Hard',
+      // The week's ONLY leg day (2026-11-19): weekend gym is unreliable, so
+      // everything the legs need lives here. Merges the best of the old
+      // Lower A and Lower B; the weekend session is now an optional extra.
+      key: 'lowerA', title: 'Lower Body', focus: 'Strength + Hypertrophy', dayType: 'training', intensity: 'Hard',
       blocks: [
         single('Back Squat', 4, 6, 8, 7, 180, '3-1-1', 'Main squat. Arsenal Squat is the backup if the rack is taken'),
-        single('Romanian Deadlift', 4, 8, 10, 8, 150, '3-1-1', 'Hip hinge. Feel the hamstring stretch'),
+        single('Romanian Deadlift', 3, 8, 10, 8, 150, '3-1-1', 'Hip hinge. Feel the hamstring stretch'),
+        single('Hip Thrust', 3, 10, 12, 8, 120, '2-1-2', 'Glutes, full lockout squeeze. Moved here from Sunday so it is never skipped'),
         single('Hammer Strength Leg Press', 3, 10, 12, 8, 120, '2-0-1', 'Secondary quad and glute'),
-        single('Seated Leg Curl', 3, 10, 12, 9, 90, '2-1-1', 'Direct hamstring'),
-        single('Standing Calf Raise', 4, 12, 15, 9, 60, '2-1-2', 'Calves, full stretch and pause'),
-        single('Bulgarian Split Squat', 3, 10, 12, 8, 90, '2-0-1', 'Per leg. Start with the left leg (scan shows it slightly behind), then match its reps on the right'),
-        single('Hip Adduction', 3, 12, 15, 8, 60, '2-1-2', 'Inner-thigh muscle for leg shape. It builds the muscle; total fat loss is what uncovers it'),
+        single('Bulgarian Split Squat', 2, 10, 12, 8, 90, '2-0-1', 'Per leg. Left leg first (scan shows it slightly behind), then match its reps on the right'),
+        superset('Leg Curl + Leg Extension', 3, 75, [
+          { name: 'Seated Leg Curl', targetReps: '10-12', targetRpe: 9 },
+          { name: 'Leg Extension', targetReps: '12-15', targetRpe: 9 },
+        ], 'Hamstring then quad, no rest between. Hold each leg extension 1 second at the top'),
+        single('Hip Adduction', 2, 12, 15, 8, 60, '2-1-2', 'Inner thigh, slow return. The scan flagged lower body as behind upper'),
+        single('Standing Calf Raise', 3, 12, 15, 9, 60, '2-1-2', 'Calves, full stretch and pause'),
         circuit('Loaded Abs', 3, 60, [
           { name: 'Weighted Decline Crunch', targetReps: '10-15', targetRpe: 9 },
           { name: 'Hanging Leg Raise', targetReps: '8-15', targetRpe: 8 },
@@ -340,8 +348,9 @@ export const PROGRAM = {
       ],
       conditioning: [], mobility: [...POSTURE_WARMUP],
       sport: [{ name: 'Easy Laps', detail: 'Swimming class this evening. Technique-focused, legs already worked.' }],
-      notes: 'Swim class tonight. Fuel carbs around the swim and hydrate well.',
+      notes: 'The only leg day of the week, so it carries everything: about 75-85 min. If time runs short, cut in this order: calves, adduction, then the leg curl + extension superset, then the split squats. Never cut squat, RDL or hip thrust. Swim class tonight: fuel carbs around it and hydrate well.',
     },
+
     3: {
       key: 'coreRecovery', title: 'Core + Recovery', focus: 'Active Recovery', dayType: 'rest', intensity: 'Light',
       blocks: [
@@ -362,7 +371,7 @@ export const PROGRAM = {
         { name: 'Foam Rolling', detail: 'Quads, back, calves' },
       ],
       sport: [{ name: 'Badminton', detail: 'Bonus, not required. If played, shorten the walk to 15 min so this stays a recovery day.' }],
-      notes: 'No lifting today, which is why the week\'s one hard cardio session sits here. Thursday is an upper-body-only arm day, so legs still get two easy days before Sunday. Everything else stays deliberately easy: keep steps and water up.',
+      notes: 'No lifting today, which is why the week\'s one hard cardio session sits here. Legs were trained on Tuesday, the week\'s only leg day, and Thursday is upper body, so they get the rest of the week to recover. Everything else stays deliberately easy: keep steps and water up.',
     },
     4: {
       key: 'armsAbs', title: 'Arms + Shoulders + Abs', focus: 'Hypertrophy', dayType: 'trainingVeg', intensity: 'Moderate',
@@ -419,12 +428,12 @@ export const PROGRAM = {
       notes: 'Pump-focused with direct arms. Controlled tempo, add reps before adding weight. Finish with the walk.',
     },
     6: {
-      key: 'saturday', title: 'BodyBalance', focus: 'Mobility Class', dayType: 'vegSat', intensity: 'Light', isClassDay: true,
+      key: 'saturday', title: 'BodyBalance', focus: 'Mobility Class', dayType: 'vegSat', intensity: 'Light', isClassDay: true, optional: true,
       blocks: [],
       conditioning: [{ name: 'Incline Walk', detail: '25 min zone 2. Do it whether or not BodyBalance happens — the class is mobility, not conditioning.' }],
       mobility: [{ name: 'BodyBalance Class', detail: 'Les Mills BodyBalance, 45-55 min. Yoga, tai chi and pilates blend for flexibility, balance and core.' }],
       sport: [],
-      notes: 'Vegetarian day. If BodyBalance is missed, switch to the Full Body fallback below and keep protein high (whey, paneer, dal, Greek yogurt).',
+      notes: 'Optional weekend extra and vegetarian day. Monday to Friday covers the whole plan. If you want to lift instead of the class, switch to the Full Body fallback below and keep protein high (whey, paneer, dal, Greek yogurt).',
       fallback: {
         key: 'saturdayFallback', title: 'Full Body Pump (fallback)', focus: 'Full Body', dayType: 'vegSat', intensity: 'Moderate',
         blocks: [
@@ -442,35 +451,34 @@ export const PROGRAM = {
           ]),
         ],
         conditioning: [], mobility: [], sport: [],
-        notes: 'Vegetarian day fallback. Moderate full-body pump, do not clash with Sunday legs.',
+        notes: 'Vegetarian day fallback. Moderate full-body pump. Optional, like the rest of the weekend.',
       },
     },
     0: {
-      key: 'lowerB', title: 'Lower Body B', focus: 'Hypertrophy', dayType: 'training', intensity: 'Hard',
+      // Optional since 2026-11-19. The full week is covered Monday to Friday;
+      // skipping this costs nothing, and it is not counted as a missed workout.
+      key: 'lowerB', title: 'Weekend Extra: Legs + Glutes', focus: 'Optional', dayType: 'rest', intensity: 'Moderate', optional: true,
       blocks: [
-        single('Hack Squat', 4, 8, 10, 8, 150, '3-1-1', 'Main quad. Arsenal Inverted Leg Press is the alternative'),
-        single('Hip Thrust', 4, 10, 12, 8, 120, '2-1-2', 'Hip hinge and glutes, full lockout squeeze'),
-        single('Life Fitness Leg Press', 3, 12, 15, 8, 90, '2-0-1', 'Secondary quad and glute'),
-        superset('Leg Curl + Leg Extension', 3, 75, [
-          { name: 'Lying Leg Curl', targetReps: '12-15', targetRpe: 9 },
-          { name: 'Leg Extension', targetReps: '12-15', targetRpe: 9 },
-        ], 'Hamstring then quad, no rest between. Hold each leg extension 1 second at the top for quad separation'),
-        dropset('Seated Calf Raise', 3, 12, 15, 10, 45, '2-1-2', [
+        single('Hack Squat', 3, 10, 12, 8, 120, '3-1-1', 'Lighter second quad hit. Arsenal Inverted Leg Press is the alternative'),
+        single('Hip Thrust', 3, 10, 12, 8, 120, '2-1-2', 'Glutes, full lockout squeeze'),
+        superset('Leg Curl + Adduction', 2, 60, [
+          { name: 'Lying Leg Curl', targetReps: '12-15', targetRpe: 8 },
+          { name: 'Hip Adduction', targetReps: '12-15', targetRpe: 8 },
+        ], 'Hamstrings and inner thigh, no rest between'),
+        dropset('Seated Calf Raise', 2, 12, 15, 10, 45, '2-1-2', [
           { label: 'Drop 1 (-20%)', targetReps: 'to failure' },
-          { label: 'Drop 2 (-20%)', targetReps: 'to failure' },
-        ], 'Top set ~1 rep shy, then strip the weight twice and keep going'),
-        single('Bulgarian Split Squat', 3, 10, 12, 8, 90, '2-0-1', 'Per leg. Left leg first, then match its reps on the right'),
-        single('Hip Adduction', 2, 12, 15, 8, 60, '2-1-2', 'Inner thigh. Slow return, full squeeze'),
-        circuit('Loaded Abs', 3, 45, [
+        ], 'Top set ~1 rep shy, then strip the weight once and keep going'),
+        circuit('Loaded Abs', 2, 45, [
           { name: 'Cable Woodchop', targetReps: '10 / side', targetRpe: 8 },
           { name: 'Ab Wheel', targetReps: '8-12', targetRpe: 8 },
-        ], 'Obliques and anti-extension. Add range on the wheel before adding reps'),
+        ], 'Obliques and anti-extension'),
       ],
-      conditioning: [{ name: 'Incline Walk', detail: '15 min easy, low incline. Short on purpose — legs were just worked.' }],
+      conditioning: [{ name: 'Walk or badminton', detail: '30-45 min outdoors or on court. This is the part worth doing even if you skip the gym.' }],
       mobility: [...POSTURE_WARMUP],
       sport: [],
-      notes: 'Last hard session of the week. If performance has stalled two weeks running, take an easy deload next week. Progressive overload is what protects muscle in a deficit, so beat last week on something: reps, load or a cleaner tempo.',
+      notes: 'Optional weekend extra. Monday to Friday already covers the whole plan, so skip it freely. If you come in, keep it to about 45 minutes and stop 2 reps short so Monday is not affected. Eating stays at rest-day calories; add a banana before if you lift.',
     },
+
   },
 };
 

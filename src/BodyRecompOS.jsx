@@ -42,13 +42,12 @@ import { BlockLogger, AddExercisePicker, makeUnplannedEntry } from './loggers.js
 import { generateDemoData } from './demo.js';
 import { canAutoPush, deriveSync, pullRemote, pushRemote } from './sync.js';
 import { screenWakeLockSupported, useScreenWakeLock } from './wakeLock.js';
+import { getSyncSecret, setSyncSecret, mirrorSyncUrl, restoreSyncCredentials, requestPersistentStorage } from './secretStore.js';
 
-// the sync passphrase lives on-device only, in its own key, so it never
-// ends up inside an exported JSON backup.
-const SYNC_SECRET_KEY = 'recomp-sync-secret';
+// The sync passphrase lives on-device only, outside app state, so it never
+// ends up in an exported JSON backup. secretStore.js keeps it alive through
+// iOS storage clears (Keychain form, persistent storage, IndexedDB copy).
 const SYNC_UPDATED_KEY = 'recomp-sync-updated';
-const getSyncSecret = () => { try { return localStorage.getItem(SYNC_SECRET_KEY) || ''; } catch { return ''; } };
-const setSyncSecret = (v) => { try { if (v) localStorage.setItem(SYNC_SECRET_KEY, v); else localStorage.removeItem(SYNC_SECRET_KEY); } catch { /* ignore */ } };
 
 const relativeBackupTime = (timestamp) => {
   if (!timestamp) return '';
@@ -77,6 +76,11 @@ function CloudBackupStatus({ ctx, compact = false }) {
         <Chip tone={ctx.syncPhase === 'synced' ? 'green' : ctx.syncPhase === 'failed' || ctx.syncPhase === 'offline' ? 'amber' : 'cyan'}>{label}</Chip>
       </div>
       {(ctx.syncPhase === 'failed' || ctx.syncPhase === 'offline') && !compact ? <button className="btn xs" onClick={ctx.doPull}>Retry</button> : null}
+      {ctx.state.settings.syncUrl && !ctx.getSyncSecret() ? (
+        <Banner tone="amber" icon={AlertTriangle}>
+          Cloud backup is paused: the passphrase is missing on this device. Open More → Sync and tap the passphrase box; iPhone can fill it from iCloud Keychain.
+        </Banner>
+      ) : null}
     </Card>
   );
 }
@@ -1618,6 +1622,9 @@ function SyncCard({ ctx }) {
   const s = ctx.state;
   const [pass, setPass] = useState(ctx.getSyncSecret());
   const [show, setShow] = useState(false);
+  const [saved, setSaved] = useState(false);
+  // The IndexedDB copy can be restored a moment after this screen mounts.
+  useEffect(() => { if (!pass) setPass(ctx.getSyncSecret()); }, [ctx.syncCredentialVersion]); // eslint-disable-line react-hooks/exhaustive-deps
   const savePass = (v) => { setPass(v); ctx.setSyncSecret(v); };
   const st = ctx.syncStatus;
   return (
@@ -1632,11 +1639,19 @@ function SyncCard({ ctx }) {
         <label>Sync URL (your Cloudflare Worker)</label>
         <input className="input mono" style={{ fontSize: 12 }} placeholder="https://acp-sync.you.workers.dev" value={s.settings.syncUrl} onChange={(e) => ctx.setSetting('syncUrl', e.target.value.trim())} />
       </div>
-      <div className="field">
-        <label>Passphrase (stays on this device)</label>
-        <input className="input mono" type={show ? 'text' : 'password'} placeholder="a long secret only you know" value={pass} onChange={(e) => savePass(e.target.value)} />
-        <button className="btn xs ghost" style={{ marginTop: 6 }} onClick={() => setShow((v) => !v)}>{show ? 'Hide' : 'Show'} passphrase</button>
-      </div>
+      {/* A real sign-in style form so iPhone offers to save the passphrase in
+          iCloud Keychain and fills it back in if iOS ever clears this app. */}
+      <form className="field" autoComplete="on" onSubmit={(e) => { e.preventDefault(); savePass(pass); setSaved(true); }}>
+        <label htmlFor="sync-account">Keychain account</label>
+        <input id="sync-account" name="username" className="input mono" style={{ fontSize: 16 }} autoComplete="username" readOnly value="Recomp OS sync" />
+        <label htmlFor="sync-passphrase" style={{ marginTop: 8 }}>Passphrase (stays on this device)</label>
+        <input id="sync-passphrase" name="password" className="input mono" type={show ? 'text' : 'password'} autoComplete="current-password" placeholder="a long secret only you know" value={pass} onChange={(e) => { savePass(e.target.value); setSaved(false); }} />
+        <div className="btn-row" style={{ marginTop: 6 }}>
+          <button type="submit" className="btn xs">{saved ? 'Saved ✓' : 'Save passphrase'}</button>
+          <button type="button" className="btn xs ghost" onClick={() => setShow((v) => !v)}>{show ? 'Hide' : 'Show'} passphrase</button>
+        </div>
+        <div className="hint">Tap Save passphrase once and choose Save Password when iPhone asks. If iOS ever clears the app, tap the box and pick the Keychain suggestion.</div>
+      </form>
       <button type="button" className="row row-action" onClick={() => ctx.setSetting('syncAuto', !s.settings.syncAuto)} aria-pressed={s.settings.syncAuto}>
         <span className={`check ${s.settings.syncAuto ? 'on' : ''}`} aria-hidden="true"><Check size={15} /></span>
         <span className="row-main"><span className="row-title">Auto-sync</span><span className="row-sub">Pull on open, push a few seconds after any change</span></span>
@@ -2187,6 +2202,22 @@ export default function BodyRecompOS() {
   const [syncRetryTick, setSyncRetryTick] = useState(0);
   const lastPushedState = useRef('');
 
+  // Startup: ask iOS not to evict this app's storage, and put back the sync
+  // passphrase / URL from the second copy if the first one was cleared. If the
+  // whole state was wiped but the credentials survived, re-arm auto-sync so
+  // the cloud copy (with every log) comes straight back.
+  useEffect(() => {
+    requestPersistentStorage();
+    restoreSyncCredentials().then(({ secret, url, restored }) => {
+      if (url && !state.settings.syncUrl) {
+        mutate((d) => { d.settings.syncUrl = url; if (secret) d.settings.syncAuto = true; });
+      }
+      if (restored) setSyncCredentialVersion((version) => version + 1);
+    });
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
+  useEffect(() => { mirrorSyncUrl(state.settings.syncUrl); }, [state.settings.syncUrl]);
+
   const rememberCloudWrite = (at) => {
     localStorage.setItem(SYNC_UPDATED_KEY, String(at));
     setSyncLastAt(at);
@@ -2333,6 +2364,7 @@ export default function BodyRecompOS() {
     addScan, updateScan, deleteScan, setProfile, setSetting, setRestart, setExerciseNote, saveCustomExercise, deleteCustomExercise, restartCalendar, autoScanDate, recalcNow, replaceState, resetAll, loadDemo,
     doPull, doPush, syncStatus, syncBusy, syncPhase, syncLastAt, getSyncSecret,
     setSyncSecret: (value) => { setSyncSecret(value); setSyncCredentialVersion((version) => version + 1); },
+    syncCredentialVersion,
     selDate, setSelDate, goto: setTab,
   };
 

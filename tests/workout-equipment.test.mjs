@@ -256,14 +256,14 @@ test('no Cable Crunch in the plan: loaded days get Weighted Decline Crunch, the 
   const v7 = migrateState({ version: 4 });
   v7.version = 7;
   const put = (dayIdx, from) => v7.program.days[dayIdx].blocks.forEach((b) => (b.exercises || []).forEach((e) => { if (e.name === from) { e.name = 'Cable Crunch'; e.targetReps = '9-11'; } }));
-  put(2, 'Weighted Decline Crunch');
+  put(4, 'Weighted Decline Crunch');
   put(3, 'Reverse Crunch');
   v7.workoutSessions = { '2026-11-17': { entries: { abs: { name: 'Cable Crunch' } } } };
   const after = migrateState(v7);
   assert.equal(after.version, STATE_VERSION);
   for (const day of Object.values(after.program.days)) assert.ok(!names(day).includes('Cable Crunch'), day.title);
-  const tue = after.program.days[2].blocks.flatMap((b) => b.exercises || []).find((e) => e.name === 'Weighted Decline Crunch');
-  assert.equal(tue.targetReps, '9-11', 'planned reps kept');
+  const thu = after.program.days[4].blocks.flatMap((b) => b.exercises || []).find((e) => e.name === 'Weighted Decline Crunch');
+  assert.equal(thu.targetReps, '9-11', 'planned reps kept');
   assert.ok(names(after.program.days[3]).includes('Reverse Crunch'));
   assert.deepEqual(after.workoutSessions, v7.workoutSessions);
 });

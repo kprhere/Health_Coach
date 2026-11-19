@@ -13,7 +13,7 @@ export { nutritionProfile };
 
 export const PROGRAM_START = '2026-07-08'; // start of the current fat-loss phase (latest scan)
 export const PHASE_NAME = 'Fat Loss Phase 1';
-export const STATE_VERSION = 8;
+export const STATE_VERSION = 9;
 
 // ---------- date utils ----------
 export const pad = (n) => String(n).padStart(2, '0');
@@ -209,6 +209,28 @@ const MIGRATIONS = {
       });
     });
     return { ...migrated, version: 8 };
+  },
+  9: (state) => {
+    // 2026-11-19: weekdays carry the whole plan. Tuesday becomes the one
+    // complete leg day, Sunday an optional shorter extra, Saturday optional.
+    // Only those three days of the saved program are replaced; the other
+    // days, all logs, scans and settings are untouched.
+    const migrated = mergeState(defaultState(), state);
+    if (!migrated.program || !migrated.program.days) migrated.program = clone(PROGRAM);
+    const days = migrated.program.days;
+    days[2] = clone(PROGRAM.days[2]);
+    days[0] = clone(PROGRAM.days[0]);
+    if (days[6]) {
+      days[6].optional = true;
+      if (typeof days[6].notes === 'string' && !/optional/i.test(days[6].notes)) days[6].notes = PROGRAM.days[6].notes;
+    } else {
+      days[6] = clone(PROGRAM.days[6]);
+    }
+    if (days[3] && typeof days[3].notes === 'string') days[3].notes = days[3].notes.replace(
+      'Thursday is an upper-body-only arm day, so legs still get two easy days before Sunday.',
+      "Legs were trained on Tuesday, the week's only leg day, and Thursday is upper body, so they get the rest of the week to recover.",
+    );
+    return { ...migrated, version: 9 };
   },
 };
 
@@ -1191,10 +1213,15 @@ const NON_VEG_RE = /chicken|fish|mutton|prawn|shrimp|turkey|meat|beef|pork|salmo
 export function habitApplicability(key, state) {
   const dow = dowOf(key);
   const satMode = (state.saturdayMode && state.saturdayMode[key]) || 'class';
+  // Weekend days are optional extras: a workout there is welcome but never
+  // shown as a missed habit.
+  const optionalDay = !!programDay(state, dow).optional;
   return {
     thu_veg: dow === 4,
     sat_veg: dow === 6,
-    bodybalance: dow === 6 && satMode === 'class',
+    bodybalance: dow === 6 && satMode === 'class' && !optionalDay,
+    workout_logged: !optionalDay,
+    workout_done: !optionalDay,
   };
 }
 
