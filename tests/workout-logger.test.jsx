@@ -219,6 +219,17 @@ describe('single-set workout controls', () => {
     expect(readEntry().skipped).toBe(false);
   });
 
+  test('machine taken: one tap swaps in the top backup and keeps the sets', async () => {
+    const user = userEvent.setup();
+    render(<SingleHarness initialSets={[{ ...makeSet(), weight: '185', reps: '8' }]} />);
+    const quick = screen.getByRole('button', { name: /Machine taken: use/ });
+    const name = quick.getAttribute('aria-label').replace('Machine taken: use ', '');
+    await user.click(quick);
+    expect(readEntry().replacedWith).toBe(name);
+    expect(readEntry().sets[0]).toMatchObject({ weight: '185', reps: '8' });
+    expect(screen.queryByRole('button', { name: /Machine taken: use/ })).toBeNull();
+  });
+
   test('replace with: best swaps show before typing, search narrows them, and the swap can be undone', async () => {
     const user = userEvent.setup();
     render(<SingleHarness initialSets={[{ ...makeSet(), weight: '185', reps: '8' }]} />);

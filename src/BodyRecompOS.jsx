@@ -27,7 +27,7 @@ import {
   supplementAdherence, hairHealthChecks, daysToLab,
   nutritionProfile, volumeTrend, muscleBalance, fmtVol, parseHealthParams, muscleWeekTrend,
   recompSignal, consistencyStreak, energyBalance, proteinPerLbLean, trainingLoadSummary,
-  customExercisePlanFits, workoutSwapPartner, workoutSessionHasData,
+  customExercisePlanFits, workoutSwapPartner, workoutSessionHasData, missedSessions, setsByMuscleWindow,
   observedActivityFactor, plannedWalkingMinutes, progressWindowSummary, postScanCoaching, nextNoMoonReminder,
   exerciseProgressSeries, recentPersonalRecords, trainingActivity, trainingConsistency, volumeByMuscleWindow,
   definitionGoal, segmentSummary,
@@ -42,6 +42,9 @@ import { BlockLogger, AddExercisePicker, makeUnplannedEntry } from './loggers.js
 import { generateDemoData } from './demo.js';
 import { canAutoPush, deriveSync, pullRemote, pushRemote } from './sync.js';
 import { screenWakeLockSupported, useScreenWakeLock } from './wakeLock.js';
+import { stampChanges } from './syncMerge.js';
+import { ProgressPhotos } from './ProgressPhotos.jsx';
+import { MuscleMap } from './MuscleMap.jsx';
 import { getSyncSecret, setSyncSecret, mirrorSyncUrl, restoreSyncCredentials, requestPersistentStorage } from './secretStore.js';
 
 // The sync passphrase lives on-device only, outside app state, so it never
@@ -598,6 +601,7 @@ export function TrainTab({ ctx }) {
   const [swapNotice, setSwapNotice] = useState('');
   const s = ctx.state;
   const plan = resolveWorkout(date, s);
+  const catchUp = date === todayKey() ? missedSessions(date, s) : [];
   const session = ctx.getSession(date);
   const flags = dayFlags(date, s);
   const prog = workoutProgress(session);
@@ -689,7 +693,7 @@ export function TrainTab({ ctx }) {
         </div>
         {open ? (
           <div className="block-body" id={`block-body-${block.id}`}>
-            <BlockLogger block={block} entry={entry} plan={plan} state={s} onMutate={(fn) => ctx.mutateEntry(date, block.id, fn)} setRestart={s.settings.restartLoadEnabled ? ctx.setRestart : null} setExerciseNote={ctx.setExerciseNote} />
+            <BlockLogger block={block} entry={entry} plan={plan} state={s} onMutate={(fn) => ctx.mutateEntry(date, block.id, fn)} setRestart={s.settings.restartLoadEnabled ? ctx.setRestart : null} setExerciseNote={ctx.setExerciseNote} setSetting={ctx.setSetting} />
           </div>
         ) : null}
       </div>
@@ -704,6 +708,24 @@ export function TrainTab({ ctx }) {
       {swapNotice ? <Banner tone="cyan" icon={Check} role="status" aria-live="polite">{swapNotice}</Banner> : null}
 
       {balanceTip ? <Banner tone="amber" icon={AlertTriangle}>Balance check: {balanceTip.text}</Banner> : null}
+
+      {catchUp.length ? (
+        <Card className="pad-sm catch-up">
+          <div className="block-tag"><span className="bar" />Catch up</div>
+          {catchUp.slice(0, 2).map((m) => (
+            <div key={m.date} className="catch-up-row">
+              <div className="row-main">
+                <div className="row-title">Missed {prettyDate(m.date)}: {m.title}</div>
+                <div className="row-sub">Do it today instead. Today's {plan.title} moves to {prettyDate(m.date)} and is skipped.</div>
+              </div>
+              <div className="btn-row">
+                <button className="btn xs primary" onClick={() => ctx.swapWorkoutDates(date, m.date)}>Do it today</button>
+                <button className="btn xs ghost" onClick={() => ctx.dismissMissed(m.date)}>Let it go</button>
+              </div>
+            </div>
+          ))}
+        </Card>
+      ) : null}
 
       {plan.isClassDay ? (
         <Card className="pad-sm">
@@ -1052,6 +1074,7 @@ const SEGMENT_KEYS = SEGMENT_FIELDS.flatMap((f) => [f.key, f.fat]);
 const BLANK_SCAN = () => { const o = { date: todayKey() }; SCAN_FIELDS.forEach((f) => { o[f.key] = ''; }); SEGMENT_KEYS.forEach((k) => { o[k] = ''; }); return o; };
 
 function BodyTab({ ctx }) {
+  const [bodyView, setBodyView] = useState('scans');
   const s = ctx.state;
   const scans = sortedScans(s);
   const latest = latestScan(s);
@@ -1100,9 +1123,26 @@ function BodyTab({ ctx }) {
     );
   };
 
+  const viewToggle = (
+    <div className="pill-toggle" style={{ marginBottom: 12 }} role="tablist" aria-label="Body view">
+      <button role="tab" aria-selected={bodyView === 'scans'} className={bodyView === 'scans' ? 'active' : ''} onClick={() => setBodyView('scans')}>Scans</button>
+      <button role="tab" aria-selected={bodyView === 'photos'} className={bodyView === 'photos' ? 'active' : ''} onClick={() => setBodyView('photos')}>Photos</button>
+    </div>
+  );
+  if (bodyView === 'photos') {
+    return (
+      <div>
+        <div className="page-title">Body</div>
+        {viewToggle}
+        <ProgressPhotos today={todayKey()} />
+      </div>
+    );
+  }
+
   return (
     <div>
       <div className="page-title">Body</div>
+      {viewToggle}
       <p className="page-sub">Your Evolt 360 scans, including the segmental arms, torso and legs breakdown. Add each new result sheet here.</p>
 
       <SectionTitle right={<Chip tone="cyan">{Math.max(0, progress.daysUntilScan)} days</Chip>}>Next Scan / 14-Day Progress</SectionTitle>
@@ -1406,7 +1446,8 @@ function StatsTab({ ctx }) {
 
       <SectionTitle right={<Chip tone={missedMuscles.length <= 2 ? 'green' : 'amber'}>{trainedMuscles.length}/{strengthGroups.length} covered</Chip>}>Muscle coverage · last 7 days</SectionTitle>
       <Card>
-        <div className="muscle-coverage">
+        <MuscleMap sets={setsByMuscleWindow(s, 7)} groups={strengthGroups} />
+        <div className="muscle-coverage" style={{ marginTop: 12 }}>
           {strengthGroups.map((group) => <span key={group} className={`muscle-chip ${(recentMuscles[group] || 0) > 0 ? 'trained' : ''}`}>{group}<small>{(recentMuscles[group] || 0) > 0 ? fmtVol(recentMuscles[group]) : 'not logged'}</small></span>)}
         </div>
         <div className="hint" style={{ marginTop: 10 }}>{missedMuscles.length ? `No working-set volume logged for: ${missedMuscles.join(', ')}.` : 'Every major muscle group has logged working-set volume this week.'}</div>
@@ -2046,7 +2087,15 @@ export default function BodyRecompOS() {
     catch { return nextNoMoonReminder(todayKey()); }
   });
 
-  useEffect(() => { saveState(state); }, [state]);
+  // Stamp what changed (for field-level sync), then save. A change that only
+  // adds stamps re-renders once and is saved on that pass.
+  const stampedFrom = useRef(state);
+  useEffect(() => {
+    const stamped = stampChanges(stampedFrom.current, state);
+    stampedFrom.current = stamped;
+    if (stamped !== state) { setState(stamped); return; }
+    saveState(state);
+  }, [state]);
   useEffect(() => { window.scrollTo(0, 0); }, [tab]);
 
   // Apple Health sync: a Shortcut opens #health?steps=..&sleep=.. etc.
@@ -2154,6 +2203,7 @@ export default function BodyRecompOS() {
     });
     return next;
   });
+  const dismissMissed = (date) => mutate((d) => { d.missedDismissed = { ...(d.missedDismissed || {}), [date]: true }; });
   const clearWorkoutSwap = (date) => setState((prev) => {
     const partner = workoutSwapPartner(date, prev);
     if (!partner) return prev;
@@ -2360,7 +2410,7 @@ export default function BodyRecompOS() {
 
   const ctx = {
     state, setState, mutate, patchSession, mutateEntry, getSession,
-    setMeal, setWatch, toggleHabit, setHabits, toggleSupplement, toggleBeverage, toggleActivity, setActivityField, setSatMode, setDayOverride, swapWorkoutDates, clearWorkoutSwap,
+    setMeal, setWatch, toggleHabit, setHabits, toggleSupplement, toggleBeverage, toggleActivity, setActivityField, setSatMode, setDayOverride, swapWorkoutDates, clearWorkoutSwap, dismissMissed,
     addScan, updateScan, deleteScan, setProfile, setSetting, setRestart, setExerciseNote, saveCustomExercise, deleteCustomExercise, restartCalendar, autoScanDate, recalcNow, replaceState, resetAll, loadDemo,
     doPull, doPush, syncStatus, syncBusy, syncPhase, syncLastAt, getSyncSecret,
     setSyncSecret: (value) => { setSyncSecret(value); setSyncCredentialVersion((version) => version + 1); },

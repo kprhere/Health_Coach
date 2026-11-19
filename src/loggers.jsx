@@ -12,7 +12,7 @@ import {
   makeSet, makeCell, cellDone, roundDone, getLastSession, getBestPerformance,
   getNextTarget, rxForExercise, e1rm, restartSuggestion, exerciseMeta, exerciseNames,
   duplicateLastSet, recommendedCustomAlternates,
-  isTimedExercise, plateBreakdown, totalFromOneSide, nextSetToFill, loadingKind, STANDARD_PLATES,
+  isTimedExercise, plateBreakdown, totalFromOneSide, nextSetToFill, loadingKind, PLATE_OPTIONS, platesOf,
   suggestedReplacements, searchExercises, exerciseLibrary,
 } from './helpers.js';
 import { RestTimer } from './components.jsx';
@@ -48,6 +48,9 @@ function ReplaceSelect({ value, onChange, state, targetName }) {
           <Search size={13} /> {value ? `Replaced with ${value}` : 'Replace with...'}
         </button>
         {value ? <button className="btn xs ghost" onClick={() => onChange('')}>Use planned exercise</button> : null}
+        {!value && suggested[0] ? (
+          <button className="btn xs ghost" onClick={() => onChange(suggested[0])} aria-label={`Machine taken: use ${suggested[0]}`}>Taken? Use {suggested[0]}</button>
+        ) : null}
       </div>
     );
   }
@@ -214,7 +217,8 @@ function saveBase(name, value) {
 }
 const fmtLb = (n) => String(Math.round(n * 100) / 100);
 
-function PlateCalculator({ name, kind, initialWeight = '', sets = [], onUse }) {
+function PlateCalculator({ name, kind, initialWeight = '', sets = [], onUse, plates, onSetPlates }) {
+  const [editPlates, setEditPlates] = useState(false);
   const [open, setOpen] = useState(false);
   const [mode, setMode] = useState('side');
   const [stack, setStack] = useState([]);
@@ -225,7 +229,7 @@ function PlateCalculator({ name, kind, initialWeight = '', sets = [], onUse }) {
 
   const sideWeight = stack.length ? stack.reduce((sum, plate) => sum + plate, 0) : side;
   const loaded = totalFromOneSide(sideWeight, base);
-  const reverse = plateBreakdown(target, kind === 'machine' ? (base || '0') : base);
+  const reverse = plateBreakdown(target, kind === 'machine' ? (base || '0') : base, plates);
   const fillIdx = nextSetToFill(sets);
   const useLabel = fillIdx >= 0 ? `Use for set ${fillIdx + 1}` : 'Add as new set';
 
@@ -254,8 +258,8 @@ function PlateCalculator({ name, kind, initialWeight = '', sets = [], onUse }) {
           {mode === 'side' ? (
             <>
               <div className="plate-label">Tap the plates on ONE side</div>
-              <div className="plate-chips">
-                {STANDARD_PLATES.map((plate) => (
+              <div className="plate-chips" style={{ gridTemplateColumns: `repeat(${Math.min(plates.length, 6)}, minmax(0, 1fr))` }}>
+                {plates.map((plate) => (
                   <button key={plate} className="plate-chip" onClick={() => tap(plate)} aria-label={`Add ${plate} lb plate`}>{plate}</button>
                 ))}
               </div>
@@ -291,6 +295,22 @@ function PlateCalculator({ name, kind, initialWeight = '', sets = [], onUse }) {
                 : <div className={`plate-result ${reverse.exact ? '' : 'warn'}`}><b>Each side:</b> {reverse.plates.length ? reverse.plates.map(({ plate, count }) => `${count} × ${plate}`).join(' + ') : 'no plates'}{reverse.exact ? '' : ` · ${reverse.remainder} lb per side cannot be loaded with standard plates`}</div>}
             </>
           )}
+          {onSetPlates ? (
+            <div className="plate-inventory">
+              <button type="button" className="btn xs ghost" onClick={() => setEditPlates((v) => !v)} aria-expanded={editPlates}>Your plates ({plates.join(', ')})</button>
+              {editPlates ? (
+                <div className="plate-chips plate-options" role="group" aria-label="Plates this gym has">
+                  {PLATE_OPTIONS.map((plate) => {
+                    const on = plates.includes(plate);
+                    return (
+                      <button key={plate} type="button" className={`plate-chip ${on ? 'on' : 'off'}`} aria-pressed={on}
+                        onClick={() => onSetPlates(on ? plates.filter((p) => p !== plate) : [...plates, plate])}>{plate}</button>
+                    );
+                  })}
+                </div>
+              ) : null}
+            </div>
+          ) : null}
         </div>
       ) : null}
     </div>
@@ -300,7 +320,7 @@ function PlateCalculator({ name, kind, initialWeight = '', sets = [], onUse }) {
 // ============================================================
 // SINGLE + DROPSET
 // ============================================================
-export function SingleLogger({ block, entry, plan, state, onMutate, setRestart, setExerciseNote }) {
+export function SingleLogger({ block, entry, plan, state, onMutate, setRestart, setExerciseNote, setSetting }) {
   const [openIdx, setOpenIdx] = useState(-1);
   const ex = block.exercises[0];
   const name = entry.replacedWith || entry.exName || ex.name;
@@ -375,7 +395,7 @@ export function SingleLogger({ block, entry, plan, state, onMutate, setRestart, 
       ) : null}
 
       <ExerciseNote name={name} state={state} setExerciseNote={setExerciseNote} />
-      {plateKind ? <PlateCalculator key={name} name={name} kind={plateKind} initialWeight={heaviestLogged(entry.sets)} sets={entry.sets} onUse={useLoaded} /> : null}
+      {plateKind ? <PlateCalculator key={name} name={name} kind={plateKind} initialWeight={heaviestLogged(entry.sets)} sets={entry.sets} onUse={useLoaded} plates={platesOf(state)} onSetPlates={setSetting ? (list) => setSetting('plates', list.length ? list : [45]) : null} /> : null}
       {!timed ? <HistoryGrid name={name} state={state} rx={rx} /> : <div className="hint">Timed hold: enter the completed seconds for each set. Weight is optional.</div>}
 
       <div className="set-head">

@@ -1293,3 +1293,58 @@ html.kb-open .bottom-nav { display: none; }
 .replace-list button span { font-size: 14px; font-weight: 600; }
 .replace-list button small { font-size: 11.5px; color: var(--muted); }
 .replace-list button.on, .replace-list button:focus-visible { border-color: var(--cyan); }
+
+/* Catch-up for missed sessions */
+.catch-up { border-color: var(--amber); }
+.catch-up-row { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px; padding: 6px 0; }
+.catch-up-row + .catch-up-row { border-top: 1px solid var(--line); }
+.catch-up-row .row-main { min-width: 0; flex: 1 1 220px; }
+
+/* Progress photos */
+.photos { display: grid; gap: 12px; }
+.compare { position: relative; width: 100%; max-width: 100%; max-height: 70vh; margin: 8px auto 0; overflow: hidden; border-radius: 12px; background: var(--surface-2); }
+.compare img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; }
+.compare-line { position: absolute; top: 0; bottom: 0; width: 2px; background: var(--text); box-shadow: 0 0 0 1px rgba(0,0,0,0.35); }
+.compare-tag { position: absolute; bottom: 8px; padding: 2px 8px; border-radius: 999px; font-size: 11px; background: rgba(0,0,0,0.55); color: #fff; }
+.compare-tag.left { left: 8px; }
+.compare-tag.right { right: 8px; }
+.compare-range { width: 100%; margin-top: 10px; }
+.photo-day + .photo-day { border-top: 1px solid var(--line); margin-top: 10px; padding-top: 10px; }
+.photo-day-date { font-size: 12px; color: var(--muted); margin-bottom: 6px; }
+.photo-row { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; }
+.photo-thumb { margin: 0; border-radius: 10px; overflow: hidden; background: var(--surface-2); }
+.photo-thumb img { display: block; width: 100%; aspect-ratio: 3 / 4; object-fit: cover; }
+.photo-thumb figcaption { display: flex; align-items: center; justify-content: space-between; gap: 4px; padding: 4px 6px; font-size: 11px; color: var(--muted); }
+.photo-thumb.empty { display: grid; place-items: center; aspect-ratio: 3 / 4; font-size: 11px; color: var(--faint); border: 1px dashed var(--line); }
+
+/* Muscle map */
+.muscle-map { display: grid; gap: 10px; }
+.mm-figures { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; max-width: 360px; margin: 0 auto; width: 100%; }
+.mm-figure { margin: 0; text-align: center; }
+.mm-figure svg { width: 100%; max-width: 100%; height: auto; display: block; }
+.mm-figure figcaption { font-size: 11px; color: var(--muted); letter-spacing: 0.06em; text-transform: uppercase; }
+.mm-body > * { fill: var(--surface-2); stroke: var(--line); stroke-width: 1; }
+.mm-muscle { stroke-width: 1.2; }
+.mm-l0 { fill: var(--surface-2); stroke: var(--amber); stroke-dasharray: 3 2; }
+.mm-l1 { fill: var(--cyan); fill-opacity: 0.32; stroke: var(--cyan); }
+.mm-l2 { fill: var(--cyan); fill-opacity: 0.75; stroke: var(--cyan); }
+.mm-l3 { fill: var(--green); fill-opacity: 0.85; stroke: var(--green); }
+.mm-legend { display: flex; flex-wrap: wrap; justify-content: center; gap: 6px 12px; font-size: 11px; color: var(--muted); }
+.mm-legend span { display: inline-flex; align-items: center; gap: 5px; }
+.mm-swatch { display: inline-block; width: 12px; height: 12px; border-radius: 3px; border: 1.2px solid transparent; }
+.mm-swatch.mm-l0 { background: var(--surface-2); border: 1.2px dashed var(--amber); }
+.mm-swatch.mm-l1 { background: var(--cyan); opacity: 0.4; }
+.mm-swatch.mm-l2 { background: var(--cyan); opacity: 0.8; }
+.mm-swatch.mm-l3 { background: var(--green); }
+.mm-sets { display: grid; grid-template-columns: repeat(auto-fill, minmax(96px, 1fr)); gap: 6px; }
+.mm-set { display: flex; justify-content: space-between; gap: 6px; padding: 6px 8px; border-radius: 8px; background: var(--surface-2); font-size: 12px; color: var(--muted); }
+.mm-set b { color: var(--text); font-variant-numeric: tabular-nums; }
+.mm-set.mm-t0 b { color: var(--amber); }
+
+.plate-inventory { margin-top: 10px; }
+.plate-options { margin-top: 8px; grid-template-columns: repeat(5, minmax(0, 1fr)) !important; }
+.plate-chip.off { opacity: 0.45; border-style: dashed; }
+.plate-chip.on { border-color: var(--cyan); }
+
+.photo-poses { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); width: 100%; }
+.photos .block-tag + div, .photos .card > .field { width: 100%; }
