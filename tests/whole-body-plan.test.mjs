@@ -209,3 +209,28 @@ test('protein target is capped at 210 g even when scan lean mass is water-heavy'
   const t = personalTargets('training', defaultState());
   assert.ok(t.protein <= 210);
 });
+
+test('catch-up: a missed weekday session is offered later in the week, leg day first', async () => {
+  const { missedSessions } = await import('../src/helpers.js');
+  const s = defaultState();
+  const logged = (date) => ({ entries: { a: { name: 'X', sets: [{ weight: '100', reps: '8', done: true }] } }, completed: true });
+  // Week of Mon 2026-11-16. Monday done, Tuesday (legs) and Wednesday missed.
+  s.workoutSessions = { '2026-11-16': logged() };
+  const thu = missedSessions('2026-11-19', s);
+  assert.deepEqual(thu.map((m) => m.date), ['2026-11-17', '2026-11-18']);
+  assert.match(thu[0].title, /Lower/);
+  // Saturday is optional, so it becomes a catch-up day; nothing optional is ever "missed".
+  const sat = missedSessions('2026-11-21', s);
+  assert.ok(sat.every((m) => !['2026-11-21', '2026-11-22'].includes(m.date)));
+  assert.equal(sat[0].date, '2026-11-17');
+  // Monday starts a fresh week; dismissed and swapped days are not offered.
+  assert.deepEqual(missedSessions('2026-11-23', s), []);
+  s.missedDismissed = { '2026-11-18': true };
+  s.workoutSwaps = { '2026-11-19': '2026-11-17', '2026-11-17': '2026-11-19' };
+  assert.deepEqual(missedSessions('2026-11-20', s).map((m) => m.date), []);
+  // Once today has its own logged workout, no offer.
+  const t = defaultState();
+  t.workoutSessions = { '2026-11-19': logged() };
+  assert.deepEqual(missedSessions('2026-11-19', t), []);
+});
+

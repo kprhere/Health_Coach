@@ -37,6 +37,7 @@ export const DEFINITION_MILESTONES = [
 
 export const SETTINGS_DEFAULT = {
   units: 'imperial',
+  plates: [45, 35, 25, 10, 5, 2.5], // plate sizes (lb) this gym has; the plate loader uses only these
   proteinTarget: 205,
   waterTargetL: 3.75,
   stepsTarget: 12000,

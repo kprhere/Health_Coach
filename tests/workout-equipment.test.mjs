@@ -267,3 +267,16 @@ test('no Cable Crunch in the plan: loaded days get Weighted Decline Crunch, the 
   assert.ok(names(after.program.days[3]).includes('Reverse Crunch'));
   assert.deepEqual(after.workoutSessions, v7.workoutSessions);
 });
+
+test('plate inventory: the loader only uses the plates this gym has', async () => {
+  const { platesOf, plateBreakdown, defaultState } = await import('../src/helpers.js');
+  const state = defaultState();
+  assert.deepEqual(platesOf(state), [45, 35, 25, 10, 5, 2.5]);
+  state.settings.plates = [25, 45, '10', 45, 0, 'x'];
+  assert.deepEqual(platesOf(state), [45, 25, 10], 'cleaned, unique, heaviest first');
+  // 205 with a 45 bar = 80 a side: 45 + 35 normally, but without 35s it is 45 + 25 + 10.
+  const r = plateBreakdown(205, 45, platesOf(state));
+  assert.deepEqual(r.plates.map(({ plate, count }) => `${count}x${plate}`), ['1x45', '1x25', '1x10']);
+  state.settings.plates = [];
+  assert.deepEqual(platesOf(state), [45, 35, 25, 10, 5, 2.5], 'an empty list falls back to standard plates');
+});

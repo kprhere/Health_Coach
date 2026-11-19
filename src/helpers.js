@@ -7,6 +7,7 @@ import {
   PROFILE_DEFAULT, SETTINGS_DEFAULT, STORAGE_KEY, HEALTH_PARAM_MAP, DAILY_BEVERAGES, NO_MOON_DATES,
   DEFINITION_MILESTONES, SEGMENT_FIELDS, POSTURE_WARMUP, POSTURE_DAY_KEYS,
 } from './data.js';
+import { applyStampedMerge } from './syncMerge.js';
 import { targetsWithFallback, mealPlanFor, nutritionProfile } from './nutritionEngine.js';
 
 export { nutritionProfile };
@@ -50,6 +51,10 @@ export function defaultState() {
     exerciseNotes: {},   // exerciseName -> persistent coaching/setup note
     lastHealthSync: { at: null, date: '', count: 0, fields: [] }, // device-visible Shortcut import receipt
     lastBackup: null,
+    missedDismissed: {}, // date -> true once a missed session is let go
+    _stamps: {},   // pathKey -> ms of the last change (see syncMerge.js)
+    _deleted: {},  // pathKey -> ms it was deleted, so deletions sync too
+    _mergedAt: 0,  // set by a sync merge so that result is not re-stamped
   };
 }
 
@@ -411,7 +416,7 @@ export function mergeSyncedState(localState, remoteState) {
 
   // User-owned maps are additive. Never let a cloud snapshot remove something
   // that still exists on this device.
-  for (const key of ['saturdayMode', 'dayOverrides', 'workoutSwaps', 'restartWeights', 'customExercises', 'exerciseNotes']) {
+  for (const key of ['saturdayMode', 'dayOverrides', 'workoutSwaps', 'restartWeights', 'customExercises', 'exerciseNotes', 'missedDismissed']) {
     const cloudMap = remote[key] && typeof remote[key] === 'object' ? remote[key] : {};
     out[key] = { ...cloudMap, ...(local[key] || {}) };
   }
@@ -423,7 +428,11 @@ export function mergeSyncedState(localState, remoteState) {
     out.bodyScans = [...scans.values()];
   }
 
-  return out;
+  // Field-level pass: anything either device stamped goes to whichever one
+  // changed it last, and stamped deletions stick (syncMerge.js). Unstamped
+  // data keeps the rules above.
+  out._mergedAt = Date.now();
+  return applyStampedMerge(out, local, remote);
 }
 
 export function validateImport(obj) {
@@ -708,6 +717,33 @@ export function dayFlags(key, state) {
 export function workoutSwapPartner(key, state) {
   const partner = state && state.workoutSwaps && state.workoutSwaps[key];
   return typeof partner === 'string' && partner !== key ? partner : '';
+}
+
+// ---------- catch-up for missed sessions ----------
+// Required sessions earlier this week (Monday up to yesterday) that were not
+// logged and are not already swapped. Shown on Train as "do it today": one
+// tap swaps that session into today, so a missed leg day is moved instead of
+// lost. Optional weekend days are never "missed", and dismissed ones stay
+// dismissed. Ordered most important first: lifting before recovery, and the
+// week's only leg day first of all.
+export function missedSessions(today, state) {
+  const dow = dowOf(today);
+  const daysSinceMonday = (dow + 6) % 7;
+  if (daysSinceMonday === 0) return [];
+  if (workoutSessionHasData(state.workoutSessions && state.workoutSessions[today])) return [];
+  if (workoutSwapPartner(today, state)) return [];
+  const dismissed = state.missedDismissed || {};
+  const out = [];
+  for (let back = daysSinceMonday; back >= 1; back--) {
+    const date = addDays(today, -back);
+    const day = programDay(state, dowOf(date));
+    if (day.optional || !(day.blocks || []).length) continue;
+    if (dismissed[date] || workoutSwapPartner(date, state)) continue;
+    if (workoutSessionHasData(state.workoutSessions && state.workoutSessions[date])) continue;
+    out.push({ date, title: day.title, key: day.key, lifting: day.dayType !== 'rest' });
+  }
+  const rank = (m) => (/lower/i.test(m.title) ? 0 : m.lifting ? 1 : 2);
+  return out.sort((a, b) => rank(a) - rank(b) || a.date.localeCompare(b.date));
 }
 
 export function resolveWorkout(key, state) {
@@ -1485,6 +1521,13 @@ export function plateBreakdown(totalWeight, barWeight = 45, plates = [45, 35, 25
 // total. Both sides carry the same plates, so total = 2 x one side + the bar
 // (or 0 on a plate-loaded machine, whose sled weight the app cannot know).
 export const STANDARD_PLATES = [45, 35, 25, 10, 5, 2.5];
+// Plate sizes that can be switched on in the plate loader's "Your plates".
+export const PLATE_OPTIONS = [55, 45, 35, 25, 15, 10, 5, 2.5, 1.25];
+export function platesOf(state) {
+  const list = state && state.settings && Array.isArray(state.settings.plates) ? state.settings.plates : STANDARD_PLATES;
+  const clean = [...new Set(list.map(Number).filter((n) => Number.isFinite(n) && n > 0))].sort((a, b) => b - a);
+  return clean.length ? clean : STANDARD_PLATES;
+}
 
 export function totalFromOneSide(oneSide, base = 0) {
   if (!hasEnteredValue(oneSide)) return { total: null, reason: 'empty' };
