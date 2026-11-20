@@ -201,6 +201,9 @@ export const FOODS = {
   asparagus: F('Roasted asparagus', '150 g', 3, 6, 2, 50, true, ['ldl', 'gi']),
   buttermilk:F('Buttermilk', '1 glass', 4, 6, 2, 70, true, ['gi']),
   fastDrinks:F('Water, black coffee or green tea', '', 0, 0, 0, 0, true, []),
+  // Cooking fat is the most-missed number in home cooking: one tablespoon is
+  // 120 kcal. Every fed day budgets one measured tablespoon across all meals.
+  oil1:      F('Cooking oil or ghee, measured with a spoon', '1 tbsp for the whole day', 0, 0, 14, 120, true, []),
 };
 
 function sumFoods(keys) {
@@ -221,7 +224,7 @@ const SHORT = {
   chicken: 'Chicken', chickenEgg: 'Chicken', fish: 'Fish', paneer: 'Paneer', tofu: 'Tofu', eggmix: 'Eggs',
   whey15: 'Whey', whey1: 'Whey', gyog: 'Yogurt', rajma: 'Rajma', dal: 'Dal',
   oats: 'Oats', oats80: 'Oats', banana: 'Fruit', soya: 'Soya', soya90: 'Soya', salmon: 'Salmon',
-  paneer150: 'Paneer', gyog250: 'Yogurt', whey2: 'Whey', fastDrinks: 'Coffee / tea', buttermilk: 'Chaas', berries: 'Berries', chiaflax: 'Seeds',
+  paneer150: 'Paneer', gyog250: 'Yogurt', whey2: 'Whey', fastDrinks: 'Coffee / tea', oil1: 'Oil', buttermilk: 'Chaas', berries: 'Berries', chiaflax: 'Seeds',
 };
 const HEADLINE_ORDER = ['oats80', 'chickenEgg', 'chicken', 'fish', 'salmon', 'soya90', 'soya', 'paneer', 'paneer150', 'tofu', 'eggmix', 'whey2', 'whey15', 'whey1', 'gyog250', 'gyog', 'rajma', 'dal', 'oats', 'banana', 'buttermilk', 'berries', 'chiaflax'];
 
@@ -335,12 +338,16 @@ export function mealPlanFor(dayType, state) {
       { ...slot('Optional bedtime (if protein low)', '9:30 PM', [['whey1'], ['gyog250'], ['milk']]), optional: true },
     ];
   } else {
+    // Pre-workout: 1 scoop of whey (with a banana when the session is long),
+    // as actually drunk before the gym. Rest days start with a plain drink;
+    // the seeds are already in the oats bowl.
     const wake = isTraining
-      ? slot('Pre-workout', '7:00-7:15 AM', [['banana'], ['fastDrinks']])
-      : slot('On waking', '6:00 AM', [['chiaflax', 'almonds'], ['banana', 'almonds'], ['buttermilk']]);
+      ? slot('Pre-workout', '7:00-7:15 AM', [['whey1', 'banana'], ['whey1'], ['banana']])
+      : slot('On waking', '6:00 AM', [['fastDrinks'], ['chiaflax', 'almonds'], ['buttermilk']]);
     const breakfast = slot(isTraining ? 'Post-workout breakfast' : 'Breakfast',
       isTraining ? '9:00-9:30 AM' : '8:00 AM', [
-        // Same bowl every day; all 1.5 scoops go in it, none pre-workout.
+        // Same bowl every day: 1.5 scoops go in it with the creatine. The
+        // pre-workout scoop is separate, in the slot above.
         ['oats80', 'whey15', 'seeds20', 'berries100'],
         isVegDay ? ['gyog250', 'idli2', 'berries', 'whey1'] : ['eggmix', 'idli2', 'berries'],
         ['gyog', 'oats', 'berries', 'almonds'],
@@ -350,22 +357,31 @@ export function mealPlanFor(dayType, state) {
     // The last option in each list is the low-carb plate: protein, sabzi and
     // steamed vegetables with the starch dropped. Rest days only budget 165 g carbs, so
     // without it no combination of full-starch plates fits the calories.
+    // First option of every slot is the default day: together the defaults
+    // land on the day's calorie target (a test locks this).
     const lunch = slot('Lunch', dayType === 'vegSat' ? '1:00 PM' : '12:30 PM',
       isVegDay
-        ? [['soya', 'brownrice', 'dal', 'steamedVeg'], ['soya', 'sweetpotato', 'dal', 'steamedVeg'], ['soya', 'paneer', 'millet2', 'steamedVeg'], ['soya', 'paneer', 'steamedVeg']]
+        ? [['soya90', 'brownrice', 'steamedVeg'], ['soya', 'sweetpotato', 'dal', 'steamedVeg'], ['soya', 'paneer', 'millet2', 'steamedVeg'], ['soya', 'paneer', 'steamedVeg']]
         : [['chickenEgg', 'brownrice', 'dal', 'steamedVeg'], ['chickenEgg', 'sweetpotato', 'dal', 'steamedVeg'], ['fish', 'quinoa', 'steamedVeg'], ['chicken', 'sabzi', 'steamedVeg']]);
+    // Training days already have whey twice (pre-workout and the oats), so
+    // their snack leads with yogurt. Rest days lead with the leaner whey.
     const snack = slot('Snack', '4:00 PM',
       isVegDay
-        ? [['whey1', 'banana'], ['gyog250', 'berries'], ['whey1', 'milk']]
-        : [['whey1', 'banana'], ['gyog', 'berries', 'almonds'], ['buttermilk', 'almonds']]);
+        ? (isTraining ? [['gyog250', 'berries'], ['whey1', 'banana'], ['whey1', 'milk']] : [['whey1', 'berries'], ['gyog250', 'berries'], ['whey1', 'milk']])
+        : (isTraining ? [['gyog', 'berries'], ['whey1', 'banana'], ['buttermilk', 'almonds']] : [['whey1', 'berries'], ['gyog', 'berries'], ['buttermilk', 'almonds']]));
     // The salmon + broccoli + asparagus option is the one thing worth adapting
     // from a friend's plan: her single most-repeated meal, no starch, two
     // distinct rotating vegetables instead of a catch-all sabzi.
     const dinner = slot('Dinner', '7:30 PM',
       isVegDay
-        ? [['soya', 'paneer', 'sabzi', 'steamedVeg'], ['paneer150', 'dal', 'roti2', 'steamedVeg'], ['soya', 'sabzi', 'steamedVeg']]
-        : [['chickenEgg', 'millet2', 'sabzi', 'steamedVeg'], ['fish', 'sabzi', 'quinoa', 'steamedVeg'], ['chicken', 'sabzi', 'steamedVeg'], ['salmon', 'broccoli', 'asparagus']]);
-    const bed = { ...slot('Optional bedtime (if protein low)', '9:30 PM', [['whey1'], ['gyog']]), optional: true };
+        ? (dayType === 'vegSat'
+          ? [['soya90', 'paneer', 'sabzi', 'steamedVeg'], ['paneer150', 'dal', 'roti2', 'steamedVeg'], ['soya', 'sabzi', 'steamedVeg']]
+          : [['soya', 'paneer', 'sabzi', 'steamedVeg'], ['paneer150', 'dal', 'roti2', 'steamedVeg'], ['soya', 'sabzi', 'steamedVeg']])
+        // Default dinner has no starch: the carbs sit around training (oats,
+        // lunch rice) and the evening plate is protein and vegetables.
+        : [['chicken', 'sabzi', 'steamedVeg'], ['chickenEgg', 'millet2', 'sabzi', 'steamedVeg'], ['fish', 'sabzi', 'quinoa', 'steamedVeg'], ['salmon', 'broccoli', 'asparagus']]);
+    const bed = { ...slot('Optional bedtime (if protein low)', '9:30 PM', [['whey1'], ['gyog']]), optional: true,
+      note: 'Only when protein is still short at night. It adds to today\'s calories.' };
     // Flex meal: a genuine extra meal, not a top-up, for a day that ran hungrier
     // or harder than planned. Scoped to training days on purpose — a rest day
     // has no extra demand to fuel and only 165 g carbs of room to spend it in.
@@ -373,12 +389,20 @@ export function mealPlanFor(dayType, state) {
     // bedtime slot above; that is correct, not a compliance failure, because
     // the day's real energy need was genuinely higher than the average target.
     const flex = isTraining
-      ? { ...slot('Flex meal (optional — high hunger or a harder session)', 'As needed',
+      ? { ...slot('Flex meal (optional, counts toward today)', 'As needed',
           isVegDay
             ? [['soya', 'sabzi', 'steamedVeg'], ['paneer150', 'steamedVeg'], ['tofu', 'sabzi', 'steamedVeg']]
-            : [['chicken', 'sabzi', 'steamedVeg'], ['fish', 'steamedVeg'], ['chickenEgg', 'steamedVeg']]), optional: true }
+            : [['chicken', 'sabzi', 'steamedVeg'], ['fish', 'steamedVeg'], ['chickenEgg', 'steamedVeg']]), optional: true,
+        note: 'Only for a long or extra-hard day, or real hunger. The default meals already hit today\'s target, so this one goes over it.' }
       : null;
     slots = [wake, breakfast, lunch, snack, dinner, ...(flex ? [flex] : []), bed];
+  }
+
+  // Cooking oil goes last so meal-log indices of the slots above never shift.
+  // The legacy Thursday fast keeps its old shape.
+  if (dayType !== 'fastThu') {
+    slots = [...slots, { ...slot('Cooking oil for the day', 'Across meals', [['oil1']]),
+      note: 'One measured tablespoon across all meals. Pour from a spoon, never the bottle. Tick it once used.' }];
   }
 
   // final safety filter: never show a non-veg option on a veg / fast day

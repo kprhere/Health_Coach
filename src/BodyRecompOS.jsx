@@ -13,7 +13,7 @@ import {
 import {
   programDay, NUTRITION, SUPPLEMENTS, HABITS, SCAN_FIELDS, WATCH_FIELDS, DAY_SHORT,
   EXERCISES, PROGRAM_RATIONALE, BADMINTON_FUEL, SWIMMING_FUEL, DAY_VARIANTS,
-  LABS, HAIR_HEALTH, DAILY_BEVERAGES, MUSCLE_GROUPS, SEGMENT_FIELDS,
+  LABS, HAIR_HEALTH, DAILY_BEVERAGES, MUSCLE_GROUPS, SEGMENT_FIELDS, PROGRESSION_RULES,
 } from './data.js';
 import {
   todayKey, addDays, prettyDate, shortDate, dowOf, clone, fastEndTime,
@@ -738,6 +738,15 @@ export function TrainTab({ ctx }) {
           ))}
         </Card>
       ) : null}
+
+      <details className="card pad-sm progress-rules">
+        <summary><span className="block-tag" style={{ display: 'inline-flex' }}><span className="bar" />How to progress and when to deload</span></summary>
+        <div className="progress-rules-list">
+          {PROGRESSION_RULES.map((r) => (
+            <div key={r.title} className="progress-rule"><b>{r.title}.</b> {r.text}</div>
+          ))}
+        </div>
+      </details>
 
       {plan.isClassDay ? (
         <Card className="pad-sm">
@@ -1939,6 +1948,13 @@ function MoreTab({ ctx }) {
             </div>
             <div className="field-row cols-3">
               {num('Steps', 'stepsTarget', s.settings, (k, v) => ctx.setSetting(k, parseFloat(v) || 0))}
+              <div className="field">
+                <label htmlFor="thursday-veg">Vegetarian Thursday</label>
+                <label className="toggle-row" style={{ display: 'flex', alignItems: 'center', gap: 8, minHeight: 40 }}>
+                  <input id="thursday-veg" type="checkbox" checked={!!s.settings.thursdayVeg} onChange={(e) => ctx.setSetting('thursdayVeg', e.target.checked)} />
+                  <span>{s.settings.thursdayVeg ? 'On: Thursdays are vegetarian' : 'Off: Thursday is a normal day'}</span>
+                </label>
+              </div>
               <div className="field"><label>Puratasi starts</label><input className="input" type="date" value={s.settings.puratasiStartDate || ''} onChange={(e) => ctx.setSetting('puratasiStartDate', e.target.value)} /></div>
               <div className="field"><label>Puratasi ends</label><input className="input" type="date" value={s.settings.puratasiEndDate || ''} onChange={(e) => ctx.setSetting('puratasiEndDate', e.target.value)} /></div>
             </div>

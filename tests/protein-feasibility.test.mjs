@@ -102,14 +102,15 @@ test('protein target is reachable inside the calorie budget', () => {
   }
 });
 
-test('the post-workout bowl is the real overnight-oats recipe with all the whey in it', () => {
+test('pre-workout whey, then the real overnight-oats bowl after training', () => {
   const state = baseState();
   const training = mealPlanFor('training', state);
   const pre = training.find((slot) => slot.name.startsWith('Pre-workout'));
   const breakfast = training.find((slot) => slot.name === 'Post-workout breakfast');
 
-  // No whey before training: all 1.5 scoops go in the oats with the creatine.
-  assert.ok(pre.options.every((o) => !o.keys.some((k) => k.startsWith('whey'))));
+  // One scoop before training is the default; the oats still carry 1.5.
+  assert.deepEqual(pre.options[0].keys, ['whey1', 'banana']);
+  assert.ok(pre.options.some((o) => o.keys.includes('banana') && !o.keys.includes('whey1')));
   assert.equal(pre.time, '7:00-7:15 AM');
   assert.equal(breakfast.time, '9:00-9:30 AM');
   assert.deepEqual(breakfast.options[0].keys, ['oats80', 'whey15', 'seeds20', 'berries100']);
@@ -306,4 +307,21 @@ test('an unset Puratasi window disables the whole feature', () => {
   state.settings.puratasiEndDate = '';
   assert.equal(inPuratasi('2026-09-21', state), false);
   assert.equal(nutritionDayType('2026-09-21', state), 'training');
+});
+
+// The first option of every non-optional slot is the plan the app shows by
+// default. Eaten as shown, it must land on the day's calorie target, cooking
+// oil included, or the planned deficit quietly disappears.
+test('the default meals of each regular day land on its calorie target, oil included', () => {
+  const state = baseState();
+  for (const dayType of ['training', 'trainingVeg', 'rest', 'restVeg', 'vegSat']) {
+    const target = personalTargets(dayType, state);
+    const slots = mealPlanFor(dayType, state);
+    const oil = slots.find((s) => s.name.startsWith('Cooking oil'));
+    assert.ok(oil && !oil.optional && oil.options[0].kcal === 120, `${dayType} budgets one tablespoon of oil`);
+    assert.equal(slots[slots.length - 1], oil, 'oil goes last so logged meal indices never shift');
+    const core = slots.filter((s) => !s.optional).reduce((a, s) => ({ kcal: a.kcal + s.options[0].kcal, p: a.p + s.options[0].p }), { kcal: 0, p: 0 });
+    assert.ok(Math.abs(core.kcal - target.kcal) <= target.kcal * 0.03, `${dayType}: default meals ${core.kcal} kcal vs target ${target.kcal}`);
+    assert.ok(core.p >= target.protein * 0.9, `${dayType}: default meals ${core.p} g protein vs target ${target.protein}`);
+  }
 });

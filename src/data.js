@@ -15,14 +15,17 @@ export const PROFILE_DEFAULT = {
   heightIn: 71,
   age: 34,
   gender: 'Male',
-  startWeightLb: 191.6,
-  startBodyFatPct: 24.8,
-  startFatMassLb: 47.6,
-  startWaistIn: 37.5,
+  // Baseline moved to the 2026-11-13 restart scan (was 2026-09-25: 191.6 lb,
+  // 24.8%, 47.6 lb fat, 37.5 in). 10% at 149.9 lb lean is about 166.6 lb,
+  // so about 30 lb of fat at roughly 1 lb a week.
+  startWeightLb: 197.1,
+  startBodyFatPct: 23.9,
+  startFatMassLb: 47.2,
+  startWaistIn: 37.4,
   goalBodyFatPct: 10,
-  goalFatLossLb: 32,
+  goalFatLossLb: 30,
   goalWaistIn: 33,
-  timelineMonths: 9,
+  timelineMonths: 8,
 };
 
 // What becomes visible at each body-fat level for a man, used by the goal card.
@@ -54,6 +57,9 @@ export const SETTINGS_DEFAULT = {
   // the full target — going veg is a food restriction, not a reason to eat less
   // or accept less protein. Dates are approximate (the month turns when the sun
   // enters Kanya, around Sept 17); confirm against your almanac and edit here.
+  // Thursday is a normal (non-veg) day by default. Turn this on in More to
+  // make every Thursday vegetarian again; calories and protein stay the same.
+  thursdayVeg: false,
   puratasiStartDate: '2026-09-17',
   puratasiEndDate: '2026-10-17',
   // ---- program calendar (all editable in More, week/day recalculate from these) ----
@@ -179,6 +185,7 @@ export const EXERCISES = {
   'Smith Squat': X('Quads, Glutes', 'Hamstrings', 'Smith Machine', 'Beginner', 'Fixed-path squat', 'Leg Press', 'Smith Machine Squat', 'Feet slightly forward, control down', 'Feet under bar straining knees'),
   'Leg Extension': X('Quads', '-', 'Machine', 'Beginner', 'Quad isolation and finisher', 'Smith Squat', 'Leg Extension Machine', 'Pause and squeeze at the top', 'Slamming reps with momentum'),
   'Hip Adduction': X('Adductors (inner thigh)', 'Glutes', 'Machine', 'Beginner', 'Inner-thigh muscle and leg shape', 'Copenhagen Plank', 'Hip Adduction Machine', 'Sit tall, squeeze to the middle, slow return', 'Letting the stack slam on the way out'),
+  'Hip Abduction': X('Glute medius (side glutes)', 'Glutes', 'Machine', 'Beginner', 'Side-hip shape and knee stability', 'Banded Lateral Walk', 'Hip Abduction Machine', 'Lean slightly forward, push the knees out, pause at the widest point', 'Bouncing the stack or rocking the torso'),
   'Bulgarian Split Squat': X('Quads, Glutes', 'Hamstrings, Core', 'Dumbbells', 'Intermediate', 'Unilateral leg strength', 'Reverse Lunge', 'Smith Machine Split Squat', 'Front shin vertical, torso tall', 'Pushing off the back foot'),
   'Walking Lunge': X('Quads, Glutes', 'Hamstrings, Core', 'Dumbbells', 'Beginner', 'Legs plus conditioning', 'Reverse Lunge', 'Smith Machine Split Squat', 'Long steps, knee tracks toe', 'Short steps hitting the knee'),
   'Reverse Lunge': X('Quads, Glutes', 'Hamstrings', 'Dumbbells', 'Beginner', 'Knee-friendly single leg', 'Bulgarian Split Squat', 'Smith Machine Split Squat', 'Step back, drop straight down', 'Leaning forward off balance'),
@@ -297,6 +304,14 @@ export const POSTURE_WARMUP = [
 // Side delts make the shoulders look wide; done fresh, straight after the
 // press, instead of as a tired superset at the end (2026-11-19).
 export const SIDE_DELT_NOTE = 'Side delts, done fresh right after the press. Light weight, lift out to the side, pause 1s at the top, 2s down. Add reps before weight';
+// How every lift moves forward. Shown on the Train tab.
+export const PROGRESSION_RULES = [
+  { title: 'Add weight', text: 'When every set hits the top of the rep range at the target effort, add 5 lb next time on upper-body lifts and 10 lb on lower-body lifts. Machines with big jumps: add reps first, then the next pin.' },
+  { title: 'Restart block', text: 'For the first 2 weeks back, stop every set with 2-3 reps still in the tank. No grinding, no failure except the last set of isolation work.' },
+  { title: 'Deload', text: 'Every 6th week, or sooner if reps drop two sessions in a row on the same lift: same exercises, half the sets, about 10% lighter. Then build again.' },
+  { title: 'In a calorie deficit', text: 'Holding your weights is a win. If strength drops for 2 weeks on most lifts, eat at the training-day target on rest days for a week and sleep more before cutting anything else.' },
+];
+
 export const POSTURE_DAY_KEYS = ['upperA', 'lowerA', 'lowerHinge', 'upperB', 'armsExtra', 'armsAbs', 'lowerB'];
 
 // ============================================================
@@ -312,16 +327,16 @@ export const PROGRAM = {
         single('Hammer Strength High Row', 4, 8, 10, 8, 120, '2-1-1', 'Opposite pattern to the press'),
         single('Hammer Strength Iso Shoulder Press', 3, 8, 10, 8, 105, '2-0-1', 'Secondary press for delts'),
         single('Arsenal Standing Lateral Raise', 4, 12, 15, 9, 60, '2-1-2', SIDE_DELT_NOTE),
-        single('Lat Pulldown', 3, 10, 12, 8, 90, '2-1-1', 'Second pull for lat width'),
+        single('Lat Pulldown', 2, 10, 12, 8, 90, '2-1-1', 'Second pull for lat width. 2 sets keeps the session near 60 min; Friday adds 3 more'),
         superset('Curl + Tricep Press', 3, 60, [
           { name: 'Life Fitness Bicep Curl', targetReps: '10-12', targetRpe: 9 },
           { name: 'Life Fitness Tricep Press', targetReps: '10-12', targetRpe: 9 },
         ], 'Opposite muscles on side-by-side machines: no rest between, 60s after each round'),
-        single('Face Pull', 3, 15, 20, 8, 60, '2-1-2', 'Rear delts and shoulder health'),
-        finisher('Arm Burnout', { rounds: 2, restAfterRoundSec: 45 }, [
+        single('Face Pull', 2, 15, 20, 8, 60, '2-1-2', 'Rear delts and shoulder health'),
+        finisher('Arm Burnout', { rounds: 1, restAfterRoundSec: 45 }, [
           { name: 'Dual Low Pulley Curl', targetReps: '12-15', targetRpe: 9 },
           { name: 'Rope Pushdown', targetReps: '12-15', targetRpe: 9 },
-        ], 'Biceps then triceps, back to back'),
+        ], 'One all-out round: biceps then triceps, back to back. Add a second round only on a short, fresh day'),
       ],
       conditioning: [{ name: 'Incline Walk', detail: '20 min zone 2 after lifting, incline 8-12%. Skip only if badminton actually happened.' }],
       mobility: [...POSTURE_WARMUP],
@@ -341,7 +356,7 @@ export const PROGRAM = {
           { name: 'Leg Extension', targetReps: '12-15', targetRpe: 9 },
           { name: 'Lying Leg Curl', targetReps: '10-12', targetRpe: 9 },
         ], 'Quad then hamstring, no rest between. Second hamstring day of the week at no extra time'),
-        single('Hip Adduction', 2, 12, 15, 8, 60, '2-1-2', 'Inner thigh, slow return. The scan flagged lower body as behind upper'),
+        single('Hip Abduction', 2, 12, 15, 9, 60, '2-1-2', 'Side glutes: lean slightly forward, pause at the widest point. Shapes the hips and keeps the knees steady on split squats. Inner thighs train Thursday'),
         single('Standing Calf Raise', 4, 12, 15, 9, 60, '2-1-2', 'Calves, full stretch and pause'),
         circuit('Loaded Abs', 3, 60, [
           { name: 'Weighted Decline Crunch', targetReps: '10-15', targetRpe: 9 },
@@ -350,7 +365,7 @@ export const PROGRAM = {
       ],
       conditioning: [], mobility: [...POSTURE_WARMUP],
       sport: [{ name: 'Easy Laps', detail: 'Swimming class this evening. Technique-focused, legs already worked.' }],
-      notes: 'About 55-60 min. Squat first while fresh; that is the heavy lift. If time runs short, cut adduction, then calves. Swim class tonight: fuel carbs around it.',
+      notes: 'About 55-60 min. Squat first while fresh; that is the heavy lift. If time runs short, cut abduction, then calves. Swim class tonight: fuel carbs around it.',
     },
 
 
@@ -366,7 +381,7 @@ export const PROGRAM = {
       ],
       conditioning: [
         { name: 'Incline Walk', detail: '20 min zone 2, incline 8-12%. Do this first as the warm-up for the intervals.' },
-        { name: 'Bike', detail: 'Intervals: 8 x (1 min hard / 1 min easy), ~16 min. The only hard cardio of the week. Bike, not sprints — no impact, no next-day soreness, so it will not touch Sunday legs. This is the one session to cut first if sleep or recovery slips.' },
+        { name: 'Bike', detail: 'Intervals: 8 x (1 min hard / 1 min easy), ~16 min. The only hard cardio of the week. Bike, not sprints: no impact and almost no next-day soreness, so it will not hurt Thursday\'s RDLs. Hard means about 8/10, not all-out. This is the one session to cut first if sleep or recovery slips.' },
       ],
       mobility: [
         { name: 'Hip Flexor Stretch', detail: '2 x 30s per side' },
@@ -377,7 +392,7 @@ export const PROGRAM = {
       notes: 'No lifting today, which is why the week\'s one hard cardio session sits here. Legs train Tuesday (squat) and Thursday (hinge); today is the easy day between them. Everything else stays deliberately easy: keep steps and water up.',
     },
     4: {
-      key: 'lowerHinge', title: 'Lower B: Hinge + Glutes', focus: 'Strength + Hypertrophy', dayType: 'trainingVeg', intensity: 'Hard',
+      key: 'lowerHinge', title: 'Lower B: Hinge + Glutes', focus: 'Strength + Hypertrophy', dayType: 'training', intensity: 'Hard',
       blocks: [
         single('Romanian Deadlift', 4, 6, 8, 8, 180, '3-1-1', 'Heavy main lift for the back of the legs. Add 5-10 lb when all sets hit 8'),
         single('Hip Thrust', 3, 8, 12, 8, 120, '2-1-2', 'Glutes, full lockout squeeze'),
@@ -400,14 +415,14 @@ export const PROGRAM = {
       conditioning: [{ name: 'Easy Laps', detail: 'Swimming class this evening, easy to moderate.' }],
       mobility: [...POSTURE_WARMUP],
       sport: [],
-      notes: 'About 55 min. Vegetarian day: get protein from whey, Greek yogurt, soya, tofu, dal. RDL first while fresh. Two days after squats, so if the lower back is still tight, use the Hammer Strength or Smith hip hinge and keep the reps clean. Arms moved to the optional Sunday session; Monday and Friday arm work covers them.',
+      notes: 'About 55 min. RDL first while fresh. Two days after squats, so if the lower back is still tight, use the Hammer Strength or Smith hip hinge and keep the reps clean. Arms moved to the optional Sunday session; Monday and Friday arm work covers them.',
     },
 
     5: {
       key: 'upperB', title: 'Upper Body B', focus: 'Hypertrophy', dayType: 'training', intensity: 'Hard',
       blocks: [
         single('Hammer Strength Incline Press', 4, 8, 10, 8, 120, '3-1-1', 'Main upper chest press'),
-        single('Hammer Strength Row', 4, 10, 12, 8, 90, '2-1-1', 'Back thickness'),
+        single('Hammer Strength Row', 3, 10, 12, 8, 90, '2-1-1', 'Back thickness. 3 sets: the pulldown superset adds 3 more'),
         single('Overhead Press', 4, 6, 8, 8, 150, '2-0-1', 'Heavy shoulder lift of the week. Standing barbell press, set up yourself: bar in the rack at upper-chest height, squeeze glutes, ribs down. Add 5 lb when all sets hit 8'),
         single('Arsenal Standing Lateral Raise', 4, 12, 15, 9, 60, '2-1-2', SIDE_DELT_NOTE),
         superset('Dip + Pulldown', 3, 75, [
@@ -418,7 +433,7 @@ export const PROGRAM = {
           { name: 'Dual Pulley Bayesian Curl', targetReps: '10-12 / arm', targetRpe: 9 },
           { name: 'Overhead Tricep Extension', targetReps: '12-15', targetRpe: 9 },
         ], 'Long heads of biceps and triceps, back to back. Bayesian curl on the dual low pulley: face away, arm slightly behind you, left arm first'),
-        single('Rear Delt Fly', 3, 15, 20, 9, 60, '2-1-2', 'Rear delts'),
+        single('Rear Delt Fly', 2, 15, 20, 9, 60, '2-1-2', 'Rear delts. 2 sets: Monday face pulls and Thursday\'s superset cover the rest'),
       ],
       conditioning: [{ name: 'Incline Walk', detail: '20 min zone 2 after lifting, incline 8-12%. Skip only if badminton actually happened.' }],
       mobility: [...POSTURE_WARMUP],
@@ -504,7 +519,7 @@ export const programDay = (state, dow) => programOf(state).days[dow] || REST_DAY
 
 // ============================================================
 // NUTRITION  (dayType targets + meal templates + quick adds)
-// veg=true meals are safe for Thursday and Saturday.
+// veg=true meals are safe for Saturday (and Thursday when Vegetarian Thursday is on).
 // ============================================================
 const M = (name, time, veg, items, kcal, p, c, f) => ({ name, time, veg, items, kcal, p, c, f });
 
@@ -556,7 +571,7 @@ export const NUTRITION = {
       M('Dinner', '7:30 PM', true, ['Dal (250 g cooked) + paneer', 'Sabzi', '1-2 roti', 'Steamed broccoli + carrots (200 g cooked)'], 580, 42, 50, 20),
     ],
   },
-  // quick add buttons. meat:true items dim on Thu / Sat.
+  // quick add buttons. meat:true items dim on vegetarian days.
   quickAdds: [
     { label: 'Whey scoop', p: 24, c: 3, f: 1, kcal: 120, meat: false },
     { label: 'Greek yogurt', p: 17, c: 8, f: 4, kcal: 130, meat: false },
@@ -789,14 +804,14 @@ export const SWIMMING_FUEL = {
       ],
     },
   ],
-  thursdayRule: 'Thursday is a normal eating day: arms in the morning, swim in the evening. Keep the pre-swim snack light and get a high-protein vegetarian dinner after class.',
+  thursdayRule: 'Thursday is a normal eating day by default: hinge and glutes in the morning, swim in the evening. Keep the pre-swim snack light and get a high-protein dinner after class. Turn on Vegetarian Thursday in More to make it a veg day.',
   coachNote: 'Do not underfuel recovery. If the swim runs late, get 30g protein in within the hour after class.',
 };
 
 // day-type -> short human reason the diet differs that day
 export const DAY_VARIANTS = {
   training: { label: 'Training day', tone: 'cyan', why: 'Highest carbs and calories to fuel lifting and refill glycogen.' },
-  trainingVeg: { label: 'Vegetarian training day', tone: 'green', why: 'Same calories and same protein as any training day, vegetarian only (Thursdays and Puratasi). Lead every plate with soya chunks, whey and paneer; dal and rice alone will not reach the target.' },
+  trainingVeg: { label: 'Vegetarian training day', tone: 'green', why: 'Same calories and same protein as any training day, vegetarian only (Puratasi, or Thursdays when Vegetarian Thursday is on in More). Lead every plate with soya chunks, whey and paneer; dal and rice alone will not reach the target.' },
   rest:     { label: 'Rest day', tone: 'violet', why: 'Lower carbs, protein held high to keep recovery and muscle up.' },
   restVeg:  { label: 'Puratasi rest day', tone: 'green', why: 'Same calories and same protein as any rest day, vegetarian only. Protein is the hard part today, so front-load it.' },
   fastThu:  { label: 'Fast plus swim', tone: 'amber', why: 'Fasted until 6 PM, then a gentle break and a high-protein veg dinner around the swim.' },
