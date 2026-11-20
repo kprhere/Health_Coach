@@ -14,7 +14,7 @@ export { nutritionProfile };
 
 export const PROGRAM_START = '2026-07-08'; // start of the current fat-loss phase (latest scan)
 export const PHASE_NAME = 'Fat Loss Phase 1';
-export const STATE_VERSION = 11;
+export const STATE_VERSION = 12;
 
 // ---------- date utils ----------
 export const pad = (n) => String(n).padStart(2, '0');
@@ -262,24 +262,71 @@ const MIGRATIONS = {
     const migrated = mergeState(defaultState(), state);
     if (!migrated.program || !migrated.program.days) migrated.program = clone(PROGRAM);
     const days = migrated.program.days;
-    const tpl = (dow, name) => clone(PROGRAM.days[dow].blocks.find((b) => b.name === name));
+    // Later templates may no longer have a block of that name (v12 put Friday's
+    // pulldown inside a superset); then leave the saved block for v12 to rebuild.
+    const tpl = (dow, name) => {
+      const found = PROGRAM.days[dow].blocks.find((b) => b.name === name);
+      return found ? clone(found) : null;
+    };
     const patchDay = (dow, { pressMatch, replace }) => {
       const day = days[dow];
       if (!day || !Array.isArray(day.blocks)) { days[dow] = clone(PROGRAM.days[dow]); return; }
-      let blocks = day.blocks.map((b) => (b && replace[b.name] ? tpl(dow, replace[b.name]) : b));
+      let blocks = day.blocks.map((b) => (b && replace[b.name] ? (tpl(dow, replace[b.name]) || b) : b));
       const hasFreshLateral = blocks.some((b) => b && b.blockType === 'single' && b.name === 'Arsenal Standing Lateral Raise');
       if (!hasFreshLateral) {
         const at = blocks.findIndex((b) => b && pressMatch.test(b.name || ''));
-        blocks.splice(at >= 0 ? at + 1 : Math.min(3, blocks.length), 0, tpl(dow, 'Arsenal Standing Lateral Raise'));
+        const lateral = tpl(dow, 'Arsenal Standing Lateral Raise');
+        if (lateral) blocks.splice(at >= 0 ? at + 1 : Math.min(3, blocks.length), 0, lateral);
       }
       day.blocks = blocks.filter(Boolean);
     };
     patchDay(1, { pressMatch: /shoulder press/i, replace: { 'Lateral Raise + Face Pull': 'Face Pull' } });
     patchDay(5, { pressMatch: /^overhead press$/i, replace: { 'Lateral + Rear Delt': 'Rear Delt Fly', 'Arm + Shoulder Finisher': 'Lat Pulldown' } });
     const ohp = (days[5].blocks || []).find((b) => b && b.name === 'Overhead Press' && b.exercises && b.exercises[0] && b.exercises[0].name === 'Overhead Press');
-    if (ohp) Object.assign(ohp.exercises[0], clone(PROGRAM.days[5].blocks.find((b) => b.name === 'Overhead Press').exercises[0]));
+    const ohpTpl = tpl(5, 'Overhead Press');
+    if (ohp && ohpTpl) Object.assign(ohp.exercises[0], ohpTpl.exercises[0]);
     days[2] = clone(PROGRAM.days[2]);
     return { ...migrated, version: 11 };
+  },
+  12: (state) => {
+    // 2026-11-19 superset review: Mon curl + tricep press superset, Thu leg
+    // curl + adduction superset, Fri reordered (overhead press before dips,
+    // dip + pulldown and curl + overhead extension supersets), and hanging
+    // leg raises (hip-flexor heavy, works against the pelvic-tilt fix) swapped
+    // out. Mon/Thu/Fri are rebuilt from the template, carrying over any
+    // exercise swaps the saved day had; Tue and Sun are replaced; Saturday's
+    // fallback is patched. Logs are untouched.
+    const migrated = mergeState(defaultState(), state);
+    if (!migrated.program || !migrated.program.days) migrated.program = clone(PROGRAM);
+    const days = migrated.program.days;
+    const rebuildKeepingSwaps = (dow) => {
+      const saved = days[dow];
+      const swaps = {};
+      ((saved && saved.blocks) || []).forEach((b) => {
+        (b && Array.isArray(b.exercises) ? b.exercises : []).forEach((e, i) => {
+          if (!e) return;
+          // Single blocks are named after their planned exercise; for multi
+          // blocks compare against the template block of the same name.
+          const planned = b.blockType === 'single'
+            ? b.name
+            : (((PROGRAM.days[dow].blocks.find((t) => t.name === b.name) || {}).exercises || [])[i] || {}).name;
+          if (planned && e.name && e.name !== planned) swaps[planned] = e.name;
+        });
+      });
+      const next = clone(PROGRAM.days[dow]);
+      next.blocks.forEach((b) => (b.exercises || []).forEach((e) => { if (swaps[e.name]) e.name = swaps[e.name]; }));
+      days[dow] = next;
+    };
+    [1, 4, 5].forEach(rebuildKeepingSwaps);
+    days[2] = clone(PROGRAM.days[2]);
+    days[0] = clone(PROGRAM.days[0]);
+    const fb = days[6] && days[6].fallback;
+    if (fb && Array.isArray(fb.blocks)) {
+      fb.blocks.forEach((b) => (b && Array.isArray(b.exercises) ? b.exercises : []).forEach((e) => {
+        if (e && e.name === 'Hanging Leg Raise') { e.name = 'Reverse Crunch'; e.targetReps = '12-15'; }
+      }));
+    }
+    return { ...migrated, version: 12 };
   },
 };
 

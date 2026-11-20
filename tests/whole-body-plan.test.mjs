@@ -9,7 +9,7 @@ import assert from 'node:assert/strict';
 import { PROGRAM, HABITS, SEED_SCANS, PROFILE_DEFAULT } from '../src/data.js';
 import {
   defaultState, migrateState, resolveWorkout, resolveNutrition, nutritionDayType, fastEndTime,
-  habitApplicability, definitionGoal, segmentSummary, muscleGroupOf, STATE_VERSION, clone,
+  habitApplicability, definitionGoal, segmentSummary, muscleGroupOf, STATE_VERSION, clone, exerciseLibrary,
 } from '../src/helpers.js';
 import { DAY_CAL_MULT, personalTargets } from '../src/nutritionEngine.js';
 
@@ -269,6 +269,9 @@ test('shoulders: side delts get 11+ fresh sets on 3 weekdays, lats and hamstring
   const ohp = PROGRAM.days[5].blocks.find((b) => b.name === 'Overhead Press').exercises[0];
   assert.deepEqual([ohp.sets, ohp.repLow, ohp.repHigh], [4, 6, 8]);
   assert.deepEqual([1, 5].map((dow) => sets(dow, 'Lat Pulldown') > 0), [true, true]);
+  // Friday's heavy press comes before dips, so the triceps are fresh for it.
+  const friNames = PROGRAM.days[5].blocks.flatMap((b) => (b.exercises || []).map((e) => e.name));
+  assert.ok(friNames.indexOf('Overhead Press') < friNames.indexOf('Chest-Assisted Dip'));
   assert.ok(sets(2, 'Lying Leg Curl') > 0 && sets(4, 'Seated Leg Curl') > 0, 'hamstrings Tuesday and Thursday');
 });
 
@@ -298,11 +301,43 @@ test('v11 upgrade patches Monday and Friday without losing exercise swaps', () =
   assert.ok(!mon.includes('Lateral Raise + Face Pull') && mon.includes('Face Pull'));
   assert.equal(fri.indexOf('Arsenal Standing Lateral Raise'), fri.indexOf('Overhead Press') + 1);
   assert.ok(!fri.includes('Lateral + Rear Delt') && !fri.includes('Arm + Shoulder Finisher'));
-  assert.ok(fri.includes('Lat Pulldown') && fri.includes('Rear Delt Fly'));
+  const friEx = after.program.days[5].blocks.flatMap((b) => (b.exercises || []).map((e) => e.name));
+  assert.ok(friEx.includes('Lat Pulldown') && friEx.includes('Rear Delt Fly'));
   assert.equal(after.program.days[5].blocks.find((b) => b.name === 'Overhead Press').exercises[0].sets, 4);
   assert.deepEqual(after.program.days[2], PROGRAM.days[2]);
   assert.deepEqual(after.workoutSessions, v10.workoutSessions);
   // Running the upgrade again does not add a second lateral block.
   const again = migrateState({ ...after, version: 10 });
   assert.equal(again.program.days[1].blocks.filter((b) => b.name === 'Arsenal Standing Lateral Raise').length, 1);
+});
+
+test('supersets pair non-competing muscles and no plan day uses hip-flexor-heavy hanging leg raises', () => {
+  const all = Object.values(PROGRAM.days).flatMap((day) => (day.blocks || []).concat(day.fallback ? day.fallback.blocks : []));
+  assert.ok(all.every((b) => !(b.exercises || []).some((e) => e.name === 'Hanging Leg Raise')));
+  // Compare the exact main muscle: side and rear delts are different heads
+  // and do not compete, unlike two biceps exercises.
+  const mainMuscle = (name) => exerciseLibrary(defaultState())[name].p.split(/[,(]/)[0].trim();
+  const pairs = all.filter((b) => b.blockType === 'superset').map((b) => b.exercises.map((e) => mainMuscle(e.name)));
+  // Antagonist or unrelated pairs only, except the deliberate Sunday arm pump.
+  const sameMuscle = pairs.filter(([a, b]) => a === b);
+  // One deliberate exception: Sunday's optional Hammer + Reverse Curl pump.
+  assert.deepEqual(sameMuscle, [['Brachialis', 'Brachialis']], `unexpected same-muscle superset: ${JSON.stringify(sameMuscle)}`);
+  assert.ok(PROGRAM.days[5].blocks.length <= 7, 'Friday is no longer a 9-block day');
+});
+
+test('v12 upgrade rebuilds Mon/Thu/Fri around the new supersets and keeps exercise swaps', () => {
+  const v11 = migrateState({ version: 4 });
+  v11.version = 11;
+  v11.program.days[1].blocks[0] = { ...v11.program.days[1].blocks[0], exercises: [{ ...v11.program.days[1].blocks[0].exercises[0], name: 'Barbell Bench Press' }] };
+  v11.program.days[6].fallback.blocks.forEach((b) => (b.exercises || []).forEach((e) => { if (e.name === 'Reverse Crunch') e.name = 'Hanging Leg Raise'; }));
+  v11.workoutSessions = { '2026-11-20': { entries: { a: { name: 'Overhead Press' } } } };
+  const after = migrateState(v11);
+  assert.equal(after.version, STATE_VERSION);
+  assert.equal(after.program.days[1].blocks[0].exercises[0].name, 'Barbell Bench Press', 'swap carried into the rebuilt Monday');
+  assert.ok(after.program.days[1].blocks.some((b) => b.name === 'Curl + Tricep Press'));
+  assert.ok(after.program.days[4].blocks.some((b) => b.name === 'Leg Curl + Adduction'));
+  assert.ok(after.program.days[5].blocks.some((b) => b.name === 'Dip + Pulldown'));
+  const fbNames = after.program.days[6].fallback.blocks.flatMap((b) => (b.exercises || []).map((e) => e.name));
+  assert.ok(!fbNames.includes('Hanging Leg Raise'));
+  assert.deepEqual(after.workoutSessions, v11.workoutSessions);
 });
