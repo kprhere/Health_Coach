@@ -23,7 +23,7 @@ test('Thursday is a fed vegetarian hinge + glutes leg day; arms live in the opti
   assert.equal(fastEndTime(THURSDAY, state), null);
   assert.ok(resolveNutrition(THURSDAY, state).meals.every((meal) => !meal.fasting));
   const sunday = PROGRAM.days[0].blocks.flatMap((b) => (b.exercises || []).map((e) => e.name));
-  for (const required of ['Close Grip Bench', 'Overhead Tricep Extension', 'Incline DB Curl', 'Hammer Curl', 'Reverse Curl', 'Weighted Decline Crunch']) {
+  for (const required of ['Close Grip Bench', 'Overhead Tricep Extension', 'Dual Pulley Bayesian Curl', 'Hammer Curl', 'Reverse Curl', 'Weighted Decline Crunch']) {
     assert.ok(sunday.includes(required), `${required} should be in the Sunday arms extra`);
   }
 });
@@ -340,4 +340,24 @@ test('v12 upgrade rebuilds Mon/Thu/Fri around the new supersets and keeps exerci
   const fbNames = after.program.days[6].fallback.blocks.flatMap((b) => (b.exercises || []).map((e) => e.name));
   assert.ok(!fbNames.includes('Hanging Leg Raise'));
   assert.deepEqual(after.workoutSessions, v11.workoutSessions);
+});
+
+test('curls use the dual low pulley instead of the incline dumbbell curl', () => {
+  const names = (dow) => PROGRAM.days[dow].blocks.flatMap((b) => (b.exercises || []).map((e) => e.name));
+  for (const dow of [0, 1, 2, 3, 4, 5, 6]) assert.ok(!names(dow).includes('Incline DB Curl'), `day ${dow}`);
+  assert.ok(names(1).includes('Dual Low Pulley Curl'));
+  assert.ok(names(5).includes('Dual Pulley Bayesian Curl'));
+  assert.ok(names(0).includes('Dual Pulley Bayesian Curl'));
+
+  const v12 = migrateState({ version: 4 });
+  v12.version = 12;
+  const put = (dow, from) => v12.program.days[dow].blocks.forEach((b) => (b.exercises || []).forEach((e) => { if (e.name === from) e.name = 'Incline DB Curl'; }));
+  put(1, 'Dual Low Pulley Curl'); put(5, 'Dual Pulley Bayesian Curl');
+  const sunBlock = v12.program.days[0].blocks.find((b) => b.name === 'Dual Pulley Bayesian Curl');
+  sunBlock.name = 'Incline DB Curl'; sunBlock.exercises[0].name = 'Incline DB Curl';
+  v12.workoutSessions = { '2026-11-14': { entries: { c: { name: 'Incline DB Curl' } } } };
+  const after = migrateState(v12);
+  const an = (dow) => after.program.days[dow].blocks.flatMap((b) => [b.name, ...(b.exercises || []).map((e) => e.name)]);
+  for (const dow of [0, 1, 5]) assert.ok(!an(dow).includes('Incline DB Curl'), `saved day ${dow} upgraded`);
+  assert.deepEqual(after.workoutSessions, v12.workoutSessions, 'old curl logs kept');
 });
