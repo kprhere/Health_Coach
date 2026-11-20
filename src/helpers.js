@@ -14,7 +14,7 @@ export { nutritionProfile };
 
 export const PROGRAM_START = '2026-07-08'; // start of the current fat-loss phase (latest scan)
 export const PHASE_NAME = 'Fat Loss Phase 1';
-export const STATE_VERSION = 12;
+export const STATE_VERSION = 13;
 
 // ---------- date utils ----------
 export const pad = (n) => String(n).padStart(2, '0');
@@ -327,6 +327,36 @@ const MIGRATIONS = {
       }));
     }
     return { ...migrated, version: 12 };
+  },
+  13: (state) => {
+    // 2026-11-19: Incline DB Curl -> the dual low pulley. Monday's burnout
+    // uses the two-arm Dual Low Pulley Curl; Friday and Sunday use the
+    // Bayesian curl (same long-head stretch, constant cable tension). Only
+    // slots still planned as Incline DB Curl change; logs are untouched.
+    const migrated = mergeState(defaultState(), state);
+    const days = (migrated.program && migrated.program.days) || {};
+    const to = { 1: 'Dual Low Pulley Curl', 5: 'Dual Pulley Bayesian Curl', 0: 'Dual Pulley Bayesian Curl' };
+    Object.entries(to).forEach(([dow, name]) => {
+      const tplDay = PROGRAM.days[dow];
+      (days[dow] && Array.isArray(days[dow].blocks) ? days[dow].blocks : []).forEach((b) => {
+        if (!b || !Array.isArray(b.exercises)) return;
+        b.exercises.forEach((e, i) => {
+          if (!e || e.name !== 'Incline DB Curl') return;
+          e.name = name;
+          if (b.blockType === 'single') {
+            b.name = name;
+            const t = tplDay.blocks.find((x) => x.name === name);
+            if (t && t.exercises[0].note) e.note = t.exercises[0].note;
+          } else {
+            const t = tplDay.blocks.find((x) => x.name === b.name);
+            const te = t && t.exercises[i];
+            if (te && te.name === name && te.targetReps) e.targetReps = te.targetReps;
+            if (t && t.note) b.note = t.note;
+          }
+        });
+      });
+    });
+    return { ...migrated, version: 13 };
   },
 };
 

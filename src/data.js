@@ -319,7 +319,7 @@ export const PROGRAM = {
         ], 'Opposite muscles on side-by-side machines: no rest between, 60s after each round'),
         single('Face Pull', 3, 15, 20, 8, 60, '2-1-2', 'Rear delts and shoulder health'),
         finisher('Arm Burnout', { rounds: 2, restAfterRoundSec: 45 }, [
-          { name: 'Incline DB Curl', targetReps: '12-15', targetRpe: 9 },
+          { name: 'Dual Low Pulley Curl', targetReps: '12-15', targetRpe: 9 },
           { name: 'Rope Pushdown', targetReps: '12-15', targetRpe: 9 },
         ], 'Biceps then triceps, back to back'),
       ],
@@ -415,9 +415,9 @@ export const PROGRAM = {
           { name: 'Lat Pulldown', targetReps: '10-12', targetRpe: 8 },
         ], 'Push then pull. Dip at a pain-free depth with 2 reps in reserve; pulldown is the second lat day of the week, done before arms tire the biceps'),
         superset('Curl + Overhead Extension', 3, 60, [
-          { name: 'Incline DB Curl', targetReps: '10-12', targetRpe: 9 },
+          { name: 'Dual Pulley Bayesian Curl', targetReps: '10-12 / arm', targetRpe: 9 },
           { name: 'Overhead Tricep Extension', targetReps: '12-15', targetRpe: 9 },
-        ], 'Long heads of biceps and triceps, back to back'),
+        ], 'Long heads of biceps and triceps, back to back. Bayesian curl on the dual low pulley: face away, arm slightly behind you, left arm first'),
         single('Rear Delt Fly', 3, 15, 20, 9, 60, '2-1-2', 'Rear delts'),
       ],
       conditioning: [{ name: 'Incline Walk', detail: '20 min zone 2 after lifting, incline 8-12%. Skip only if badminton actually happened.' }],
@@ -457,7 +457,7 @@ export const PROGRAM = {
       key: 'armsExtra', title: 'Weekend Extra: Arms + Shoulders', focus: 'Optional', dayType: 'rest', intensity: 'Moderate', optional: true,
       blocks: [
         single('Close Grip Bench', 3, 6, 10, 8, 120, '2-0-1', 'Heavy triceps. Elbows tucked, bar to low chest'),
-        single('Incline DB Curl', 3, 8, 12, 8, 90, '3-0-1', 'Long-head biceps stretch'),
+        single('Dual Pulley Bayesian Curl', 3, 8, 12, 8, 75, '3-0-1', 'Long-head biceps stretch on the dual low pulley. One arm at a time, left first'),
         single('Overhead Tricep Extension', 3, 10, 15, 9, 75, '2-1-2', 'Long head: this is the triceps horseshoe'),
         single('Preacher Curl', 2, 10, 15, 9, 75, '2-0-1', 'Strict, no bounce out of the bottom'),
         superset('Lateral + Rear Delt', 3, 60, [
