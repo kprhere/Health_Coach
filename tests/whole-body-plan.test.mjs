@@ -6,7 +6,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 
-import { PROGRAM, HABITS, SEED_SCANS, PROFILE_DEFAULT } from '../src/data.js';
+import { PROGRAM, HABITS, SEED_SCANS, PROFILE_DEFAULT, SETTINGS_DEFAULT } from '../src/data.js';
 import {
   defaultState, migrateState, resolveWorkout, resolveNutrition, nutritionDayType, fastEndTime,
   habitApplicability, definitionGoal, segmentSummary, muscleGroupOf, STATE_VERSION, clone, exerciseLibrary,
@@ -15,11 +15,19 @@ import { DAY_CAL_MULT, personalTargets } from '../src/nutritionEngine.js';
 
 const THURSDAY = '2026-11-12';
 
-test('Thursday is a fed vegetarian hinge + glutes leg day; arms live in the optional Sunday extra', () => {
+test('Thursday is a fed hinge + glutes leg day, vegetarian only when switched on; arms live in the optional Sunday extra', () => {
   const state = defaultState();
   const plan = resolveWorkout(THURSDAY, state);
   assert.equal(plan.title, 'Lower B: Hinge + Glutes');
-  assert.equal(nutritionDayType(THURSDAY, state), 'trainingVeg');
+  assert.equal(nutritionDayType(THURSDAY, state), 'training');
+  assert.equal(habitApplicability(THURSDAY, state).thu_veg, false);
+  const vegState = { ...state, settings: { ...state.settings, thursdayVeg: true } };
+  assert.equal(nutritionDayType(THURSDAY, vegState), 'trainingVeg');
+  assert.equal(habitApplicability(THURSDAY, vegState).thu_veg, true);
+  // An older stored program still marked 'trainingVeg' follows the setting.
+  const oldProgram = clone(state.program);
+  oldProgram.days[4].dayType = 'trainingVeg';
+  assert.equal(nutritionDayType(THURSDAY, { ...state, program: oldProgram }), 'training');
   assert.equal(fastEndTime(THURSDAY, state), null);
   assert.ok(resolveNutrition(THURSDAY, state).meals.every((meal) => !meal.fasting));
   const sunday = PROGRAM.days[0].blocks.flatMap((b) => (b.exercises || []).map((e) => e.name));
@@ -52,11 +60,11 @@ test('removing the fast does not raise weekly calories', () => {
   assert.ok(newWeek <= oldWeek);
 });
 
-test('single-leg work starts on the left and every leg day trains the inner thigh', () => {
-  for (const dow of [2, 4]) {
-    const names = PROGRAM.days[dow].blocks.flatMap((b) => (b.exercises || []).map((e) => e.name));
-    assert.ok(names.includes('Hip Adduction'), `day ${dow} should include Hip Adduction`);
-  }
+test('single-leg work starts on the left; Tuesday trains side glutes, Thursday inner thigh', () => {
+  const names = (dow) => PROGRAM.days[dow].blocks.flatMap((b) => (b.exercises || []).map((e) => e.name));
+  assert.ok(names(2).includes('Hip Abduction'), 'Tuesday should include Hip Abduction');
+  assert.ok(names(4).includes('Hip Adduction'), 'Thursday should include Hip Adduction');
+  assert.equal(muscleGroupOf('Hip Abduction', defaultState()), 'Glutes');
   const bss = PROGRAM.days[2].blocks.find((b) => b.name === 'Bulgarian Split Squat');
   assert.match(bss.exercises[0].note, /left/i);
   assert.equal(muscleGroupOf('Hip Adduction', defaultState()), 'Quads');
@@ -78,7 +86,8 @@ test('weekdays carry the whole plan: legs split Tue squat / Thu hinge, weekends 
   // Side delts still three days a week (Mon, Thu, Fri).
   const lateralDays = [1, 2, 3, 4, 5].filter((dow) => names(dow).includes('Arsenal Standing Lateral Raise'));
   assert.ok(lateralDays.length >= 3, `lateral raises on ${lateralDays}`);
-  assert.equal(day(4).dayType, 'trainingVeg', 'Thursday stays the vegetarian training day');
+  assert.equal(day(4).dayType, 'training', 'Thursday is a normal training day unless Vegetarian Thursday is on');
+  assert.equal(SETTINGS_DEFAULT.thursdayVeg, false);
   for (const dow of [1, 2, 3, 4, 5]) assert.ok(!day(dow).optional, `day ${dow} is required`);
   for (const dow of [6, 0]) assert.equal(day(dow).optional, true, `day ${dow} is optional`);
   assert.match(day(0).title, /Arms/);
@@ -135,9 +144,9 @@ test('the v5 upgrade replaces the fast-day program and resets the goal, keeping 
   };
   const after = migrateState(before);
   assert.equal(after.version, STATE_VERSION);
-  assert.equal(after.program.days[4].dayType, 'trainingVeg');
+  assert.equal(after.program.days[4].dayType, 'training');
   assert.equal(after.profile.goalBodyFatPct, 10);
-  assert.equal(after.profile.startFatMassLb, 47.6);
+  assert.equal(after.profile.startFatMassLb, PROFILE_DEFAULT.startFatMassLb);
   assert.equal(after.settings.stepsTarget, 12000);
   assert.ok(after.workoutSessions['2026-09-15'], 'logged workouts must survive');
   assert.deepEqual(after.habitLogs['2026-09-17'], { thu_fast: true });
@@ -360,4 +369,34 @@ test('curls use the dual low pulley instead of the incline dumbbell curl', () =>
   const an = (dow) => after.program.days[dow].blocks.flatMap((b) => [b.name, ...(b.exercises || []).map((e) => e.name)]);
   for (const dow of [0, 1, 5]) assert.ok(!an(dow).includes('Incline DB Curl'), `saved day ${dow} upgraded`);
   assert.deepEqual(after.workoutSessions, v12.workoutSessions, 'old curl logs kept');
+});
+
+test('v14 upgrade trims Monday and Friday, swaps Tuesday to abduction, frees Thursday and moves the baseline', () => {
+  const oldProgram = clone(PROGRAM);
+  const latOld = oldProgram.days[1].blocks.find((b) => b.name === 'Lat Pulldown');
+  latOld.exercises[0].sets = 3;
+  const tue = oldProgram.days[2].blocks.findIndex((b) => b.name === 'Hip Abduction');
+  oldProgram.days[2].blocks[tue] = { ...clone(oldProgram.days[2].blocks[tue]), name: 'Hip Adduction' };
+  oldProgram.days[2].blocks[tue].exercises[0].name = 'Hip Adduction';
+  oldProgram.days[4].dayType = 'trainingVeg';
+  oldProgram.days[4].notes = 'About 55 min. Vegetarian day: get protein from whey, Greek yogurt, soya, tofu, dal. RDL first while fresh.';
+  const before = {
+    version: 13,
+    program: oldProgram,
+    profile: { ...PROFILE_DEFAULT, startWeightLb: 191.6, startBodyFatPct: 24.8, startFatMassLb: 47.6, startWaistIn: 37.5, goalFatLossLb: 32, timelineMonths: 9 },
+    workoutSessions: { '2026-11-17': { entries: [{ name: 'Hip Adduction' }] } },
+  };
+  const after = migrateState(before);
+  assert.equal(after.version, STATE_VERSION);
+  const names = (dow) => after.program.days[dow].blocks.flatMap((b) => (b.exercises || []).map((e) => e.name));
+  assert.ok(names(2).includes('Hip Abduction') && !names(2).includes('Hip Adduction'));
+  assert.equal(after.program.days[4].dayType, 'training');
+  assert.doesNotMatch(after.program.days[4].notes, /Vegetarian day/);
+  assert.doesNotMatch(JSON.stringify(after.program.days[3].conditioning), /Sunday legs/);
+  assert.equal(after.profile.startWeightLb, 197.1);
+  assert.equal(after.profile.startFatMassLb, 47.2);
+  assert.deepEqual(after.workoutSessions['2026-11-17'], { entries: [{ name: 'Hip Adduction' }] }, 'logs untouched');
+  // A hand-edited baseline is left alone.
+  const custom = migrateState({ ...before, profile: { ...before.profile, startWeightLb: 190 } });
+  assert.equal(custom.profile.startWeightLb, 190);
 });

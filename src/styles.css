@@ -1354,3 +1354,9 @@ html.kb-open .bottom-nav { display: none; }
 .mm-note b { color: var(--text); font-weight: 600; }
 .mm-note b.amber { color: var(--amber); }
 .mm-note b.green { color: var(--green); }
+
+/* Train tab: progression and deload rules */
+.progress-rules summary { cursor: pointer; list-style: none; }
+.progress-rules summary::-webkit-details-marker { display: none; }
+.progress-rules-list { display: grid; gap: 8px; margin-top: 10px; font-size: 14px; line-height: 1.45; }
+.progress-rule b { color: var(--text, inherit); }

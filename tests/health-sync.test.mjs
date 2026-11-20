@@ -139,11 +139,13 @@ test('planned chicken meals trade chicken quantity for egg whites instead of sta
     { p: 46, c: 1, f: 4, kcal: 243 },
   );
   const meals = mealPlanFor('training', defaultState());
-  for (const name of ['Lunch', 'Dinner']) {
-    const meal = meals.find((item) => item.name === name);
-    assert.ok(meal.options[0].keys.includes('chickenEgg'));
-    assert.ok(meal.options[0].items[0].includes('105 g chicken + 4 egg whites'));
-  }
+  const lunch = meals.find((item) => item.name === 'Lunch');
+  assert.ok(lunch.options[0].keys.includes('chickenEgg'));
+  assert.ok(lunch.options[0].items[0].includes('105 g chicken + 4 egg whites'));
+  // Dinner defaults to plain chicken and vegetables; the chicken + whites
+  // plate stays one tap away.
+  const dinner = meals.find((item) => item.name === 'Dinner');
+  assert.ok(dinner.options.some((o) => o.keys.includes('chickenEgg')));
 });
 
 test('any date can override its nutrition plan to vegetarian or a 1 PM no-moon fast without changing the workout', () => {
@@ -171,9 +173,11 @@ test('any date can override its nutrition plan to vegetarian or a 1 PM no-moon f
   delete state.dayOverrides[date];
   assert.equal(nutritionDayType(date, state), scheduledWorkout.dayType);
 
-  // Since v5 Thursday is a fed vegetarian training day: no fast window, every
-  // meal slot offered, and still no eggs, chicken or fish.
+  // Thursday is a normal fed training day by default; the Vegetarian Thursday
+  // setting makes it vegetarian: no fast window and no eggs, chicken or fish.
   const scheduledThursday = '2026-08-06';
+  assert.equal(nutritionDayType(scheduledThursday, state), 'training');
+  state.settings = { ...state.settings, thursdayVeg: true };
   assert.equal(nutritionDayType(scheduledThursday, state), 'trainingVeg');
   assert.equal(fastEndTime(scheduledThursday, state), null);
   assert.ok(resolveNutrition(scheduledThursday, state).meals.every((meal) => !meal.fasting));

@@ -14,7 +14,7 @@ export { nutritionProfile };
 
 export const PROGRAM_START = '2026-07-08'; // start of the current fat-loss phase (latest scan)
 export const PHASE_NAME = 'Fat Loss Phase 1';
-export const STATE_VERSION = 13;
+export const STATE_VERSION = 14;
 
 // ---------- date utils ----------
 export const pad = (n) => String(n).padStart(2, '0');
@@ -357,6 +357,44 @@ const MIGRATIONS = {
       });
     });
     return { ...migrated, version: 13 };
+  },
+  14: (state) => {
+    // 2026-11-19 trainer review: Monday and Friday trimmed to about 60 min,
+    // Tuesday's adduction becomes abduction, Wednesday's bike note fixed,
+    // Thursday is a normal (non-veg) day unless Vegetarian Thursday is on,
+    // and the profile baseline moves to the Nov 13 restart scan if it still
+    // holds the old Sep 25 defaults. Logs are untouched.
+    const migrated = mergeState(defaultState(), state);
+    const days = (migrated.program && migrated.program.days) || {};
+    const tplBlock = (dow, name) => PROGRAM.days[dow].blocks.find((b) => b.name === name);
+    const sync = (dow, from, to = from) => {
+      const day = days[dow];
+      if (!day || !Array.isArray(day.blocks)) return;
+      const i = day.blocks.findIndex((b) => b && b.name === from);
+      const t = tplBlock(dow, to);
+      if (i >= 0 && t) day.blocks[i] = clone(t);
+    };
+    sync(1, 'Lat Pulldown');
+    sync(1, 'Arm Burnout');
+    sync(1, 'Face Pull');
+    sync(5, 'Hammer Strength Row');
+    sync(2, 'Hip Adduction', 'Hip Abduction');
+    sync(5, 'Rear Delt Fly');
+    if (days[2]) days[2].notes = PROGRAM.days[2].notes;
+    if (days[3] && Array.isArray(days[3].conditioning)) {
+      days[3].conditioning = days[3].conditioning.map((c) => (c && c.name === 'Bike'
+        ? clone(PROGRAM.days[3].conditioning.find((x) => x.name === 'Bike')) : c));
+    }
+    if (days[4]) {
+      if (days[4].dayType === 'trainingVeg') days[4].dayType = 'training';
+      if (typeof days[4].notes === 'string') days[4].notes = days[4].notes.replace(' Vegetarian day: get protein from whey, Greek yogurt, soya, tofu, dal.', '');
+    }
+    const prof = migrated.profile || {};
+    if (prof.startWeightLb === 191.6 && prof.startBodyFatPct === 24.8) {
+      migrated.profile = { ...prof, ...['startWeightLb', 'startBodyFatPct', 'startFatMassLb', 'startWaistIn', 'goalFatLossLb', 'timelineMonths']
+        .reduce((o, k) => ({ ...o, [k]: PROFILE_DEFAULT[k] }), {}) };
+    }
+    return { ...migrated, version: 14 };
   },
 };
 
@@ -805,7 +843,12 @@ export function nutritionDayType(key, state) {
   if (override === 'noMoon' || override === 'fast1' || override === 'fast2' || override === 'fast') return 'noMoonFast';
   if (override === 'veg') return 'vegSat';
   if (isNoMoonDay(key)) return 'noMoonFast';
-  const scheduled = programDay(state, dowOf(key)).dayType;
+  let scheduled = programDay(state, dowOf(key)).dayType;
+  // Thursday follows the Vegetarian Thursday setting (off by default), so the
+  // stored program's old 'trainingVeg' never decides it on its own.
+  if (dowOf(key) === 4 && (scheduled === 'training' || scheduled === 'trainingVeg')) {
+    scheduled = state && state.settings && state.settings.thursdayVeg ? 'trainingVeg' : 'training';
+  }
   if (inPuratasi(key, state)) {
     if (scheduled === 'training') return 'trainingVeg';
     if (scheduled === 'rest') return 'restVeg';
@@ -1377,7 +1420,7 @@ export function habitApplicability(key, state) {
   // shown as a missed habit.
   const optionalDay = !!programDay(state, dow).optional;
   return {
-    thu_veg: dow === 4,
+    thu_veg: dow === 4 && !!(state.settings && state.settings.thursdayVeg),
     sat_veg: dow === 6,
     bodybalance: dow === 6 && satMode === 'class' && !optionalDay,
     workout_logged: !optionalDay,

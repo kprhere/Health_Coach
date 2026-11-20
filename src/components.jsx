@@ -190,6 +190,7 @@ export function MealCard({ meal, index, eaten, choiceIndex = 0, onChoose, onTogg
         ) : null}
       </div>
       {meal.fasting ? <div className="fp-note amber" style={{ marginTop: 8 }}>{meal.note}</div> : null}
+      {!meal.fasting && meal.note ? <div className="hint" style={{ marginTop: 6 }}>{meal.note}</div> : null}
       {onChoose && opts.length > 1 ? (
         <div className="opt-switch">
           {opts.map((op, i) => (
