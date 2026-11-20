@@ -19,3 +19,12 @@ test('the map shades trained muscles and outlines untrained ones', () => {
   expect(label).toContain('Back 3 sets');
   expect(container.querySelector('.mm-set.mm-t0').textContent).toContain('Quads');
 });
+
+test('compact map for Home lists untrained and low muscles instead of the full grid', () => {
+  const groups = ['Chest', 'Back', 'Biceps', 'Quads'];
+  const { container } = render(<MuscleMap compact sets={{ Chest: 10, Biceps: 20, Back: 3 }} groups={groups} />);
+  expect(container.querySelector('.mm-sets')).toBeNull();
+  const note = container.querySelector('.mm-note').textContent;
+  expect(note).toContain('Not trained this week: Quads');
+  expect(note).toContain('Under 6 sets: Back');
+});

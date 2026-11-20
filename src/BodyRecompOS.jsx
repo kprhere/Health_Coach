@@ -366,6 +366,12 @@ function HomeTab({ ctx }) {
             <div className="btn-row" style={{ marginTop: 10 }}><button className="btn ghost sm" onClick={() => ctx.goto('stats')}>Open Stats</button></div>
           </Card>
 
+          <SectionTitle right={<Chip tone="cyan">last 7 days</Chip>}>Muscle map</SectionTitle>
+          <Card className="pad-sm">
+            <MuscleMap compact sets={setsByMuscleWindow(s, 7)} groups={MUSCLE_GROUPS.filter((g) => !['Cardio', 'Mobility'].includes(g))} />
+            <div className="btn-row" style={{ marginTop: 10 }}><button className="btn ghost sm" onClick={() => ctx.goto('stats')}>Sets per muscle</button></div>
+          </Card>
+
           <SectionTitle>Today plan</SectionTitle>
           <Card>
             <div className="card-head"><div className="lead"><Dumbbell size={17} color="var(--cyan)" /><h3>{plan.title}</h3></div>

@@ -1348,3 +1348,9 @@ html.kb-open .bottom-nav { display: none; }
 
 .photo-poses { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); width: 100%; }
 .photos .block-tag + div, .photos .card > .field { width: 100%; }
+
+.muscle-map.compact .mm-figures { max-width: 280px; }
+.mm-note { display: grid; gap: 4px; font-size: 12.5px; color: var(--muted); text-align: center; }
+.mm-note b { color: var(--text); font-weight: 600; }
+.mm-note b.amber { color: var(--amber); }
+.mm-note b.green { color: var(--green); }

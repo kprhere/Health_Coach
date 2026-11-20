@@ -67,10 +67,12 @@ function Figure({ regions, sets, label }) {
   );
 }
 
-export function MuscleMap({ sets = {}, groups = [] }) {
+export function MuscleMap({ sets = {}, groups = [], compact = false }) {
   const summary = groups.map((g) => `${g} ${sets[g] || 0} sets`).join(', ');
+  const untrained = groups.filter((g) => !(sets[g] > 0));
+  const low = groups.filter((g) => sets[g] > 0 && sets[g] < 6);
   return (
-    <div className="muscle-map">
+    <div className={`muscle-map${compact ? ' compact' : ''}`}>
       <div className="mm-figures" aria-label={`Working sets in the last 7 days: ${summary}`}>
         <Figure regions={FRONT} sets={sets} label="Front" />
         <Figure regions={BACK} sets={sets} label="Back" />
@@ -78,11 +80,18 @@ export function MuscleMap({ sets = {}, groups = [] }) {
       <div className="mm-legend">
         {LEVEL_LABEL.map((text, i) => <span key={text}><i className={`mm-swatch mm-l${i}`} />{text}</span>)}
       </div>
-      <div className="mm-sets">
-        {groups.map((g) => (
-          <span key={g} className={`mm-set mm-t${muscleLevel(sets[g])}`}>{g}<b>{sets[g] || 0}</b></span>
-        ))}
-      </div>
+      {compact ? (
+        <div className="mm-note">
+          {untrained.length ? <span><b className="amber">Not trained this week:</b> {untrained.join(', ')}</span> : <span><b className="green">Every muscle trained this week.</b></span>}
+          {low.length ? <span><b>Under 6 sets:</b> {low.join(', ')}</span> : null}
+        </div>
+      ) : (
+        <div className="mm-sets">
+          {groups.map((g) => (
+            <span key={g} className={`mm-set mm-t${muscleLevel(sets[g])}`}>{g}<b>{sets[g] || 0}</b></span>
+          ))}
+        </div>
+      )}
     </div>
   );
 }
