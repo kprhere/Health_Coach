@@ -752,12 +752,15 @@ export function missedSessions(today, state) {
   for (let back = daysSinceMonday; back >= 1; back--) {
     const date = addDays(today, -back);
     const day = programDay(state, dowOf(date));
-    if (day.optional || !(day.blocks || []).length) continue;
+    // Only lifting sessions can be "missed". A recovery or rest day (Core +
+    // Recovery on Wednesday) is never offered: swapping it in turned a
+    // Thursday leg day into a rest day (2026-11-19).
+    if (day.optional || !(day.blocks || []).length || /^rest/.test(day.dayType || '')) continue;
     if (dismissed[date] || workoutSwapPartner(date, state)) continue;
     if (workoutSessionHasData(state.workoutSessions && state.workoutSessions[date])) continue;
-    out.push({ date, title: day.title, key: day.key, lifting: day.dayType !== 'rest' });
+    out.push({ date, title: day.title, key: day.key });
   }
-  const rank = (m) => (/lower/i.test(m.title) ? 0 : m.lifting ? 1 : 2);
+  const rank = (m) => (/lower/i.test(m.title) ? 0 : 1);
   return out.sort((a, b) => rank(a) - rank(b) || a.date.localeCompare(b.date));
 }
 

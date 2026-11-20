@@ -334,6 +334,12 @@ function HomeTab({ ctx }) {
 
       <div className="split">
         <div className="split-main">
+          <SectionTitle right={<Chip tone="cyan">last 7 days</Chip>}>Muscle map</SectionTitle>
+          <Card className="pad-sm">
+            <MuscleMap compact sets={setsByMuscleWindow(s, 7)} groups={MUSCLE_GROUPS.filter((g) => !['Cardio', 'Mobility'].includes(g))} />
+            <div className="btn-row" style={{ marginTop: 10 }}><button className="btn ghost sm" onClick={() => ctx.goto('stats')}>Sets per muscle</button></div>
+          </Card>
+
           <DefinitionGoalCard goal={defGoal} onOpenBody={() => ctx.goto('body')} />
           <RecompSignalCard signal={recomp} />
 
@@ -366,14 +372,14 @@ function HomeTab({ ctx }) {
             <div className="btn-row" style={{ marginTop: 10 }}><button className="btn ghost sm" onClick={() => ctx.goto('stats')}>Open Stats</button></div>
           </Card>
 
-          <SectionTitle right={<Chip tone="cyan">last 7 days</Chip>}>Muscle map</SectionTitle>
-          <Card className="pad-sm">
-            <MuscleMap compact sets={setsByMuscleWindow(s, 7)} groups={MUSCLE_GROUPS.filter((g) => !['Cardio', 'Mobility'].includes(g))} />
-            <div className="btn-row" style={{ marginTop: 10 }}><button className="btn ghost sm" onClick={() => ctx.goto('stats')}>Sets per muscle</button></div>
-          </Card>
-
           <SectionTitle>Today plan</SectionTitle>
           <Card>
+            {plan.sourceDate !== date ? (
+              <Banner tone="amber" icon={AlertTriangle}>
+                Swapped: today is showing the {prettyDate(plan.sourceDate)} workout, not today's scheduled one.{' '}
+                <button className="btn xs" onClick={() => ctx.clearWorkoutSwap(date)}>Undo swap</button>
+              </Banner>
+            ) : null}
             <div className="card-head"><div className="lead"><Dumbbell size={17} color="var(--cyan)" /><h3>{plan.title}</h3></div>
               <Chip tone={prog.total && prog.done === prog.total ? 'green' : 'cyan'}>{prog.done}/{prog.total || plan.blocks.length} blocks</Chip></div>
             {plan.blocks.length ? plan.blocks.map((b) => (

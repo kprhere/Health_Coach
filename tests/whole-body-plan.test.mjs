@@ -236,7 +236,9 @@ test('catch-up: a missed weekday session is offered later in the week, leg day f
   // Week of Mon 2026-11-16. Monday done, Tuesday (legs) and Wednesday missed.
   s.workoutSessions = { '2026-11-16': logged() };
   const thu = missedSessions('2026-11-19', s);
-  assert.deepEqual(thu.map((m) => m.date), ['2026-11-17', '2026-11-18']);
+  // Wednesday's Core + Recovery is a rest day: never offered, so a leg day
+  // can never be swapped away for it.
+  assert.deepEqual(thu.map((m) => m.date), ['2026-11-17']);
   assert.match(thu[0].title, /Lower/);
   // Saturday is optional, so it becomes a catch-up day; nothing optional is ever "missed".
   const sat = missedSessions('2026-11-21', s);
