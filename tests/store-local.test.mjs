@@ -403,3 +403,32 @@ test('assembleState of a loaded store equals the committed state', async () => {
   assert.deepEqual((await store.load()).state, s);
   assert.deepEqual(assembleState(await store.listRecords()), s);
 });
+
+test('a server tombstone from the transport shape deletes the local record', async () => {
+  const { normalizeRecord } = await import('../src/cloud/syncEngine.js');
+  const id = fresh();
+  const store = createLocalStore(id);
+  const s = defaultState();
+  await store.commit(null, withDay(s, '2026-07-05', 2), { accountMode: false });
+  const row = normalizeRecord({ collection: 'mealLogs', key: '2026-07-05', data: { water: 2 }, version: 2, updated_at: 't', deleted_at: '2026-07-06T00:00:00Z' });
+  await store.outbox.applyRemote([row]);
+  assert.equal((await store.load()).state.mealLogs['2026-07-05'], undefined);
+});
+
+test('resolving a group-rolled-back conflict keeps the local version and refuses "server"', async () => {
+  const id = fresh();
+  const store = createLocalStore(id);
+  const s = defaultState();
+  await store.commit(s, withDay(s, '2026-07-01', 1), { accountMode: true });
+  await store.outbox.setRecordVersion(id, 'mealLogs', '2026-07-01', 5);
+  const [op] = await store.outbox.listPending(id);
+  const cid = await store.outbox.recordConflict({ opId: op.opId, local: undefined, server: null });
+  const refused = await store.outbox.resolveConflict(cid, 'server');
+  assert.equal(refused.ok, false);
+  assert.equal((await store.load()).state.mealLogs['2026-07-01'].water, 1);
+  const kept = await store.outbox.resolveConflict(cid, 'local');
+  assert.equal(kept.ok, true);
+  assert.equal(await store.outbox.getRecordVersion(id, 'mealLogs', '2026-07-01'), 5);
+  const [again] = await store.outbox.listPending(id);
+  assert.equal(again.baseVersion, 5);
+});

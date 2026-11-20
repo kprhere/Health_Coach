@@ -40,8 +40,10 @@ import {
   Sidebar, BottomNav, Card, Chip, SectionTitle, MetricRing, ScoreRing, ProgressBar,
   StatCell, CoachInsights, Sheet, Banner, EmptyState, LineTrend, BarMini,
   MacroChips, FuelPlan, SupplementTiming, HairHealthCard, LabsCard,
-  TargetsFromScan, MealCard, HeroGauge, RecompSignalCard,
+  TargetsFromScan, MealCard, HeroGauge, RecompSignalCard, WeeklyRecapCard, MuscleRecoveryCard,
 } from './components.jsx';
+import { weeklyRecap } from './domain/weeklyRecap.js';
+import { muscleRecovery } from './domain/muscleRecovery.js';
 import { BlockLogger, AddExercisePicker, makeUnplannedEntry } from './loggers.jsx';
 import { generateDemoData } from './demo.js';
 import { effectiveWorkout as resolveWorkout } from './coach/effective.js';
@@ -230,6 +232,7 @@ function HomeTab({ ctx }) {
   const rec = recoveryScore(date, s);
   const streak = consistencyStreak(s);
   const tl = trainingLoadSummary(s);
+  const recap = weeklyRecap(s, date);
   const firstName = s.profile.name.split(' ')[0];
   const hr = new Date().getHours();
   const greetWord = hr < 12 ? 'Morning' : hr < 18 ? 'Afternoon' : 'Evening';
@@ -293,6 +296,12 @@ function HomeTab({ ctx }) {
             </div>
             <div className="btn-row" style={{ marginTop: 10 }}><button className="btn ghost sm" onClick={() => ctx.goto('stats')}>Open Stats</button></div>
           </Card>
+
+          <SectionTitle>Weekly recap</SectionTitle>
+          <WeeklyRecapCard recap={recap} />
+
+          <SectionTitle>Muscle recovery</SectionTitle>
+          <MuscleRecoveryCard rows={muscleRecovery(s, date)} />
 
           <SectionTitle>Today plan</SectionTitle>
           <Card>
@@ -372,21 +381,24 @@ function HomeTab({ ctx }) {
           <CloudBackupStatus ctx={ctx} compact />
 
           <SectionTitle>Coach insights</SectionTitle>
-          <Card><CoachInsights items={insights} /></Card>
+          <Card>
+            <CoachInsights items={insights} />
+            <div className="btn-row" style={{ marginTop: 8 }}><button className="btn ghost sm" onClick={() => ctx.goto('coach')}>Open Coach</button></div>
+          </Card>
 
           <SectionTitle>Goal & pace</SectionTitle>
           <Card>
-            <div className="pbar-row"><span className="lab">Fat lost toward goal</span><span className="val num">{target.lost} / {target.goal} lb</span></div>
+            <div className="pbar-row"><span className="lab">Fat lost toward goal</span><span className="val num">{target.goal ? `${target.lost} / ${target.goal} lb` : 'No goal set'}</span></div>
             <ProgressBar pct={target.pct} color="var(--green)" />
             {nut.profile ? (
               <div className="hint" style={{ marginTop: 8 }}>
-                At your {nut.profile.deficitPct}% cut (~{nut.profile.lbPerWeek} lb/week){nut.profile.weeksToGoal ? `, you'd reach the ${target.goal} lb goal in about ${nut.profile.weeksToGoal} weeks` : ''}. Body fat {latestScan(s)?.bodyFatPct}% → goal {nut.profile.goalBodyFatPct}%.
+                At your {nut.profile.deficitPct}% cut (~{nut.profile.lbPerWeek} lb/week){nut.profile.weeksToGoal && target.goal ? `, you'd reach the ${target.goal} lb goal in about ${nut.profile.weeksToGoal} weeks` : ''}. {Number.isFinite(latestScan(s)?.bodyFatPct) ? `Body fat ${latestScan(s).bodyFatPct}%` : 'Body fat not logged'}{Number.isFinite(nut.profile.goalBodyFatPct) ? ` → goal ${nut.profile.goalBodyFatPct}%` : ''}.
               </div>
             ) : null}
             <div className="divider" />
             <div className="stat-grid">
               <StatCell k="Next scan in" v={scan ? Math.max(0, scan.days) : '-'} unit="days" />
-              <StatCell k="Waist goal" v={s.profile.goalWaistIn} unit="in" />
+              <StatCell k="Waist goal" v={Number.isFinite(s.profile.goalWaistIn) ? s.profile.goalWaistIn : '-'} unit={Number.isFinite(s.profile.goalWaistIn) ? 'in' : ''} />
             </div>
           </Card>
         </div>
@@ -411,7 +423,7 @@ function PlanTab({ ctx }) {
   return (
     <div>
       <div className="page-title">Planner</div>
-      <p className="page-sub">Weekly plan built from your Upper / Lower hybrid. Tap a day to see the workout and meals.</p>
+      <p className="page-sub">Your weekly plan. Tap a day to see the workout and meals.</p>
 
       <div className="date-nav">
         <button className="nav-btn" onClick={() => setDate(addDays(monday, -7))} aria-label="Previous week"><ChevronLeft size={18} /></button>
@@ -1134,7 +1146,7 @@ function BodyTab({ ctx }) {
 
           <SectionTitle>Goal progress</SectionTitle>
           <Card>
-            <div className="pbar-row"><span className="lab">Fat lost of {target.goal} lb goal</span><span className="val num">{target.lost} lb</span></div>
+            <div className="pbar-row"><span className="lab">{target.goal ? `Fat lost of ${target.goal} lb goal` : 'Fat lost (no goal set)'}</span><span className="val num">{target.lost} lb</span></div>
             <ProgressBar pct={target.pct} color="var(--green)" />
             <div className="hint" style={{ marginTop: 8 }}>{prev && latest ? `Since last scan: ${Math.round((latest.weight - prev.weight) * 10) / 10} lb weight, ${Math.round((latest.bodyFatPct - prev.bodyFatPct) * 10) / 10}% body fat.` : 'Add another scan to see month-over-month change.'}</div>
           </Card>
@@ -2107,10 +2119,10 @@ function MoreTab({ ctx }) {
               </Sheet>
             ) : null}
             <div className="divider" />
-            <button className="btn primary block" onClick={() => { if (confirm('Load 8 weeks of sample workouts, meals and watch data so the Stats and charts fill in? This overwrites current logs.')) ctx.loadDemo(); }}>
+            <button className="btn primary block" onClick={() => { if (confirm('Load 8 weeks of sample workouts, meals and watch data so the Stats and charts fill in? It only fills days with nothing logged; your own logs are kept. Sample entries are mixed in with your data and cannot be separated afterwards, so use it on a spare install or after exporting a backup.')) ctx.loadDemo(); }}>
               <Zap size={15} /> Load sample data
             </button>
-            <div className="hint" style={{ margin: '8px 0 12px' }}>Fills Stats, training-volume charts and scores with a realistic upward trend so you can see the app populated. Undo with Reset all data.</div>
+            <div className="hint" style={{ margin: '8px 0 12px' }}>Fills Stats, training-volume charts and scores with a realistic upward trend so you can see the app populated. Only empty days are filled, but the sample entries stay mixed in; Reset all data clears everything, including your own logs.</div>
             <button className="btn danger block" onClick={() => { if (confirm('Reset all data? This clears every log, scan and measurement and returns the app to first-run setup. Export a backup first if unsure.')) ctx.resetAll(); }}>
               <RotateCcw size={15} /> Reset all data
             </button>
@@ -2761,6 +2773,7 @@ export default function BodyRecompOS({ initialState, store = null, degraded = nu
   }, [state, syncPhase]);
 
   const loadDemo = () => setState((prev) => {
+    snapshot('before-sample-data', prev);
     const gen = generateDemoData(prev);
     const keep = (existing = {}, demo = {}) => ({ ...demo, ...existing }); // existing (real) wins
     return {
@@ -2833,7 +2846,7 @@ export default function BodyRecompOS({ initialState, store = null, degraded = nu
           </div>
         </header>
 
-        <main className="app-main">
+        <main key={tab} className={`app-main${tab === 'train' ? '' : ' screen-enter'}`}>
           {tab === 'home' && <HomeTab ctx={ctx} />}
           {tab === 'plan' && <PlanTab ctx={ctx} />}
           {tab === 'coach' && <CoachTab state={state} setState={setState} today={today} nowMs={Date.now()} aiEnabled={aiEnabled} callModel={aiCall} />}

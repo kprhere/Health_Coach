@@ -256,6 +256,18 @@ test('a recently declined proposal is not offered again, and a pain proposal car
   assert.ok(generateProposals(declined, ASOF, later).proposals.some((x) => x.fingerprint === first.fingerprint));
 });
 
+test('an undone proposal is not re-offered inside the cooldown', () => {
+  const s = scenario();
+  const first = reduceProposal(s);
+  const applied = applyProposal(s, first, opts);
+  assert.ok(applied.ok, JSON.stringify(applied.errors));
+  const undone = undoProposal(applied.state, first.id, { todayKey: ASOF, nowMs: NOW_MS });
+  assert.ok(undone.ok, JSON.stringify(undone.errors));
+  const soon = generateProposals(undone.state, ASOF, NOW_MS + 86400000).proposals;
+  assert.equal(soon.some((x) => x.fingerprint === first.fingerprint), false);
+  assert.ok(generateProposals(undone.state, ASOF, NOW_MS + 5 * 86400000).proposals.some((x) => x.fingerprint === first.fingerprint));
+});
+
 test('buildProposal carries the safety note a finding asks to show', () => {
   const f = { rule: 'pain-block', kind: 'reduce', targetDates: [MON], note: 'persistent or concerning pain: consider evaluation by a qualified clinician', rationale: 'x', confidence: 'medium', evidence: [], missing: [], changes: [{ op: 'scale-sets', factor: 0.8, minSets: 1 }] };
   assert.deepEqual(buildProposal(f, scenario(), ASOF, NOW_MS).notes, [f.note]);

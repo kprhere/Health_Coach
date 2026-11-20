@@ -10,6 +10,7 @@ import {
   ResponsiveContainer, LineChart, Line, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip,
 } from 'recharts';
 import { GOAL_TAG_META } from './nutritionEngine.js';
+import { CountUp } from './ui/motion.jsx';
 
 export const TABS = [
   { key: 'home', label: 'Home', icon: Home },
@@ -321,7 +322,8 @@ export function Banner({ tone = 'cyan', icon, children, ...rest }) {
   return (
     <div className={`banner ${tone}`} {...rest}>
       {I ? <I size={17} style={{ flex: '0 0 17px', marginTop: 1, color: `var(--${tone === 'red' ? 'red' : tone === 'amber' ? 'amber' : tone === 'violet' ? 'violet' : 'cyan'})` }} /> : null}
-      <p>{children}</p>
+      {/* a div, not a p: callers put block content (button rows) inside */}
+      <div className="banner-text">{children}</div>
     </div>
   );
 }
@@ -389,12 +391,55 @@ export function HeroGauge({ score = 0, greeting, caption = 'Daily Score', chips 
             style={{ filter: 'drop-shadow(0 0 10px rgba(139,123,240,0.55))', transition: 'stroke-dashoffset 0.6s cubic-bezier(0.22,1,0.36,1)' }} />
         </svg>
         <div className="hg-center">
-          <div className="hg-score">{score}</div>
+          <div className="hg-score"><CountUp value={score} /></div>
           <div className="hg-cap">{caption}</div>
         </div>
       </div>
       {chips.length ? <div className="hg-chips">{chips.map((ch, i) => <span key={i} className={`chip ${ch.tone || ''}`}>{ch.label}</span>)}</div> : null}
       {summary ? <p className="hg-summary">{summary}</p> : null}
+    </div>
+  );
+}
+
+// Week-over-week recap. Missing data is stated, never shown as zero.
+export function WeeklyRecapCard({ recap }) {
+  if (!recap || !recap.hasData) {
+    return <EmptyState icon={BarChart3} title="No recap yet" sub="Log a session this week and last week's comparison shows up here." />;
+  }
+  const { current, volumeChangePct, prCount, topPr } = recap;
+  const up = volumeChangePct != null && volumeChangePct >= 0;
+  return (
+    <div className="card pad-sm recap" role="group" aria-label="Weekly recap">
+      <div className="train-load">
+        <div className="tl-cell"><div className="tl-k">Sessions</div><div className="tl-v"><CountUp value={current.workouts} /></div><div className="tl-sub">last 7 days</div></div>
+        <div className="tl-cell"><div className="tl-k">Sets</div><div className="tl-v"><CountUp value={current.sets} /></div><div className="tl-sub">logged</div></div>
+        <div className="tl-cell"><div className="tl-k">Volume vs prior</div><div className="tl-v">{volumeChangePct == null ? 'n/a' : `${up ? '+' : ''}${volumeChangePct}%`}</div><div className="tl-sub">{volumeChangePct == null ? 'needs both weeks' : up ? 'up' : 'down'}</div></div>
+        <div className="tl-cell"><div className="tl-k">New PRs</div><div className="tl-v">{prCount}</div><div className="tl-sub">{topPr ? `${topPr.name} e1RM ${topPr.e1rm} lb` : 'none this week'}</div></div>
+      </div>
+      {prCount > 0 ? <div className="recap-pr"><Chip tone="green"><Check size={12} /> PR this week</Chip></div> : null}
+    </div>
+  );
+}
+
+// Heuristic only: built from logged sets, blind to sleep, pain and injury.
+const RECOVERY_LABEL = { ready: 'Ready', recovering: 'Recovering', fatigued: 'Fresh work', 'not-logged': 'Not logged' };
+const RECOVERY_COLOR = { ready: 'var(--green)', recovering: 'var(--cyan)', fatigued: 'var(--amber)' };
+export function MuscleRecoveryCard({ rows = [] }) {
+  if (!rows.some((r) => r.pct != null)) {
+    return <EmptyState icon={Dumbbell} title="No recovery estimate yet" sub="Log a session and each muscle's estimated recovery appears here." />;
+  }
+  return (
+    <div className="card pad-sm" role="group" aria-label="Estimated muscle recovery">
+      <div className="recovery-grid">
+        {rows.map((r) => (
+          <div key={r.muscle} className="recovery-row">
+            <div className="recovery-name">{r.muscle}</div>
+            <div className="recovery-bar"><ProgressBar pct={r.pct == null ? 0 : r.pct} color={RECOVERY_COLOR[r.status] || 'var(--faint)'} /></div>
+            <div className="recovery-val">{r.pct == null ? 'Not logged' : `${r.pct}% · ${RECOVERY_LABEL[r.status]}`}</div>
+          </div>
+        ))}
+      </div>
+      <div className="hint" style={{ marginTop: 10 }}>Estimate from your logged sets only. It ignores sleep, pain and injury, and is not clearance to train or rest.</div>
     </div>
   );
 }
@@ -479,15 +524,39 @@ export function RestTimer({ seconds = 90, label = 'Rest' }) {
 }
 
 // ---------- bottom sheet / modal ----------
+const FOCUSABLE = 'a[href],button:not([disabled]),input:not([disabled]),select:not([disabled]),textarea:not([disabled]),[tabindex]:not([tabindex="-1"])';
+
 export function Sheet({ title, onClose, children }) {
+  const ref = useRef(null);
+  // Read during the first render: the close button's autoFocus fires before any effect.
+  const openerRef = useRef(typeof document !== 'undefined' ? document.activeElement : null);
+  // Give focus back to whatever opened the sheet once it closes.
   useEffect(() => {
-    const onKey = (e) => { if (e.key === 'Escape') onClose(); };
+    const opener = openerRef.current;
+    if (ref.current && !ref.current.contains(document.activeElement)) {
+      const first = ref.current.querySelector(FOCUSABLE);
+      if (first) first.focus();
+    }
+    return () => { if (opener && typeof opener.focus === 'function' && document.contains(opener)) opener.focus(); };
+  }, []);
+  useEffect(() => {
+    const onKey = (e) => {
+      if (e.key === 'Escape') { onClose(); return; }
+      if (e.key !== 'Tab' || !ref.current) return;
+      // aria-modal is not enough on its own: keep Tab inside the dialog.
+      const items = [...ref.current.querySelectorAll(FOCUSABLE)].filter((el) => el.offsetParent !== null);
+      if (!items.length) return;
+      const first = items[0], last = items[items.length - 1];
+      if (!ref.current.contains(document.activeElement)) { e.preventDefault(); first.focus(); }
+      else if (e.shiftKey && document.activeElement === first) { e.preventDefault(); last.focus(); }
+      else if (!e.shiftKey && document.activeElement === last) { e.preventDefault(); first.focus(); }
+    };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
   }, [onClose]);
   return (
     <div className="sheet-backdrop" onClick={onClose}>
-      <div className="sheet" role="dialog" aria-modal="true" aria-label={title} onClick={(e) => e.stopPropagation()}>
+      <div className="sheet" ref={ref} role="dialog" aria-modal="true" aria-label={title} onClick={(e) => e.stopPropagation()}>
         <div className="sheet-grab" />
         <div className="card-head" style={{ marginBottom: 12 }}>
           <h3 style={{ margin: 0 }}>{title}</h3>

@@ -88,7 +88,7 @@ test('transport maps RPC results and errors for the sync engine', async () => {
   assert.deepEqual(await c.transport.pushOps([{ op_id: 'x' }]), { applied: [] });
   assert.equal(m.state.rpcs[0].name, 'push_ops');
   m.state.nextRpc = { data: [{ collection: 'a', key: 'k', data: {}, version: 2, updated_at: 't', deleted_at: null }], error: null };
-  assert.deepEqual(await c.transport.pullChanges('2026-01-01T00:00:00Z', 10), [{ collection: 'a', key: 'k', data: {}, version: 2, updatedAt: 't', deletedAt: null }]);
+  assert.deepEqual(await c.transport.pullChanges('2026-01-01T00:00:00Z', 10), [{ collection: 'a', key: 'k', data: {}, version: 2, updatedAt: 't', deletedAt: null, deleted: false }]);
   assert.deepEqual(m.state.rpcs[1].args, { since: '2026-01-01T00:00:00Z', max_rows: 10 });
   m.state.nextRpc = { data: null, error: { message: 'Failed to fetch' }, status: 0 };
   await assert.rejects(c.transport.pushOps([]), (e) => e.code === 'NETWORK');

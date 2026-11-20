@@ -95,8 +95,9 @@ export function generateProposals(state, asOf, nowMs, { config } = {}) {
   findings.forEach((f) => {
     if (!f.changes.length) { notes.push(f); return; }
     const p = buildProposal(f, state, asOf, nowMs);
-    const recentlyDeclined = (e) => (e.status === 'declined' || e.status === 'rejected')
-      && e.resolvedAtMs != null && nowMs != null && (nowMs - e.resolvedAtMs) < cfg.cooldownDays * 86400000;
+    // An undo is the person saying no after the fact, so it cools down like a decline.
+    const recentlyDeclined = (e) => (e.status === 'declined' || e.status === 'rejected' || e.status === 'undone')
+      && (e.resolvedAtMs ?? e.undoneAtMs) != null && nowMs != null && (nowMs - (e.resolvedAtMs ?? e.undoneAtMs)) < cfg.cooldownDays * 86400000;
     if (existing.some((e) => e.fingerprint === p.fingerprint && (e.status === 'pending' || e.status === 'applied' || recentlyDeclined(e)))) return;
     proposals.push(p);
   });
@@ -212,8 +213,9 @@ export function validateProposal(proposal, state, { todayKey, config, mode = 'ma
   const others = Object.values(coach.proposals).filter((o) => o && o.id !== p.id);
   if (others.some((o) => o.fingerprint === p.fingerprint && (o.status === 'pending' || o.status === 'applied'))) errors.push('duplicate: the same change is already pending or applied');
   others.forEach((o) => {
-    if (o.fingerprint === p.fingerprint && (o.status === 'declined' || o.status === 'rejected')
-      && o.resolvedAtMs != null && daysBetween(keyOfMs(o.resolvedAtMs), todayKey) < cfg.cooldownDays) errors.push('recently declined: not proposed again during the cooldown');
+    const at = o.resolvedAtMs ?? o.undoneAtMs;
+    if (o.fingerprint === p.fingerprint && (o.status === 'declined' || o.status === 'rejected' || o.status === 'undone')
+      && at != null && daysBetween(keyOfMs(at), todayKey) < cfg.cooldownDays) errors.push('recently declined: not proposed again during the cooldown');
   });
   const applied = others.filter((o) => o.status === 'applied' && o.appliedAtMs != null);
   const lo = dates[0], hi = dates[dates.length - 1];

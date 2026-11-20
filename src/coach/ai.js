@@ -55,7 +55,9 @@ export function buildMinimalPayload(proposal) {
     const item = { label, value: e.value };
     const dn = toDayNumber(e.date);
     if (ref != null && dn != null) item.dayOffset = dn - ref;
-    if (finiteNum(e.windowDays)) item.windowDays = e.windowDays;
+    // Evidence from the rules engine names its window `window`.
+    const wd = finiteNum(e.windowDays) ? e.windowDays : e.window;
+    if (finiteNum(wd)) item.windowDays = wd;
     evidence.push(item);
   });
   const windows = {};
@@ -69,7 +71,8 @@ export function buildMinimalPayload(proposal) {
     .map((m) => m.trim())
     .slice(0, 10);
   return {
-    rule: safeLabel(p.rule || p.ruleName) || 'unknown-rule',
+    // Built proposals carry `rules` (one per finding); older callers pass `rule`.
+    rule: safeLabel(p.rule || p.ruleName || (Array.isArray(p.rules) ? p.rules.filter((r) => typeof r === 'string').join(' ') : '')) || 'unknown-rule',
     kind: safeLabel(p.kind) || 'review',
     evidence,
     windows,

@@ -190,3 +190,12 @@ test('provider notes are exported and AI is documented as off by default', () =>
   assert.match(AI_PROVIDER_NOTES.default, /off by default/i);
   assert.ok(AI_PROVIDER_NOTES.ollama && AI_PROVIDER_NOTES.openai && AI_PROVIDER_NOTES.payload);
 });
+
+test('a proposal built by the rules engine keeps its rule name and evidence window in the payload', () => {
+  const pl = buildMinimalPayload({
+    rules: ['low-recovery'], kind: 'reduce', asOf: '2026-10-05',
+    evidence: [{ label: 'average sleep (h)', value: 4.8, window: 7 }],
+  });
+  assert.equal(pl.rule, 'low-recovery');
+  assert.equal(pl.evidence[0].windowDays, 7);
+});

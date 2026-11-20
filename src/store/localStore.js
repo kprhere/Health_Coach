@@ -299,9 +299,12 @@ export function createLocalStore(accountId, {
         const c = await reqP(conflicts.get(conflictId));
         if (!c) return { ok: false, reason: 'no-such-conflict' };
         const server = c.server || {};
-        const serverVersion = Number.isFinite(server.version) ? server.version : 0;
         const row = await reqP(records.get([c.collection, c.key]));
+        // A group-rolled-back op has no server copy: keep the local version
+        // so a retry is not sent as "create" against an existing row.
+        const serverVersion = Number.isFinite(server.version) ? server.version : (row ? row.version || 0 : 0);
         const op = await reqP(outbox.get(c.opId));
+        if (resolution === 'server' && !c.server) return { ok: false, reason: 'no-server-copy' };
         if (resolution === 'server') {
           records.put({
             collection: c.collection, key: c.key, data: server.deleted ? null : server.data,
@@ -322,7 +325,6 @@ export function createLocalStore(accountId, {
         later.filter((o) => o.opId !== c.opId && o.baseVersion < serverVersion)
           .forEach((o) => outbox.put({ ...o, baseVersion: serverVersion }));
         conflicts.delete(conflictId);
-        void row;
         return { ok: true, resolution: typeof resolution === 'string' ? resolution : 'merged' };
       });
       await refreshPending();

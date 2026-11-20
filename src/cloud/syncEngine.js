@@ -23,6 +23,8 @@ export const normalizeRecord = (row) => (row ? {
   version: row.version,
   updatedAt: row.updatedAt ?? row.updated_at ?? null,
   deletedAt: row.deletedAt ?? row.deleted_at ?? null,
+  // The store reads `deleted`; the server only sends a tombstone timestamp.
+  deleted: !!(row.deleted ?? row.deletedAt ?? row.deleted_at),
 } : null);
 
 const tsValue = (s) => (s ? Date.parse(s) : -Infinity);
@@ -162,17 +164,25 @@ export function createSyncEngine({
         return 'stop';
       }
       if (kind === 'permanent') {
-        if (batch.length > 1) {
-          // One bad op must not poison its neighbours: isolate it.
-          for (const o of batch) {
+        // One bad op must not poison its neighbours: isolate it. An atomic
+        // group stays together, or its all-or-nothing guarantee is lost.
+        const units = [];
+        for (const o of batch) {
+          const u = o.group ? units.find((x) => x[0].group === o.group) : null;
+          if (u) u.push(o); else units.push([o]);
+        }
+        if (units.length > 1) {
+          for (const unit of units) {
             ctx.predicted.clear();
-            const r = await sendBatch([o], ctx);
+            const r = await sendBatch(unit, ctx);
             if (r === 'stop') return 'stop';
           }
           return 'ok';
         }
-        failed.set(batch[0].opId, err);
-        await outbox.markFailed(batch[0].opId, Object.assign(err, { permanent: true }));
+        for (const o of batch) {
+          failed.set(o.opId, err);
+          await outbox.markFailed(o.opId, Object.assign(err, { permanent: true }));
+        }
         return 'ok';
       }
       for (const o of batch) await outbox.markFailed(o.opId, err);

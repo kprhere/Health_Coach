@@ -474,7 +474,7 @@ table.data td:first-child, table.data th:first-child { text-align: left; color: 
   border-radius: var(--radius-sm); padding: 12px 13px; margin-bottom: 12px;
   border: 1px solid var(--line);
 }
-.banner p { margin: 0; font-size: 12.5px; line-height: 1.45; }
+.banner p, .banner .banner-text { margin: 0; font-size: 12.5px; line-height: 1.45; }
 .banner.amber { background: rgba(246, 166, 35, 0.07); border-color: rgba(246, 166, 35, 0.28); }
 .banner.cyan { background: rgba(52, 208, 222, 0.07); border-color: rgba(52, 208, 222, 0.28); }
 .banner.violet { background: rgba(139, 123, 240, 0.07); border-color: rgba(139, 123, 240, 0.28); }
@@ -1218,3 +1218,23 @@ body::before {
 /* let card headers wrap on narrow phones instead of squeezing the title */
 .card-head { flex-wrap: wrap; row-gap: 8px; }
 .card-head .lead { min-width: 0; flex: 1 1 150px; }
+
+/* ---- Premium motion (opacity/transform only, no layout shift) ----
+   Train is deliberately excluded: no entrance animation while logging. */
+@keyframes screen-in { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
+@keyframes card-rise { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: none; } }
+.screen-enter { animation: screen-in 260ms var(--ease-premium) both; }
+.screen-enter .split-main > * { animation: card-rise 380ms var(--ease-premium) both; }
+.screen-enter .split-main > *:nth-child(2) { animation-delay: 40ms; }
+.screen-enter .split-main > *:nth-child(3) { animation-delay: 80ms; }
+.screen-enter .split-main > *:nth-child(4) { animation-delay: 120ms; }
+.screen-enter .split-main > *:nth-child(n+5) { animation-delay: 160ms; }
+.recap-pr { margin-top: var(--sp-2); }
+@media (prefers-reduced-motion: reduce) {
+  .screen-enter, .screen-enter .split-main > * { animation: none; }
+}
+
+.recovery-grid { display: grid; gap: var(--sp-2); }
+.recovery-row { display: grid; grid-template-columns: 84px 1fr auto; align-items: center; gap: var(--sp-3); font-size: var(--fs-sm); }
+.recovery-name { color: var(--text); }
+.recovery-val { color: var(--muted); font-family: var(--mono); font-size: var(--fs-xs); text-align: right; min-width: 110px; }
