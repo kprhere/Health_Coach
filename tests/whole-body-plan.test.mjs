@@ -255,3 +255,54 @@ test('catch-up: a missed weekday session is offered later in the week, leg day f
   assert.deepEqual(missedSessions('2026-11-19', t), []);
 });
 
+
+test('shoulders: side delts get 11+ fresh sets on 3 weekdays, lats and hamstrings twice a week', () => {
+  const sets = (dow, name) => PROGRAM.days[dow].blocks.reduce((n, b) => n + (b.exercises || []).filter((e) => e.name === name).reduce((m, e) => m + (e.sets ?? b.rounds ?? 0), 0), 0);
+  const lateral = [1, 2, 3, 4, 5].reduce((n, dow) => n + sets(dow, 'Arsenal Standing Lateral Raise'), 0);
+  assert.ok(lateral >= 11, `side delt sets ${lateral}`);
+  for (const dow of [1, 5]) {
+    const blocks = PROGRAM.days[dow].blocks;
+    const press = blocks.findIndex((b) => /Shoulder Press|^Overhead Press$/.test(b.name));
+    const lat = blocks.findIndex((b) => b.blockType === 'single' && b.name === 'Arsenal Standing Lateral Raise');
+    assert.equal(lat, press + 1, `day ${dow}: lateral raises straight after the press, done fresh`);
+  }
+  const ohp = PROGRAM.days[5].blocks.find((b) => b.name === 'Overhead Press').exercises[0];
+  assert.deepEqual([ohp.sets, ohp.repLow, ohp.repHigh], [4, 6, 8]);
+  assert.deepEqual([1, 5].map((dow) => sets(dow, 'Lat Pulldown') > 0), [true, true]);
+  assert.ok(sets(2, 'Lying Leg Curl') > 0 && sets(4, 'Seated Leg Curl') > 0, 'hamstrings Tuesday and Thursday');
+});
+
+test('v11 upgrade patches Monday and Friday without losing exercise swaps', () => {
+  const v10 = migrateState({ version: 4 });
+  v10.version = 10;
+  // Simulate the old Mon/Fri shape with a user swap on Monday's bench.
+  const oldMon = v10.program.days[1].blocks.filter((b) => !(b.blockType === 'single' && b.name === 'Arsenal Standing Lateral Raise'));
+  oldMon[0] = { ...oldMon[0], exercises: [{ ...oldMon[0].exercises[0], name: 'Barbell Bench Press' }] };
+  const fp = oldMon.findIndex((b) => b.name === 'Face Pull');
+  oldMon[fp] = { blockType: 'superset', name: 'Lateral Raise + Face Pull', rounds: 3, exercises: [{ name: 'Arsenal Standing Lateral Raise' }, { name: 'Face Pull' }] };
+  v10.program.days[1].blocks = oldMon;
+  const oldFri = v10.program.days[5].blocks.filter((b) => !(b.blockType === 'single' && b.name === 'Arsenal Standing Lateral Raise'));
+  const ohpB = oldFri.find((b) => b.name === 'Overhead Press');
+  ohpB.exercises[0] = { ...ohpB.exercises[0], sets: 3, repLow: 8, repHigh: 10 };
+  oldFri[oldFri.findIndex((b) => b.name === 'Rear Delt Fly')] = { blockType: 'superset', name: 'Lateral + Rear Delt', rounds: 3, exercises: [{ name: 'Arsenal Standing Lateral Raise' }, { name: 'Rear Delt Fly' }] };
+  oldFri[oldFri.length - 1] = { blockType: 'finisher', name: 'Arm + Shoulder Finisher', rounds: 2, exercises: [{ name: 'Hammer Curl' }, { name: 'Rope Pushdown' }] };
+  v10.program.days[5].blocks = oldFri;
+  v10.workoutSessions = { '2026-11-17': { entries: { a: { name: 'X' } } } };
+
+  const after = migrateState(v10);
+  assert.equal(after.version, STATE_VERSION);
+  const mon = after.program.days[1].blocks.map((b) => b.name);
+  const fri = after.program.days[5].blocks.map((b) => b.name);
+  assert.equal(after.program.days[1].blocks[0].exercises[0].name, 'Barbell Bench Press', 'Monday swap kept');
+  assert.equal(mon.indexOf('Arsenal Standing Lateral Raise'), mon.indexOf('Hammer Strength Iso Shoulder Press') + 1);
+  assert.ok(!mon.includes('Lateral Raise + Face Pull') && mon.includes('Face Pull'));
+  assert.equal(fri.indexOf('Arsenal Standing Lateral Raise'), fri.indexOf('Overhead Press') + 1);
+  assert.ok(!fri.includes('Lateral + Rear Delt') && !fri.includes('Arm + Shoulder Finisher'));
+  assert.ok(fri.includes('Lat Pulldown') && fri.includes('Rear Delt Fly'));
+  assert.equal(after.program.days[5].blocks.find((b) => b.name === 'Overhead Press').exercises[0].sets, 4);
+  assert.deepEqual(after.program.days[2], PROGRAM.days[2]);
+  assert.deepEqual(after.workoutSessions, v10.workoutSessions);
+  // Running the upgrade again does not add a second lateral block.
+  const again = migrateState({ ...after, version: 10 });
+  assert.equal(again.program.days[1].blocks.filter((b) => b.name === 'Arsenal Standing Lateral Raise').length, 1);
+});

@@ -14,7 +14,7 @@ export { nutritionProfile };
 
 export const PROGRAM_START = '2026-07-08'; // start of the current fat-loss phase (latest scan)
 export const PHASE_NAME = 'Fat Loss Phase 1';
-export const STATE_VERSION = 10;
+export const STATE_VERSION = 11;
 
 // ---------- date utils ----------
 export const pad = (n) => String(n).padStart(2, '0');
@@ -251,6 +251,35 @@ const MIGRATIONS = {
         .replace('Thursday is an upper-body-only arm day, so legs still get two easy days before Sunday.', 'Legs train Tuesday (squat) and Thursday (hinge); today is the easy day between them.');
     }
     return { ...migrated, version: 10 };
+  },
+  11: (state) => {
+    // 2026-11-19 shoulder fix: side delts were 9 sets a week, always as the
+    // last superset. Mon/Fri get 4 fresh lateral-raise sets right after the
+    // press, Friday's overhead press becomes the heavy shoulder lift, Friday's
+    // arm finisher becomes a second lat pulldown, and Tuesday gets a leg
+    // extension + leg curl superset. Mon/Fri are patched block by block so
+    // earlier exercise swaps survive; Tuesday is replaced from the template.
+    const migrated = mergeState(defaultState(), state);
+    if (!migrated.program || !migrated.program.days) migrated.program = clone(PROGRAM);
+    const days = migrated.program.days;
+    const tpl = (dow, name) => clone(PROGRAM.days[dow].blocks.find((b) => b.name === name));
+    const patchDay = (dow, { pressMatch, replace }) => {
+      const day = days[dow];
+      if (!day || !Array.isArray(day.blocks)) { days[dow] = clone(PROGRAM.days[dow]); return; }
+      let blocks = day.blocks.map((b) => (b && replace[b.name] ? tpl(dow, replace[b.name]) : b));
+      const hasFreshLateral = blocks.some((b) => b && b.blockType === 'single' && b.name === 'Arsenal Standing Lateral Raise');
+      if (!hasFreshLateral) {
+        const at = blocks.findIndex((b) => b && pressMatch.test(b.name || ''));
+        blocks.splice(at >= 0 ? at + 1 : Math.min(3, blocks.length), 0, tpl(dow, 'Arsenal Standing Lateral Raise'));
+      }
+      day.blocks = blocks.filter(Boolean);
+    };
+    patchDay(1, { pressMatch: /shoulder press/i, replace: { 'Lateral Raise + Face Pull': 'Face Pull' } });
+    patchDay(5, { pressMatch: /^overhead press$/i, replace: { 'Lateral + Rear Delt': 'Rear Delt Fly', 'Arm + Shoulder Finisher': 'Lat Pulldown' } });
+    const ohp = (days[5].blocks || []).find((b) => b && b.name === 'Overhead Press' && b.exercises && b.exercises[0] && b.exercises[0].name === 'Overhead Press');
+    if (ohp) Object.assign(ohp.exercises[0], clone(PROGRAM.days[5].blocks.find((b) => b.name === 'Overhead Press').exercises[0]));
+    days[2] = clone(PROGRAM.days[2]);
+    return { ...migrated, version: 11 };
   },
 };
 

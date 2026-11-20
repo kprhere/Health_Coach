@@ -294,6 +294,9 @@ export const POSTURE_WARMUP = [
   { name: 'Dead Bug', detail: 'Before lifting: 2 x 10 per side, lower back pressed flat to the floor' },
   { name: 'Glute Bridge', detail: 'Before lifting: 2 x 15 with a 2s squeeze at the top. All day cue: tailbone tucked, ribs down' },
 ];
+// Side delts make the shoulders look wide; done fresh, straight after the
+// press, instead of as a tired superset at the end (2026-11-19).
+export const SIDE_DELT_NOTE = 'Side delts, done fresh right after the press. Light weight, lift out to the side, pause 1s at the top, 2s down. Add reps before weight';
 export const POSTURE_DAY_KEYS = ['upperA', 'lowerA', 'lowerHinge', 'upperB', 'armsExtra', 'armsAbs', 'lowerB'];
 
 // ============================================================
@@ -308,13 +311,11 @@ export const PROGRAM = {
         single('Hammer Strength Bench Press', 4, 6, 8, 7, 150, '3-1-1', 'Main press. Restart block: stop 2 reps short, no grinding'),
         single('Hammer Strength High Row', 4, 8, 10, 8, 120, '2-1-1', 'Opposite pattern to the press'),
         single('Hammer Strength Iso Shoulder Press', 3, 8, 10, 8, 105, '2-0-1', 'Secondary press for delts'),
+        single('Arsenal Standing Lateral Raise', 4, 12, 15, 9, 60, '2-1-2', SIDE_DELT_NOTE),
         single('Lat Pulldown', 3, 10, 12, 8, 90, '2-1-1', 'Second pull for lat width'),
         single('Life Fitness Bicep Curl', 3, 10, 12, 9, 75, '2-0-1', 'Direct biceps'),
         single('Life Fitness Tricep Press', 3, 10, 12, 9, 75, '2-0-1', 'Direct triceps'),
-        superset('Lateral Raise + Face Pull', 3, 60, [
-          { name: 'Arsenal Standing Lateral Raise', targetReps: '12-15', targetRpe: 9 },
-          { name: 'Face Pull', targetReps: '15-20', targetRpe: 8 },
-        ], 'Delts and shoulder health. No rest between the two, 60s after each round'),
+        single('Face Pull', 3, 15, 20, 8, 60, '2-1-2', 'Rear delts and shoulder health'),
         finisher('Arm Burnout', { rounds: 2, restAfterRoundSec: 45 }, [
           { name: 'Incline DB Curl', targetReps: '12-15', targetRpe: 9 },
           { name: 'Rope Pushdown', targetReps: '12-15', targetRpe: 9 },
@@ -334,9 +335,12 @@ export const PROGRAM = {
         single('Back Squat', 4, 5, 8, 8, 180, '3-1-1', 'Heavy main lift of the week for legs. Add 5 lb when all sets hit 8. Arsenal Squat is the backup if the rack is taken'),
         single('Hammer Strength Leg Press', 3, 10, 12, 8, 120, '2-0-1', 'Secondary quad and glute'),
         single('Bulgarian Split Squat', 2, 10, 12, 8, 90, '2-0-1', 'Per leg. Left leg first (scan shows it slightly behind), then match its reps on the right'),
-        single('Leg Extension', 3, 12, 15, 9, 60, '2-1-2', 'Hold 1 second at the top'),
+        superset('Leg Extension + Leg Curl', 3, 75, [
+          { name: 'Leg Extension', targetReps: '12-15', targetRpe: 9 },
+          { name: 'Lying Leg Curl', targetReps: '10-12', targetRpe: 9 },
+        ], 'Quad then hamstring, no rest between. Second hamstring day of the week at no extra time'),
         single('Hip Adduction', 2, 12, 15, 8, 60, '2-1-2', 'Inner thigh, slow return. The scan flagged lower body as behind upper'),
-        single('Standing Calf Raise', 3, 12, 15, 9, 60, '2-1-2', 'Calves, full stretch and pause'),
+        single('Standing Calf Raise', 4, 12, 15, 9, 60, '2-1-2', 'Calves, full stretch and pause'),
         circuit('Loaded Abs', 3, 60, [
           { name: 'Weighted Decline Crunch', targetReps: '10-15', targetRpe: 9 },
           { name: 'Hanging Leg Raise', targetReps: '8-15', targetRpe: 8 },
@@ -401,17 +405,12 @@ export const PROGRAM = {
         single('Hammer Strength Incline Press', 4, 8, 10, 8, 120, '3-1-1', 'Main upper chest press'),
         single('Hammer Strength Row', 4, 10, 12, 8, 90, '2-1-1', 'Back thickness'),
         single('Chest-Assisted Dip', 3, 10, 12, 8, 90, '3-1-1', 'Lower-chest machine press. Keep 2 reps in reserve and use a pain-free depth'),
-        single('Overhead Press', 3, 8, 10, 8, 120, '2-0-1', 'Standing barbell press, set up yourself: bar in the rack at upper-chest height, squeeze glutes, ribs down'),
+        single('Overhead Press', 4, 6, 8, 8, 150, '2-0-1', 'Heavy shoulder lift of the week. Standing barbell press, set up yourself: bar in the rack at upper-chest height, squeeze glutes, ribs down. Add 5 lb when all sets hit 8'),
+        single('Arsenal Standing Lateral Raise', 4, 12, 15, 9, 60, '2-1-2', SIDE_DELT_NOTE),
         single('Incline DB Curl', 3, 10, 12, 9, 75, '2-0-1', 'Direct biceps, long-head stretch'),
         single('Overhead Tricep Extension', 3, 12, 15, 9, 75, '2-1-2', 'Direct triceps, long head'),
-        superset('Lateral + Rear Delt', 3, 60, [
-          { name: 'Arsenal Standing Lateral Raise', targetReps: '12-15', targetRpe: 9 },
-          { name: 'Rear Delt Fly', targetReps: '15-20', targetRpe: 9 },
-        ], 'Side and rear delts, no rest between'),
-        finisher('Arm + Shoulder Finisher', { rounds: 2, restAfterRoundSec: 45 }, [
-          { name: 'Hammer Curl', targetReps: '12-15', targetRpe: 9 },
-          { name: 'Rope Pushdown', targetReps: '12-15', targetRpe: 9 },
-        ]),
+        single('Rear Delt Fly', 3, 15, 20, 9, 60, '2-1-2', 'Rear delts'),
+        single('Lat Pulldown', 3, 10, 12, 8, 90, '2-1-1', 'Second lat day of the week for width'),
       ],
       conditioning: [{ name: 'Incline Walk', detail: '20 min zone 2 after lifting, incline 8-12%. Skip only if badminton actually happened.' }],
       mobility: [...POSTURE_WARMUP],
