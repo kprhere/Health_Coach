@@ -313,8 +313,10 @@ export const PROGRAM = {
         single('Hammer Strength Iso Shoulder Press', 3, 8, 10, 8, 105, '2-0-1', 'Secondary press for delts'),
         single('Arsenal Standing Lateral Raise', 4, 12, 15, 9, 60, '2-1-2', SIDE_DELT_NOTE),
         single('Lat Pulldown', 3, 10, 12, 8, 90, '2-1-1', 'Second pull for lat width'),
-        single('Life Fitness Bicep Curl', 3, 10, 12, 9, 75, '2-0-1', 'Direct biceps'),
-        single('Life Fitness Tricep Press', 3, 10, 12, 9, 75, '2-0-1', 'Direct triceps'),
+        superset('Curl + Tricep Press', 3, 60, [
+          { name: 'Life Fitness Bicep Curl', targetReps: '10-12', targetRpe: 9 },
+          { name: 'Life Fitness Tricep Press', targetReps: '10-12', targetRpe: 9 },
+        ], 'Opposite muscles on side-by-side machines: no rest between, 60s after each round'),
         single('Face Pull', 3, 15, 20, 8, 60, '2-1-2', 'Rear delts and shoulder health'),
         finisher('Arm Burnout', { rounds: 2, restAfterRoundSec: 45 }, [
           { name: 'Incline DB Curl', targetReps: '12-15', targetRpe: 9 },
@@ -343,8 +345,8 @@ export const PROGRAM = {
         single('Standing Calf Raise', 4, 12, 15, 9, 60, '2-1-2', 'Calves, full stretch and pause'),
         circuit('Loaded Abs', 3, 60, [
           { name: 'Weighted Decline Crunch', targetReps: '10-15', targetRpe: 9 },
-          { name: 'Hanging Leg Raise', targetReps: '8-15', targetRpe: 8 },
-        ], 'Add a heavier plate to the decline crunch whenever all rounds hit 15. Abs grow like any muscle'),
+          { name: 'Ab Wheel', targetReps: '8-12', targetRpe: 8 },
+        ], 'Crunch, then anti-extension. Add a heavier plate to the crunch whenever all rounds hit 15. The wheel trains the abs to hold the pelvis level (posture)'),
       ],
       conditioning: [], mobility: [...POSTURE_WARMUP],
       sport: [{ name: 'Easy Laps', detail: 'Swimming class this evening. Technique-focused, legs already worked.' }],
@@ -379,8 +381,10 @@ export const PROGRAM = {
       blocks: [
         single('Romanian Deadlift', 4, 6, 8, 8, 180, '3-1-1', 'Heavy main lift for the back of the legs. Add 5-10 lb when all sets hit 8'),
         single('Hip Thrust', 3, 8, 12, 8, 120, '2-1-2', 'Glutes, full lockout squeeze'),
-        single('Seated Leg Curl', 3, 10, 12, 9, 75, '2-1-2', 'Hamstrings, slow return'),
-        single('Hip Adduction', 2, 12, 15, 8, 60, '2-1-2', 'Inner thigh, second hit of the week'),
+        superset('Leg Curl + Adduction', 3, 60, [
+          { name: 'Seated Leg Curl', targetReps: '10-12', targetRpe: 9 },
+          { name: 'Hip Adduction', targetReps: '12-15', targetRpe: 8 },
+        ], 'Neighbouring seated machines, different muscles: no rest between, 60s after each round'),
         dropset('Seated Calf Raise', 2, 12, 15, 10, 45, '2-1-2', [
           { label: 'Drop 1 (-20%)', targetReps: 'to failure' },
         ], 'Top set about 1 rep shy, then strip the weight once'),
@@ -404,13 +408,17 @@ export const PROGRAM = {
       blocks: [
         single('Hammer Strength Incline Press', 4, 8, 10, 8, 120, '3-1-1', 'Main upper chest press'),
         single('Hammer Strength Row', 4, 10, 12, 8, 90, '2-1-1', 'Back thickness'),
-        single('Chest-Assisted Dip', 3, 10, 12, 8, 90, '3-1-1', 'Lower-chest machine press. Keep 2 reps in reserve and use a pain-free depth'),
         single('Overhead Press', 4, 6, 8, 8, 150, '2-0-1', 'Heavy shoulder lift of the week. Standing barbell press, set up yourself: bar in the rack at upper-chest height, squeeze glutes, ribs down. Add 5 lb when all sets hit 8'),
         single('Arsenal Standing Lateral Raise', 4, 12, 15, 9, 60, '2-1-2', SIDE_DELT_NOTE),
-        single('Incline DB Curl', 3, 10, 12, 9, 75, '2-0-1', 'Direct biceps, long-head stretch'),
-        single('Overhead Tricep Extension', 3, 12, 15, 9, 75, '2-1-2', 'Direct triceps, long head'),
+        superset('Dip + Pulldown', 3, 75, [
+          { name: 'Chest-Assisted Dip', targetReps: '10-12', targetRpe: 8 },
+          { name: 'Lat Pulldown', targetReps: '10-12', targetRpe: 8 },
+        ], 'Push then pull. Dip at a pain-free depth with 2 reps in reserve; pulldown is the second lat day of the week, done before arms tire the biceps'),
+        superset('Curl + Overhead Extension', 3, 60, [
+          { name: 'Incline DB Curl', targetReps: '10-12', targetRpe: 9 },
+          { name: 'Overhead Tricep Extension', targetReps: '12-15', targetRpe: 9 },
+        ], 'Long heads of biceps and triceps, back to back'),
         single('Rear Delt Fly', 3, 15, 20, 9, 60, '2-1-2', 'Rear delts'),
-        single('Lat Pulldown', 3, 10, 12, 8, 90, '2-1-1', 'Second lat day of the week for width'),
       ],
       conditioning: [{ name: 'Incline Walk', detail: '20 min zone 2 after lifting, incline 8-12%. Skip only if badminton actually happened.' }],
       mobility: [...POSTURE_WARMUP],
@@ -436,7 +444,7 @@ export const PROGRAM = {
             { name: 'Life Fitness Tricep Press', targetReps: '12-15', targetRpe: 9 },
           ], 'Direct arms superset'),
           circuit('Core Finisher', 3, 45, [
-            { name: 'Hanging Leg Raise', targetReps: '10-15', targetRpe: 8 },
+            { name: 'Reverse Crunch', targetReps: '12-15', targetRpe: 8 },
             { name: 'Cable Woodchop', targetReps: '10 / side', targetRpe: 8 },
           ]),
         ],
@@ -465,7 +473,7 @@ export const PROGRAM = {
         ], 'Brachialis and forearms push the biceps veins outward'),
         circuit('Loaded Abs', 3, 60, [
           { name: 'Weighted Decline Crunch', targetReps: '10-15', targetRpe: 9 },
-          { name: 'Hanging Leg Raise', targetReps: '8-15', targetRpe: 8 },
+          { name: 'Reverse Crunch', targetReps: '12-15', targetRpe: 8 },
           { name: 'Ab Wheel', targetReps: '8-12', targetRpe: 8 },
         ], 'Optional extra ab work'),
       ],
