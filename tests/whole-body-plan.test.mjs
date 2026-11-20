@@ -15,17 +15,17 @@ import { DAY_CAL_MULT, personalTargets } from '../src/nutritionEngine.js';
 
 const THURSDAY = '2026-11-12';
 
-test('Thursday is a fed vegetarian arms, shoulders and abs session', () => {
+test('Thursday is a fed vegetarian hinge + glutes leg day; arms live in the optional Sunday extra', () => {
   const state = defaultState();
   const plan = resolveWorkout(THURSDAY, state);
-  assert.equal(plan.title, 'Arms + Shoulders + Abs');
+  assert.equal(plan.title, 'Lower B: Hinge + Glutes');
   assert.equal(nutritionDayType(THURSDAY, state), 'trainingVeg');
   assert.equal(fastEndTime(THURSDAY, state), null);
-  const names = plan.blocks.flatMap((b) => (b.exercises || []).map((e) => e.name));
-  for (const required of ['Close Grip Bench', 'Overhead Tricep Extension', 'Incline DB Curl', 'Hammer Curl', 'Reverse Curl', 'Weighted Decline Crunch']) {
-    assert.ok(names.includes(required), `${required} should be on Thursday`);
-  }
   assert.ok(resolveNutrition(THURSDAY, state).meals.every((meal) => !meal.fasting));
+  const sunday = PROGRAM.days[0].blocks.flatMap((b) => (b.exercises || []).map((e) => e.name));
+  for (const required of ['Close Grip Bench', 'Overhead Tricep Extension', 'Incline DB Curl', 'Hammer Curl', 'Reverse Curl', 'Weighted Decline Crunch']) {
+    assert.ok(sunday.includes(required), `${required} should be in the Sunday arms extra`);
+  }
 });
 
 test('no habit or rule still asks for a Thursday fast', () => {
@@ -53,7 +53,7 @@ test('removing the fast does not raise weekly calories', () => {
 });
 
 test('single-leg work starts on the left and every leg day trains the inner thigh', () => {
-  for (const dow of [2, 0]) {
+  for (const dow of [2, 4]) {
     const names = PROGRAM.days[dow].blocks.flatMap((b) => (b.exercises || []).map((e) => e.name));
     assert.ok(names.includes('Hip Adduction'), `day ${dow} should include Hip Adduction`);
   }
@@ -63,22 +63,41 @@ test('single-leg work starts on the left and every leg day trains the inner thig
   assert.equal(muscleGroupOf('Reverse Curl', defaultState()), 'Biceps');
 });
 
-test('weekdays carry the whole plan: one complete leg day, weekends optional', () => {
+test('weekdays carry the whole plan: legs split Tue squat / Thu hinge, weekends optional', () => {
   const day = (dow) => PROGRAM.days[dow];
   const names = (dow) => day(dow).blocks.flatMap((b) => (b.exercises || []).map((e) => e.name));
   const legDays = [1, 2, 3, 4, 5].filter((dow) => /lower/i.test(day(dow).title));
-  assert.deepEqual(legDays, [2], 'exactly one leg day Monday to Friday, on Tuesday');
-  for (const lift of ['Back Squat', 'Romanian Deadlift', 'Hip Thrust', 'Hammer Strength Leg Press', 'Bulgarian Split Squat', 'Seated Leg Curl', 'Leg Extension', 'Standing Calf Raise']) {
-    assert.ok(names(2).includes(lift), `${lift} on Tuesday`);
-  }
+  assert.deepEqual(legDays, [2, 4], 'two leg days Monday to Friday');
+  // Each leg day opens with its own heavy main lift, done fresh.
+  assert.equal(day(2).blocks[0].name, 'Back Squat');
+  assert.equal(day(4).blocks[0].name, 'Romanian Deadlift');
+  for (const lift of ['Back Squat', 'Hammer Strength Leg Press', 'Bulgarian Split Squat', 'Leg Extension', 'Standing Calf Raise']) assert.ok(names(2).includes(lift), `${lift} on Tuesday`);
+  for (const lift of ['Romanian Deadlift', 'Hip Thrust', 'Seated Leg Curl', 'Seated Calf Raise']) assert.ok(names(4).includes(lift), `${lift} on Thursday`);
+  // Neither leg day is the old 80-minute marathon: at most 7 blocks each.
+  assert.ok(day(2).blocks.length <= 7 && day(4).blocks.length <= 7);
+  // Side delts still three days a week (Mon, Thu, Fri).
+  const lateralDays = [1, 2, 3, 4, 5].filter((dow) => names(dow).includes('Arsenal Standing Lateral Raise'));
+  assert.ok(lateralDays.length >= 3, `lateral raises on ${lateralDays}`);
+  assert.equal(day(4).dayType, 'trainingVeg', 'Thursday stays the vegetarian training day');
   for (const dow of [1, 2, 3, 4, 5]) assert.ok(!day(dow).optional, `day ${dow} is required`);
   for (const dow of [6, 0]) assert.equal(day(dow).optional, true, `day ${dow} is optional`);
+  assert.match(day(0).title, /Arms/);
   assert.equal(day(0).dayType, 'rest', 'Sunday eats at rest-day calories');
-  // A skipped weekend is never a missed habit.
-  const sunday = '2026-11-22';
-  const monday = '2026-11-23';
-  assert.equal(habitApplicability(sunday, defaultState()).workout_done, false);
-  assert.equal(habitApplicability(monday, defaultState()).workout_done, true);
+  assert.equal(habitApplicability('2026-11-22', defaultState()).workout_done, false);
+  assert.equal(habitApplicability('2026-11-23', defaultState()).workout_done, true);
+});
+
+test('v10 upgrade replaces Tuesday, Thursday and Sunday only, keeps other days and every log', () => {
+  const v9 = migrateState({ version: 4 });
+  v9.version = 9;
+  v9.program.days[1].blocks[0].exercises[0].name = 'Barbell Bench Press';
+  v9.program.days[4] = { ...v9.program.days[4], key: 'armsAbs', title: 'Arms + Shoulders + Abs' };
+  v9.workoutSessions = { '2026-11-19': { entries: { cgb: { name: 'Close Grip Bench' } } } };
+  const after = migrateState(v9);
+  assert.equal(after.version, STATE_VERSION);
+  assert.equal(after.program.days[1].blocks[0].exercises[0].name, 'Barbell Bench Press', 'Monday swap kept');
+  for (const dow of [2, 4, 0]) assert.deepEqual(after.program.days[dow], PROGRAM.days[dow]);
+  assert.deepEqual(after.workoutSessions, v9.workoutSessions);
 });
 
 test('v9 upgrade rebuilds Tuesday and Sunday only, keeps other days and every log', () => {

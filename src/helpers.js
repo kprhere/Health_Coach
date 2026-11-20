@@ -14,7 +14,7 @@ export { nutritionProfile };
 
 export const PROGRAM_START = '2026-07-08'; // start of the current fat-loss phase (latest scan)
 export const PHASE_NAME = 'Fat Loss Phase 1';
-export const STATE_VERSION = 9;
+export const STATE_VERSION = 10;
 
 // ---------- date utils ----------
 export const pad = (n) => String(n).padStart(2, '0');
@@ -236,6 +236,21 @@ const MIGRATIONS = {
       "Legs were trained on Tuesday, the week's only leg day, and Thursday is upper body, so they get the rest of the week to recover.",
     );
     return { ...migrated, version: 9 };
+  },
+  10: (state) => {
+    // 2026-11-19: legs split over two weekdays. Tuesday squat + quads,
+    // Thursday hinge + glutes (was the arms day), Sunday optional arms extra.
+    // Only those three days of the saved program change; logs untouched.
+    const migrated = mergeState(defaultState(), state);
+    if (!migrated.program || !migrated.program.days) migrated.program = clone(PROGRAM);
+    const days = migrated.program.days;
+    [2, 4, 0].forEach((dow) => { days[dow] = clone(PROGRAM.days[dow]); });
+    if (days[3] && typeof days[3].notes === 'string') {
+      days[3].notes = days[3].notes
+        .replace("Legs were trained on Tuesday, the week's only leg day, and Thursday is upper body, so they get the rest of the week to recover.", 'Legs train Tuesday (squat) and Thursday (hinge); today is the easy day between them.')
+        .replace('Thursday is an upper-body-only arm day, so legs still get two easy days before Sunday.', 'Legs train Tuesday (squat) and Thursday (hinge); today is the easy day between them.');
+    }
+    return { ...migrated, version: 10 };
   },
 };
 
