@@ -323,7 +323,7 @@ export const PROGRAM = {
     1: {
       key: 'upperA', title: 'Upper Body A', focus: 'Strength', dayType: 'training', intensity: 'Hard',
       blocks: [
-        single('Hammer Strength Bench Press', 4, 6, 8, 7, 150, '3-1-1', 'Main press. Restart block: stop 2 reps short, no grinding'),
+        single('Barbell Bench Press', 4, 6, 8, 7, 150, '3-1-1', 'Main press. Restart block: stop 2 reps short, no grinding'),
         single('Hammer Strength High Row', 4, 8, 10, 8, 120, '2-1-1', 'Opposite pattern to the press'),
         single('Hammer Strength Iso Shoulder Press', 3, 8, 10, 8, 105, '2-0-1', 'Secondary press for delts'),
         single('Arsenal Standing Lateral Raise', 4, 12, 15, 9, 60, '2-1-2', SIDE_DELT_NOTE),
@@ -451,7 +451,7 @@ export const PROGRAM = {
         key: 'saturdayFallback', title: 'Full Body Pump (fallback)', focus: 'Full Body', dayType: 'vegSat', intensity: 'Moderate',
         blocks: [
           single('Hammer Strength Leg Press', 3, 12, 15, 8, 90, '2-0-1', 'Legs'),
-          single('Hammer Strength Bench Press', 3, 10, 12, 8, 90, '2-1-1', 'Chest'),
+          single('Barbell Bench Press', 3, 10, 12, 8, 90, '2-1-1', 'Chest'),
           single('Hammer Strength Row', 3, 10, 12, 8, 90, '2-1-1', 'Back'),
           single('Hammer Strength Iso Shoulder Press', 3, 10, 12, 8, 75, '2-0-1', 'Shoulders'),
           superset('Curl + Pushdown', 3, 45, [

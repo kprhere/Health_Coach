@@ -14,7 +14,7 @@ export { nutritionProfile };
 
 export const PROGRAM_START = '2026-07-08'; // start of the current fat-loss phase (latest scan)
 export const PHASE_NAME = 'Fat Loss Phase 1';
-export const STATE_VERSION = 14;
+export const STATE_VERSION = 15;
 
 // ---------- date utils ----------
 export const pad = (n) => String(n).padStart(2, '0');
@@ -395,6 +395,27 @@ const MIGRATIONS = {
         .reduce((o, k) => ({ ...o, [k]: PROFILE_DEFAULT[k] }), {}) };
     }
     return { ...migrated, version: 14 };
+  },
+  15: (state) => {
+    // 2026-11-21: the bench is a free barbell, not the plate-loaded Hammer
+    // Strength press, so the plate loader must add the 45 lb bar. Planned
+    // slots move to Barbell Bench Press (Monday main press and the Saturday
+    // fallback); slots already swapped to something else keep the swap. The
+    // persistent note and restart weight follow the move. Logs are untouched.
+    const FROM = 'Hammer Strength Bench Press', TO = 'Barbell Bench Press';
+    const migrated = mergeState(defaultState(), state);
+    const days = (migrated.program && migrated.program.days) || {};
+    const fix = (day) => (day && Array.isArray(day.blocks) ? day.blocks : []).forEach((b) => {
+      if (!b) return;
+      if (b.name === FROM) b.name = TO;
+      (Array.isArray(b.exercises) ? b.exercises : []).forEach((e) => { if (e && e.name === FROM) e.name = TO; });
+    });
+    Object.values(days).forEach((day) => { fix(day); if (day) fix(day.fallback); });
+    ['exerciseNotes', 'restartWeights'].forEach((key) => {
+      const bag = migrated[key];
+      if (bag && bag[FROM] != null && bag[TO] == null) bag[TO] = clone(bag[FROM]);
+    });
+    return { ...migrated, version: 15 };
   },
 };
 
@@ -1067,23 +1088,66 @@ export function workoutSessionHasData(session) {
 }
 
 // ---------- completion logic ----------
-export const cellDone = (c) => !!(c.done || c.skipped || hasEnteredValue(c.seconds) || (c.weight !== '' && c.reps !== ''));
+// A set is logged once it has reps or seconds; weight is optional so
+// bodyweight work counts. A missed set is resolved but never counted as work.
+export const setLogged = (x) => !!x && !x.missed && (parseInt(x.reps, 10) > 0 || parseFloat(x.seconds) > 0);
+export const cellDone = (c) => !!(c.done || c.skipped || c.missed || setLogged(c));
 export const roundDone = (rd) => rd.done || Object.values(rd.byExercise).every(cellDone);
 
 export function blockDone(entry) {
   if (entry.skipped) return true;
   if (entry.completed) return true;
   if (entry.sets) {
-    const planned = entry.sets.filter((s) => !s.isDrop);
-    return planned.length > 0 && planned.every((s) => hasEnteredValue(s.seconds) || (s.weight !== '' && s.reps !== ''));
+    // Warm-ups and drop rows are optional; every working set must be logged
+    // or marked missed.
+    const planned = entry.sets.filter((s) => !s.isDrop && !s.isWarmup);
+    return planned.length > 0 && planned.every((s) => s.missed || setLogged(s));
   }
   if (entry.rounds) return entry.rounds.length > 0 && entry.rounds.every(roundDone);
   return false;
 }
 
+// Finish a block as it stands: blank working sets become missed (they stay
+// out of volume and history), blank circuit cells are closed, and the block
+// counts as complete. reopenEntry undoes only what finishEntry added.
+export function finishEntry(entry) {
+  if (!entry || entry.skipped) return;
+  (entry.sets || []).forEach((set) => {
+    if (!set.isWarmup && !set.isDrop && !setLogged(set) && !set.missed) { set.missed = true; set.autoMissed = true; }
+  });
+  (entry.rounds || []).forEach((rd) => {
+    Object.values(rd.byExercise || {}).forEach((c) => {
+      if (!c.skipped && !setLogged(c) && !c.missed) { c.missed = true; c.autoMissed = true; }
+    });
+    rd.done = true;
+  });
+  entry.completed = true;
+}
+export function reopenEntry(entry) {
+  if (!entry) return;
+  (entry.sets || []).forEach((set) => { if (set.autoMissed) { delete set.missed; delete set.autoMissed; } });
+  (entry.rounds || []).forEach((rd) => {
+    Object.values(rd.byExercise || {}).forEach((c) => { if (c.autoMissed) { delete c.missed; delete c.autoMissed; } });
+    rd.done = Object.values(rd.byExercise || {}).every(cellDone) && Object.values(rd.byExercise || {}).some((c) => setLogged(c) || c.skipped);
+  });
+  entry.completed = false;
+}
+// Marking the whole workout complete finishes every block in it.
+export function completeSession(session) {
+  Object.values(session.entries || {}).forEach((e) => { if (e && !blockDone(e)) { finishEntry(e); e.autoFinished = true; } });
+  session.completed = true;
+}
+export function reopenSession(session) {
+  Object.values(session.entries || {}).forEach((e) => { if (e && e.autoFinished) { reopenEntry(e); delete e.autoFinished; } });
+  session.completed = false;
+}
+
 export function workoutProgress(session) {
   const ids = Object.keys(session.entries || {});
   if (ids.length === 0) return { done: 0, total: 0, pct: 0 };
+  // A workout marked complete counts in full, including ones finished before
+  // missed sets were tracked.
+  if (session.completed) return { done: ids.length, total: ids.length, pct: 100 };
   const done = ids.filter((id) => blockDone(session.entries[id])).length;
   return { done, total: ids.length, pct: Math.round((done / ids.length) * 100) };
 }
@@ -1102,7 +1166,7 @@ export function allSetRecords(state) {
       if (entry.sets) {
         const nm = entry.replacedWith || entry.exName;
         entry.sets.forEach((set) => {
-          if (set.isWarmup) return; // warm-ups never count toward history, volume or PRs
+          if (set.isWarmup || set.missed) return; // warm-ups and missed sets never count toward history, volume or PRs
           const w = parseFloat(set.weight), r = parseInt(set.reps, 10);
           if (!isNaN(w) && !isNaN(r) && r > 0) {
             const rpe = parseFloat(set.rpe) || null;
@@ -1113,7 +1177,7 @@ export function allSetRecords(state) {
       if (entry.rounds) {
         entry.rounds.forEach((rd) => {
           Object.entries(rd.byExercise).forEach(([exName, c]) => {
-            if (c.skipped) return;
+            if (c.skipped || c.missed) return;
             const nm = c.replacedWith || exName;
             const w = parseFloat(c.weight), r = parseInt(c.reps, 10);
             if (!isNaN(w) && !isNaN(r) && r > 0) {
@@ -1135,12 +1199,12 @@ export function allTimedRecords(state) {
       if (!entry || entry.skipped) return;
       (entry.sets || []).forEach((set) => {
         const seconds = Number(set.seconds);
-        if (seconds > 0 && !set.isWarmup) records.push({ date, name: entry.replacedWith || entry.exName, seconds, weight: Number(set.weight) || 0, rpe: Number(set.rpe) || null, source: entry.blockType });
+        if (seconds > 0 && !set.isWarmup && !set.missed) records.push({ date, name: entry.replacedWith || entry.exName, seconds, weight: Number(set.weight) || 0, rpe: Number(set.rpe) || null, source: entry.blockType });
       });
       (entry.rounds || []).forEach((round) => {
         Object.entries(round.byExercise || {}).forEach(([exerciseName, cell]) => {
           const seconds = Number(cell.seconds);
-          if (seconds > 0 && !cell.skipped) records.push({ date, name: cell.replacedWith || exerciseName, seconds, weight: Number(cell.weight) || 0, rpe: Number(cell.rpe) || null, source: entry.blockType });
+          if (seconds > 0 && !cell.skipped && !cell.missed) records.push({ date, name: cell.replacedWith || exerciseName, seconds, weight: Number(cell.weight) || 0, rpe: Number(cell.rpe) || null, source: entry.blockType });
         });
       });
     });
@@ -1726,7 +1790,7 @@ export function totalFromOneSide(oneSide, base = 0) {
 // Which sets to fill when the loaded weight is used: the first working set with
 // no weight yet; when every working set has one, signal a new set instead.
 export function nextSetToFill(sets = []) {
-  const idx = sets.findIndex((set) => !set.isWarmup && !hasEnteredValue(set.weight));
+  const idx = sets.findIndex((set) => !set.isWarmup && !set.missed && !hasEnteredValue(set.weight));
   return idx;
 }
 
@@ -1738,6 +1802,71 @@ export function loadingKind(name = '', equipment = '') {
   if (/barbell/i.test(text)) return 'barbell';
   if (/hammer strength|arsenal|plate/i.test(text)) return 'machine';
   return null;
+}
+
+// ---------- bench history: add the missing bar ----------
+// Bench was planned as the plate-loaded Hammer Strength press, so the plate
+// loader logged plates only. It was a free barbell, so those logs are short
+// by the bar. The user reviews and applies this once; each fixed entry keeps
+// its original weights in entry.barFix so it can be undone.
+export const BENCH_BAR_FIX = { from: 'Hammer Strength Bench Press', to: 'Barbell Bench Press', bar: 45 };
+const entryName = (entry) => entry.replacedWith || entry.exName;
+const lbText = (n) => String(Math.round(n * 100) / 100);
+
+export function barlessBenchSessions(state, bar = BENCH_BAR_FIX.bar) {
+  const add = Number(bar);
+  const out = [];
+  Object.keys(state.workoutSessions || {}).sort().forEach((date) => {
+    const entries = (state.workoutSessions[date] && state.workoutSessions[date].entries) || {};
+    Object.entries(entries).forEach(([id, entry]) => {
+      if (!entry || entry.barFix || entryName(entry) !== BENCH_BAR_FIX.from || !Array.isArray(entry.sets)) return;
+      const sets = entry.sets
+        .filter((set) => hasEnteredValue(set.weight) && Number.isFinite(parseFloat(set.weight)) && parseFloat(set.weight) >= 0)
+        .map((set) => ({ before: parseFloat(set.weight), after: parseFloat(set.weight) + add, reps: set.reps, isWarmup: !!set.isWarmup }));
+      if (sets.length) out.push({ date, id, sets });
+    });
+  });
+  return out;
+}
+
+// Mutates a draft state (use inside ctx.mutate). Returns how many entries changed.
+export function applyBenchBarFix(draft, bar = BENCH_BAR_FIX.bar) {
+  const add = Number(bar);
+  if (!Number.isFinite(add) || add <= 0) return 0;
+  let changed = 0;
+  barlessBenchSessions(draft, add).forEach(({ date, id }) => {
+    const entry = draft.workoutSessions[date].entries[id];
+    entry.barFix = { bar: add, from: BENCH_BAR_FIX.from, exName: entry.exName, replacedWith: entry.replacedWith || null, weights: entry.sets.map((set) => set.weight) };
+    entry.sets.forEach((set) => {
+      const w = parseFloat(set.weight);
+      if (hasEnteredValue(set.weight) && Number.isFinite(w) && w >= 0) set.weight = lbText(w + add);
+    });
+    if (entry.replacedWith === BENCH_BAR_FIX.from) entry.replacedWith = BENCH_BAR_FIX.to;
+    else entry.exName = BENCH_BAR_FIX.to;
+    changed += 1;
+  });
+  return changed;
+}
+
+export function benchBarFixedCount(state) {
+  let n = 0;
+  Object.values(state.workoutSessions || {}).forEach((s) => Object.values((s && s.entries) || {}).forEach((e) => { if (e && e.barFix) n += 1; }));
+  return n;
+}
+
+// Mutates a draft state: restores every fixed entry exactly as it was.
+export function undoBenchBarFix(draft) {
+  let restored = 0;
+  Object.values(draft.workoutSessions || {}).forEach((s) => Object.values((s && s.entries) || {}).forEach((entry) => {
+    if (!entry || !entry.barFix) return;
+    const fix = entry.barFix;
+    entry.sets.forEach((set, i) => { if (i < fix.weights.length) set.weight = fix.weights[i]; });
+    entry.exName = fix.exName;
+    if (fix.replacedWith) entry.replacedWith = fix.replacedWith; else delete entry.replacedWith;
+    delete entry.barFix;
+    restored += 1;
+  }));
+  return restored;
 }
 
 // ---------- week-over-week training volume improvement ----------
@@ -1784,11 +1913,11 @@ export function allWorkingSets(state) {
       if (!entry || entry.skipped) return;
       (entry.sets || []).forEach((set) => {
         // Drop rows extend the top set; they are one hard set, not several.
-        if (!set.isWarmup && !set.isDrop && hasWork(set)) recs.push({ date, name: entry.replacedWith || entry.exName });
+        if (!set.isWarmup && !set.isDrop && !set.missed && hasWork(set)) recs.push({ date, name: entry.replacedWith || entry.exName });
       });
       (entry.rounds || []).forEach((rd) => {
         Object.entries(rd.byExercise || {}).forEach(([exName, c]) => {
-          if (c && !c.skipped && hasWork(c)) recs.push({ date, name: c.replacedWith || exName });
+          if (c && !c.skipped && !c.missed && hasWork(c)) recs.push({ date, name: c.replacedWith || exName });
         });
       });
     });

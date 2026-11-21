@@ -17,6 +17,8 @@ import {
 } from './data.js';
 import {
   todayKey, addDays, prettyDate, shortDate, dowOf, clone, fastEndTime,
+  completeSession, reopenSession,
+  barlessBenchSessions, applyBenchBarFix, undoBenchBarFix, benchBarFixedCount, BENCH_BAR_FIX,
   dayFlags, resolveWorkout, resolveNutrition, initSession,
   blockDone, workoutProgress, nutritionActuals, nutritionAdherence,
   watchFor, recoveryScore, habitStatus, habitPct, dailyScore, coachInsights,
@@ -605,6 +607,59 @@ function PlanTab({ ctx }) {
 // =====================================================================
 // TRAIN
 // =====================================================================
+// One-time review of bench sessions logged without the bar (see
+// helpers.applyBenchBarFix). Shows on Train until applied or dismissed, and
+// always in More > Data so the fix can be applied later or undone.
+export function BenchHistoryFix({ ctx, always = false }) {
+  const s = ctx.state;
+  const [bar, setBar] = useState(String(BENCH_BAR_FIX.bar));
+  const [done, setDone] = useState('');
+  const pending = barlessBenchSessions(s, bar);
+  const fixed = benchBarFixedCount(s);
+  const dismissed = !!(s.settings && s.settings.benchBarFixDismissed);
+  if (!always && (dismissed || !pending.length)) return done ? <Banner tone="green" icon={Check} role="status">{done}</Banner> : null;
+  if (!pending.length && !fixed) return always ? <div className="hint">No bench sessions need the bar added.</div> : null;
+  const addBar = Number(bar);
+  const valid = Number.isFinite(addBar) && addBar > 0;
+  const apply = () => {
+    const n = pending.length;
+    ctx.mutate((d) => { applyBenchBarFix(d, addBar); });
+    setDone(`Added the ${addBar} lb bar to ${n} bench ${n === 1 ? 'session' : 'sessions'}. They now count as Barbell Bench Press.`);
+  };
+  const undo = () => {
+    if (!confirm('Put the old bench weights back (without the bar) and move them back to Hammer Strength Bench Press?')) return;
+    ctx.mutate((d) => { undoBenchBarFix(d); });
+    setDone('Bench history restored to the original weights.');
+  };
+  return (
+    <Card className="bench-fix">
+      {pending.length ? (
+        <>
+          <div className="row-title">Bench history is missing the bar</div>
+          <div className="hint" style={{ margin: '4px 0 10px' }}>
+            {pending.length} {pending.length === 1 ? 'session was' : 'sessions were'} logged as Hammer Strength Bench Press, so the plate loader left the bar out. Add it and move {pending.length === 1 ? 'it' : 'them'} to Barbell Bench Press so history, next targets and PRs line up.
+          </div>
+          <div className="bench-fix-list">
+            {pending.map(({ date, id, sets }) => (
+              <div key={`${date}-${id}`} className="bench-fix-row">
+                <span className="faint">{shortDate(date)}</span>
+                <span className="mono">{sets.map((x) => `${x.before}→${x.after}${x.reps ? `×${x.reps}` : ''}${x.isWarmup ? ' (w)' : ''}`).join(', ')}</span>
+              </div>
+            ))}
+          </div>
+          <div className="field-row cols-2" style={{ marginTop: 10, alignItems: 'end' }}>
+            <div className="field"><label htmlFor="bench-fix-bar">Bar weight (lb)</label><input id="bench-fix-bar" className="input mono" inputMode="decimal" value={bar} onChange={(e) => setBar(e.target.value)} /></div>
+            <button className="btn sm primary" disabled={!valid} onClick={apply}>Add bar to {pending.length} {pending.length === 1 ? 'session' : 'sessions'}</button>
+          </div>
+          {!always ? <button className="btn xs ghost" style={{ marginTop: 6 }} onClick={() => ctx.setSetting('benchBarFixDismissed', true)}>Not now (still in More → Data)</button> : null}
+        </>
+      ) : null}
+      {done ? <Banner tone="green" icon={Check} role="status">{done}</Banner> : null}
+      {always && fixed ? <div className="btn-row" style={{ marginTop: pending.length ? 10 : 0 }}><span className="hint">{fixed} bench {fixed === 1 ? 'session has' : 'sessions have'} the bar added.</span><button className="btn xs ghost" onClick={undo}>Undo bench fix</button></div> : null}
+    </Card>
+  );
+}
+
 export function TrainTab({ ctx }) {
   const [date, setDate] = useState(ctx.selDate);
   const [expanded, setExpanded] = useState({});
@@ -720,6 +775,8 @@ export function TrainTab({ ctx }) {
 
       {swapNotice ? <Banner tone="cyan" icon={Check} role="status" aria-live="polite">{swapNotice}</Banner> : null}
 
+      <BenchHistoryFix ctx={ctx} />
+
       {balanceTip ? <Banner tone="amber" icon={AlertTriangle}>Balance check: {balanceTip.text}</Banner> : null}
 
       {catchUp.length ? (
@@ -804,7 +861,7 @@ export function TrainTab({ ctx }) {
 
           <div className="btn-row" style={{ marginTop: 6 }}>
             <button className="btn sm" onClick={() => setAdding(true)}><Plus size={15} /> Add another exercise</button>
-            <button className={`btn sm ${session.completed ? 'primary' : ''}`} onClick={() => ctx.patchSession(date, (x) => { x.completed = !x.completed; })}>
+            <button className={`btn sm ${session.completed ? 'primary' : ''}`} onClick={() => ctx.patchSession(date, (x) => { if (x.completed) reopenSession(x); else completeSession(x); })}>
               <Check size={15} /> {session.completed ? 'Completed' : 'Mark complete'}
             </button>
           </div>
@@ -2014,6 +2071,9 @@ function MoreTab({ ctx }) {
               <span className={`check ${screenWakeLockSupported() && s.settings.keepScreenAwake !== false ? 'on' : ''}`} aria-hidden="true"><Check size={15} /></span>
             </button>
           </Card>
+
+          <SectionTitle>Bench history</SectionTitle>
+          <BenchHistoryFix ctx={ctx} always />
 
           <SectionTitle>Data</SectionTitle>
           <Card>

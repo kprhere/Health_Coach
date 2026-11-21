@@ -168,9 +168,9 @@ test('custom chest equipment is automatically recommended for matching plan slot
   };
 
   const fits = customExercisePlanFits(name, state);
-  const alternates = recommendedCustomAlternates('Hammer Strength Bench Press', state);
+  const alternates = recommendedCustomAlternates('Barbell Bench Press', state);
 
-  assert.ok(fits.some((fit) => fit.exerciseName === 'Hammer Strength Bench Press'));
+  assert.ok(fits.some((fit) => fit.exerciseName === 'Barbell Bench Press'));
   assert.equal(alternates[0].name, name);
   assert.deepEqual(recommendedCustomAlternates('Back Squat', state), []);
 });

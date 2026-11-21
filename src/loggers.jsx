@@ -13,7 +13,7 @@ import {
   getNextTarget, rxForExercise, e1rm, restartSuggestion, exerciseMeta, exerciseNames,
   duplicateLastSet, recommendedCustomAlternates,
   isTimedExercise, plateBreakdown, totalFromOneSide, nextSetToFill, loadingKind, PLATE_OPTIONS, platesOf,
-  suggestedReplacements, searchExercises, exerciseLibrary,
+  suggestedReplacements, searchExercises, exerciseLibrary, finishEntry, reopenEntry,
 } from './helpers.js';
 import { RestTimer } from './components.jsx';
 
@@ -339,7 +339,18 @@ export function SingleLogger({ block, entry, plan, state, onMutate, setRestart, 
   });
   const addWarmup = () => onMutate((e) => { e.sets.unshift({ ...makeSet(), isWarmup: true }); });
 
-  const setField = (i, f, v) => onMutate((e) => { e.sets[i][f] = v; });
+  const setField = (i, f, v) => onMutate((e) => {
+    const set = e.sets[i];
+    set[f] = v;
+    // Typing a result into a missed set means it was done after all.
+    if (['weight', 'reps', 'seconds'].includes(f) && String(v).trim() !== '') { delete set.missed; delete set.autoMissed; }
+  });
+  const toggleMissed = (i) => onMutate((e) => {
+    const set = e.sets[i];
+    if (set.missed) { delete set.missed; delete set.autoMissed; } else { set.missed = true; delete set.autoMissed; }
+  });
+  const finish = () => onMutate((e) => { if (e.completed) reopenEntry(e); else finishEntry(e); });
+  const missedCount = entry.sets.filter((x) => x.missed).length;
   const addSet = (drop) => onMutate((e) => { e.sets.push({ ...makeSet(), isDrop: !!drop }); });
   const delSet = (i) => onMutate((e) => { e.sets.splice(i, 1); });
   const copyLast = () => onMutate((e) => { e.sets = duplicateLastSet(e.sets); });
@@ -404,14 +415,19 @@ export function SingleLogger({ block, entry, plan, state, onMutate, setRestart, 
       {entry.sets.map((s, i) => (
         <div key={i}>
           <div className="set-row">
-            <span className="set-n">{s.isWarmup ? <span className="tag-drop" style={{ color: 'var(--cyan)', background: 'rgba(52,208,222,0.12)' }}>W</span> : s.isDrop ? <span className="tag-drop">DROP</span> : i + 1}</span>
+            <span className="set-n">{s.missed ? <span className="tag-missed" title="Missed set">MISS</span> : s.isWarmup ? <span className="tag-drop" style={{ color: 'var(--cyan)', background: 'rgba(52,208,222,0.12)' }}>W</span> : s.isDrop ? <span className="tag-drop">DROP</span> : i + 1}</span>
             <input aria-label={`Set ${i + 1} weight`} inputMode="decimal" value={s.weight} placeholder="lb" onChange={(e) => setField(i, 'weight', e.target.value)} />
             <input aria-label={`Set ${i + 1} ${timed ? 'seconds' : 'reps'}`} inputMode="numeric" value={timed ? (s.seconds || '') : s.reps} placeholder={timed ? 'sec' : 'reps'} onChange={(e) => setField(i, timed ? 'seconds' : 'reps', e.target.value)} />
             <input aria-label={`Set ${i + 1} RPE`} inputMode="decimal" value={s.rpe} placeholder="rpe" onChange={(e) => setField(i, 'rpe', e.target.value)} />
             <button className="set-del" onClick={() => setOpenIdx(openIdx === i ? -1 : i)} aria-label={`Set ${i + 1} details`} aria-expanded={openIdx === i}><MoreHorizontal size={16} /></button>
           </div>
           {s.rpe !== '' && !isNaN(parseFloat(s.rpe)) ? <div className="rir-hint">Auto RIR {Math.max(0, 10 - parseFloat(s.rpe))}{s.isWarmup ? ' · warm-up, excluded from history' : ''}</div> : null}
-          {openIdx === i ? <Detail data={s} patch={(f, v) => setField(i, f, v)} onDelete={() => { delSet(i); setOpenIdx(-1); }} /> : null}
+          {openIdx === i ? (
+            <>
+              {!s.isWarmup ? <div className="btn-row" style={{ margin: '6px 0' }}><button className={`btn xs ${s.missed ? 'primary' : ''}`} onClick={() => toggleMissed(i)} aria-pressed={!!s.missed}>{s.missed ? 'Missed · tap to undo' : 'Mark set missed'}</button></div> : null}
+              <Detail data={s} patch={(f, v) => setField(i, f, v)} onDelete={() => { delSet(i); setOpenIdx(-1); }} />
+            </>
+          ) : null}
         </div>
       ))}
 
@@ -421,7 +437,9 @@ export function SingleLogger({ block, entry, plan, state, onMutate, setRestart, 
         {entry.sets.length ? <button className="btn xs" onClick={copyLast}><Copy size={13} /> Copy last</button> : null}
         {isDrop ? <button className="btn xs" onClick={() => addSet(true)}><Plus size={13} /> Drop</button> : null}
         <button className="btn xs ghost" onClick={toggleSkip}>{entry.skipped ? 'Un-skip' : 'Skip'}</button>
+        {!entry.skipped ? <button className={`btn xs ${entry.completed ? 'primary' : ''}`} onClick={finish} aria-pressed={!!entry.completed}><Check size={13} /> {entry.completed ? 'Finished · reopen' : 'Finish exercise'}</button> : null}
       </div>
+      {missedCount ? <div className="hint" style={{ marginTop: 6 }}>{missedCount} missed {missedCount === 1 ? 'set' : 'sets'}. The exercise still counts as done; missed sets stay out of volume and history.</div> : null}
       <div style={{ marginTop: 8 }}>
         <ReplaceSelect value={entry.replacedWith} onChange={replace} state={state} targetName={ex.name} />
         <div className="hint" style={{ marginTop: 6 }}>Replacement changes exercise history, cues and future targets. Existing set rows and entered weights stay unchanged so nothing is overwritten.</div>
@@ -444,8 +462,8 @@ export function RoundsLogger({ block, entry, state, onMutate, setExerciseNote })
     rd.done = true;
   });
   const uncompleteRound = (ri) => onMutate((e) => {
-    const rd = e.rounds[ri]; rd.done = false;
-    Object.values(rd.byExercise).forEach((c) => { c.done = false; });
+    const rd = e.rounds[ri]; rd.done = false; e.completed = false;
+    Object.values(rd.byExercise).forEach((c) => { c.done = false; if (c.autoMissed) { delete c.missed; delete c.autoMissed; } });
   });
   const copyRound = (ri) => onMutate((e) => {
     if (ri <= 0) return;
@@ -459,10 +477,7 @@ export function RoundsLogger({ block, entry, state, onMutate, setExerciseNote })
     const by = {}; e.exNames.forEach((nm) => { by[nm] = makeCell(); });
     e.rounds.push({ done: false, byExercise: by });
   });
-  const completeAll = () => onMutate((e) => {
-    e.rounds.forEach((rd) => { Object.values(rd.byExercise).forEach((c) => { if (!c.skipped) c.done = true; }); rd.done = true; });
-    e.completed = true;
-  });
+  const completeAll = () => onMutate((e) => { if (e.completed) reopenEntry(e); else finishEntry(e); });
   const cellSkip = (ri, nm) => onMutate((e) => { const c = e.rounds[ri].byExercise[nm]; c.skipped = !c.skipped; });
   const cellReplace = (ri, nm, name) => onMutate((e) => { e.rounds[ri].byExercise[nm].replacedWith = name; });
 
@@ -540,7 +555,7 @@ export function RoundsLogger({ block, entry, state, onMutate, setExerciseNote })
 
       <div className="btn-row" style={{ marginTop: 8 }}>
         <button className="btn xs" onClick={addRound}><Plus size={13} /> Round</button>
-        <button className="btn xs" onClick={completeAll}><Check size={13} /> Complete {kind}</button>
+        <button className={`btn xs ${entry.completed ? 'primary' : ''}`} onClick={completeAll} aria-pressed={!!entry.completed}><Check size={13} /> {entry.completed ? `Finished · reopen` : `Complete ${kind}`}</button>
       </div>
     </div>
   );
