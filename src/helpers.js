@@ -1494,8 +1494,20 @@ export function dailyScore(key, state) {
 // ============================================================
 // ANALYTICS  (volume + superset / finisher completion)
 // ============================================================
+// Every group named in an exercise's primary label. Compound lifts list two
+// ("Quads, Glutes"), and each one gets a set, so squats and RDLs count for glutes.
+export function muscleGroupsOf(name, state) {
+  const parts = String(exerciseMeta(name, state).p || '').split(',').map((x) => x.trim()).filter(Boolean);
+  const groups = [...new Set(parts.map(groupOfLabel))];
+  const real = groups.filter((g) => g !== 'Other');
+  return real.length ? real : ['Other'];
+}
+
 export function muscleGroupOf(name, state) {
-  const p = exerciseMeta(name, state).p || '';
+  return groupOfLabel(exerciseMeta(name, state).p || '');
+}
+
+function groupOfLabel(p) {
   if (/Chest/i.test(p)) return 'Chest';
   if (/Lat|Back|Trap/i.test(p)) return 'Back';
   if (/Delt|Shoulder/i.test(p)) return 'Shoulders';
@@ -1781,8 +1793,7 @@ export function setsByMuscleWindow(state, days = 21, endKey = todayKey()) {
   const out = {};
   allWorkingSets(state).forEach((r) => {
     if (r.date > start && r.date <= endKey) {
-      const g = muscleGroupOf(r.name, state);
-      out[g] = (out[g] || 0) + 1;
+      muscleGroupsOf(r.name, state).forEach((g) => { out[g] = (out[g] || 0) + 1; });
     }
   });
   return out;

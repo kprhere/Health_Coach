@@ -1,6 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { setsByMuscleWindow, allSetRecords } from '../src/helpers.js';
+import { setsByMuscleWindow, allSetRecords, muscleGroupsOf, muscleGroupOf } from '../src/helpers.js';
+import { EXERCISES } from '../src/data.js';
 
 const day = '2026-11-21';
 const state = {
@@ -34,4 +35,19 @@ test('bodyweight and timed core work counts toward weekly sets', () => {
 
 test('tonnage records still require a load', () => {
   assert.equal(allSetRecords(state).length, 1);
+});
+
+test('compound lifts credit every primary muscle they list', () => {
+  assert.deepEqual(muscleGroupsOf('Back Squat', {}), ['Quads', 'Glutes']);
+  assert.deepEqual(muscleGroupsOf('Romanian Deadlift', {}), ['Hamstrings', 'Glutes']);
+  assert.deepEqual(muscleGroupsOf('Deadlift', {}), ['Back', 'Hamstrings']);
+  assert.deepEqual(muscleGroupsOf('Hammer Curl', {}), ['Biceps']);
+  assert.equal(muscleGroupOf('Back Squat', {}), 'Quads'); // tonnage keeps one group
+  const sets = setsByMuscleWindow({ workoutSessions: { [day]: { entries: { sq: { exName: 'Back Squat', sets: [{ weight: '185', reps: '6' }] } } } } }, 7, day);
+  assert.deepEqual(sets, { Quads: 1, Glutes: 1 });
+});
+
+test('every library exercise outside mobility maps to a real muscle group', () => {
+  const untagged = Object.keys(EXERCISES).filter((n) => EXERCISES[n].p !== 'Mobility' && muscleGroupsOf(n, {}).includes('Other'));
+  assert.deepEqual(untagged, []);
 });
