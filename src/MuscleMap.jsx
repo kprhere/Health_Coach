@@ -8,10 +8,19 @@ export function muscleLevel(sets) {
   const n = Number(sets) || 0;
   if (n <= 0) return 0;
   if (n < 6) return 1;
-  if (n <= 16) return 2;
-  return 3;
+  if (n < 12) return 2;
+  if (n <= 16) return 3;
+  return 4;
 }
-export const LEVEL_LABEL = ['Not trained', 'Under 6 sets', '6-16 sets', 'Over 16 sets'];
+export const LEVEL_LABEL = ['Not trained', 'Under 6', '6-11', '12-16', 'Over 16'];
+export const MAP_RANGES = [7, 30];
+
+// Sets per week for the window. A 30-day window is averaged to a weekly rate
+// so the same 6 / 12 / 16 bands still mean the same thing.
+export function weeklyRate(sets, days = 7) {
+  const n = Number(sets) || 0;
+  return days > 7 ? Math.round((n / (days / 7)) * 10) / 10 : n;
+}
 
 const FRONT = [
   { g: 'Shoulders', shapes: [['ellipse', 33, 50, 10, 8], ['ellipse', 87, 50, 10, 8]] },
@@ -67,28 +76,46 @@ function Figure({ regions, sets, label }) {
   );
 }
 
-export function MuscleMap({ sets = {}, groups = [], compact = false }) {
-  const summary = groups.map((g) => `${g} ${sets[g] || 0} sets`).join(', ');
+export function RangeToggle({ days, onDays }) {
+  return (
+    <div className="mm-range" role="group" aria-label="Muscle map range">
+      {MAP_RANGES.map((d) => (
+        <button key={d} type="button" className={d === days ? 'on' : ''} aria-pressed={d === days} onClick={() => onDays(d)}>{d} days</button>
+      ))}
+    </div>
+  );
+}
+
+export function MuscleMap({ sets = {}, groups = [], compact = false, days = 7 }) {
+  const weekly = Object.fromEntries(groups.map((g) => [g, weeklyRate(sets[g], days)]));
+  const avg = days > 7;
+  const when = avg ? `in the last ${days} days` : 'this week';
+  const summary = groups.map((g) => `${g} ${weekly[g]} sets${avg ? ' per week' : ''}`).join(', ');
   const untrained = groups.filter((g) => !(sets[g] > 0));
-  const low = groups.filter((g) => sets[g] > 0 && sets[g] < 6);
+  const low = groups.filter((g) => sets[g] > 0 && weekly[g] < 6);
   return (
     <div className={`muscle-map${compact ? ' compact' : ''}`}>
-      <div className="mm-figures" aria-label={`Working sets in the last 7 days: ${summary}`}>
-        <Figure regions={FRONT} sets={sets} label="Front" />
-        <Figure regions={BACK} sets={sets} label="Back" />
+      <div className="mm-figures" aria-label={`Working sets ${when}: ${summary}`}>
+        <Figure regions={FRONT} sets={weekly} label="Front" />
+        <Figure regions={BACK} sets={weekly} label="Back" />
       </div>
       <div className="mm-legend">
         {LEVEL_LABEL.map((text, i) => <span key={text}><i className={`mm-swatch mm-l${i}`} />{text}</span>)}
+        <span className="mm-unit">sets / week{avg ? ', averaged' : ''}</span>
       </div>
       {compact ? (
         <div className="mm-note">
-          {untrained.length ? <span><b className="amber">Not trained this week:</b> {untrained.join(', ')}</span> : <span><b className="green">Every muscle trained this week.</b></span>}
-          {low.length ? <span><b>Under 6 sets:</b> {low.join(', ')}</span> : null}
+          {untrained.length ? <span><b className="amber">Not trained {when}:</b> {untrained.join(', ')}</span> : <span><b className="green">Every muscle trained {when}.</b></span>}
+          {low.length ? <span><b>Under 6 sets a week:</b> {low.join(', ')}</span> : null}
         </div>
       ) : (
-        <div className="mm-sets">
+        <div className={`mm-sets${avg ? ' avg' : ''}`}>
           {groups.map((g) => (
-            <span key={g} className={`mm-set mm-t${muscleLevel(sets[g])}`}>{g}<b>{sets[g] || 0}</b></span>
+            <span key={g} className={`mm-set mm-t${muscleLevel(weekly[g])}`}>
+              <span className="mm-name">{g}</span>
+              <b>{weekly[g]}{avg ? <small>/wk</small> : null}</b>
+              {avg ? <small className="mm-total">{sets[g] || 0} total</small> : null}
+            </span>
           ))}
         </div>
       )}
