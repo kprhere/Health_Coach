@@ -140,8 +140,9 @@ test('planned chicken meals trade chicken quantity for egg whites instead of sta
   );
   const meals = mealPlanFor('training', defaultState());
   const lunch = meals.find((item) => item.name === 'Lunch');
-  assert.ok(lunch.options[0].keys.includes('chickenEgg'));
-  assert.ok(lunch.options[0].items[0].includes('105 g chicken + 4 egg whites'));
+  // The rice + dal plate (second, behind the quick roti plate) keeps the trade.
+  assert.ok(lunch.options[1].keys.includes('chickenEgg'));
+  assert.ok(lunch.options[1].items[0].includes('105 g chicken + 4 egg whites'));
   // Dinner defaults to plain chicken and vegetables; the chicken + whites
   // plate stays one tap away.
   const dinner = meals.find((item) => item.name === 'Dinner');

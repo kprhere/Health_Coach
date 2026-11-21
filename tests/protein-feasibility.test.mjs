@@ -128,14 +128,14 @@ test('no two options in a meal slot share a label', () => {
     }
   }
   const lunch = mealPlanFor('training', state).find((slot) => slot.name === 'Lunch');
-  assert.deepEqual(lunch.options.map((o) => o.short), ['Chicken + rice', 'Chicken + sweet potato', 'Fish', 'Chicken (low-carb)', 'Chicken + yogurt', 'Chicken + eggs']);
+  assert.deepEqual(lunch.options.map((o) => o.short), ['Chicken + eggs + roti', 'Chicken + rice', 'Chicken + sweet potato', 'Fish', 'Chicken (low-carb)', 'Roti plate + yogurt']);
 });
 
 test('lunch portions use cooked gram weights and keep whey as a snack option', () => {
   const state = baseState();
   const training = mealPlanFor('training', state);
   const lunch = training.find((slot) => slot.name === 'Lunch');
-  const lunchItems = lunch.options[0].items;
+  const lunchItems = lunch.options[1].items; // the rice + dal plate
   const snack = training.find((slot) => slot.name === 'Snack');
 
   assert.ok(lunchItems.includes('Dal (250 g cooked)'));
@@ -330,15 +330,16 @@ test('default non-veg dinner is chicken with steamed broccoli and carrots, eggs 
   const state = baseState();
   for (const dayType of ['training', 'rest']) {
     const dinner = mealPlanFor(dayType, state).find((s) => s.name === 'Dinner');
-    const [primary] = dinner.options;
+    const [primary, sabzi] = dinner.options;
     assert.deepEqual(primary.keys, ['chicken', 'steamedVeg', 'eggsOpt']);
     assert.equal(primary.short, 'Chicken + eggs');
     assert.ok(primary.items.some((i) => /optional/i.test(i)));
+    assert.deepEqual(sabzi.keys, ['chicken', 'sabzi', 'steamedVeg']);
+    assert.equal(sabzi.short, 'Chicken + sabzi');
     const noEggs = dinner.options[dinner.options.length - 1];
     assert.deepEqual(noEggs.keys, ['chicken', 'steamedVeg']);
     assert.equal(noEggs.short, 'Chicken, no eggs');
-    // logged choices 1-3 keep pointing at the same plates
-    assert.deepEqual(dinner.options.slice(1, 4).map((o) => o.headline), ['chickenEgg', 'fish', 'salmon']);
+    assert.equal(new Set(dinner.options.map((o) => o.short)).size, dinner.options.length);
   }
   for (const dayType of ['trainingVeg', 'restVeg', 'vegSat']) {
     const dinner = mealPlanFor(dayType, state).find((s) => s.name.includes('inner'));
@@ -346,18 +347,42 @@ test('default non-veg dinner is chicken with steamed broccoli and carrots, eggs 
   }
 });
 
-test('non-veg lunch offers yogurt and eggs in place of dal, appended last', () => {
+test('default non-veg lunch is chicken, eggs, 2 roti and steamed veg, with a yogurt add-on plate', () => {
   const state = baseState();
   for (const dayType of ['training', 'rest']) {
     const lunch = mealPlanFor(dayType, state).find((s) => s.name === 'Lunch');
-    assert.deepEqual(lunch.options[0].keys, ['chickenEgg', 'brownrice', 'dal', 'steamedVeg']); // default unchanged
-    const [yogurt, eggs] = lunch.options.slice(-2);
-    assert.deepEqual([yogurt.short, eggs.short], ['Chicken + yogurt', 'Chicken + eggs']);
-    assert.ok(!yogurt.keys.includes('dal') && yogurt.keys.includes('gyog'));
-    assert.ok(!eggs.keys.includes('dal') && eggs.keys.includes('eggmix'));
-    assert.ok(yogurt.p > lunch.options[0].p && eggs.p > lunch.options[0].p);
-    assert.equal(new Set(lunch.options.map((o) => o.short)).size, lunch.options.length);
+    const primary = lunch.options[0];
+    assert.deepEqual(primary.keys, ['chicken', 'eggmix', 'roti2', 'steamedVeg']);
+    assert.equal(primary.short, 'Chicken + eggs + roti');
+    assert.deepEqual([primary.kcal, primary.p, primary.c, primary.f], [670, 76, 53, 18]);
+    const yogurt = lunch.options[lunch.options.length - 1];
+    assert.deepEqual(yogurt.keys, [...primary.keys, 'gyog']);
+    assert.equal(yogurt.short, 'Roti plate + yogurt');
+    assert.deepEqual(lunch.options[1].keys, ['chickenEgg', 'brownrice', 'dal', 'steamedVeg']); // old default, second
   }
-  const vegLunch = mealPlanFor('trainingVeg', state).find((s) => s.name === 'Lunch');
-  assert.ok(vegLunch.options.every((o) => o.veg));
+  assert.ok(mealPlanFor('trainingVeg', state).find((s) => s.name === 'Lunch').options.every((o) => o.veg));
+});
+
+test('migration 16 keeps logged non-veg lunches and dinners on the plate that was eaten', async () => {
+  const { migrateState, nutritionActuals, defaultState: fresh } = await import('../src/helpers.js');
+  const old = fresh();
+  old.version = 15;
+  const mon = '2026-11-16'; // regular non-veg day
+  const sat = '2026-11-21'; // veg Saturday: untouched
+  old.mealLogs = {
+    [mon]: { eaten: { 2: true, 4: true }, choices: { 4: 2 }, extras: [], water: 0, flags: {} }, // lunch default (rice + dal), dinner index 2 (fish)
+    '2026-11-17': { eaten: {}, choices: {}, extras: [], water: 0, flags: {} }, // nothing chosen: takes new defaults
+    [sat]: { eaten: { 2: true }, choices: { 2: 1 }, extras: [], water: 0, flags: {} },
+  };
+  const after = migrateState(old);
+  assert.equal(after.version, 16);
+  assert.deepEqual(after.mealLogs[mon].choices, { 2: 1, 4: 3 });
+  assert.deepEqual(after.mealLogs['2026-11-17'].choices, {});
+  assert.deepEqual(after.mealLogs[sat].choices, { 2: 1 });
+  const slots = mealPlanFor('training', after);
+  // Monday still totals the rice + dal lunch and the fish dinner it logged
+  assert.equal(slots[2].options[after.mealLogs[mon].choices[2]].short, 'Chicken + rice');
+  assert.equal(slots[4].options[after.mealLogs[mon].choices[4]].short, 'Fish'); // old index 2 was fish
+  assert.ok(nutritionActuals(mon, after).kcal > 0);
+  assert.deepEqual(migrateState(after).mealLogs[mon].choices, { 2: 1, 4: 3 }); // runs once
 });

@@ -364,14 +364,16 @@ export function mealPlanFor(dayType, state) {
     const lunch = slot('Lunch', dayType === 'vegSat' ? '1:00 PM' : '12:30 PM',
       isVegDay
         ? [['soya90', 'brownrice', 'steamedVeg'], ['soya', 'sweetpotato', 'dal', 'steamedVeg'], ['soya', 'paneer', 'millet2', 'steamedVeg'], ['soya', 'paneer', 'steamedVeg']]
-        // The last two swap dal for Greek yogurt (more protein, fewer carbs)
-        // or eggs. Appended so logged choices 0-3 keep their plates.
-        : [['chickenEgg', 'brownrice', 'dal', 'steamedVeg'], ['chickenEgg', 'sweetpotato', 'dal', 'steamedVeg'], ['fish', 'quinoa', 'steamedVeg'], ['chicken', 'sabzi', 'steamedVeg'],
-          ['chickenEgg', 'brownrice', 'gyog', 'steamedVeg'], ['chicken', 'brownrice', 'eggmix', 'steamedVeg']]);
+        // Primary lunch is the quick plate: chicken, eggs, 2 roti and steamed
+        // veg, no dal. The last option adds Greek yogurt for a hungry day (it
+        // goes over the calorie target). Migration 16 shifted logged choices
+        // by one so the older plates keep their meaning.
+        : [['chicken', 'eggmix', 'roti2', 'steamedVeg'], ['chickenEgg', 'brownrice', 'dal', 'steamedVeg'], ['chickenEgg', 'sweetpotato', 'dal', 'steamedVeg'], ['fish', 'quinoa', 'steamedVeg'], ['chicken', 'sabzi', 'steamedVeg'],
+          ['chicken', 'eggmix', 'roti2', 'steamedVeg', 'gyog']]);
     if (!isVegDay) {
       const n = lunch.options.length;
-      lunch.options[n - 2] = { ...lunch.options[n - 2], short: 'Chicken + yogurt' };
-      lunch.options[n - 1] = { ...lunch.options[n - 1], short: 'Chicken + eggs' };
+      lunch.options[0] = { ...lunch.options[0], short: 'Chicken + eggs + roti' };
+      lunch.options[n - 1] = { ...lunch.options[n - 1], short: 'Roti plate + yogurt' };
     }
     // Training days already have whey twice (pre-workout and the oats), so
     // their snack leads with yogurt. Rest days lead with the leaner whey.
@@ -390,10 +392,13 @@ export function mealPlanFor(dayType, state) {
         // Default dinner has no starch: the carbs sit around training (oats,
         // lunch rice) and the evening plate is protein and vegetables. The
         // primary plate is grilled chicken with steamed broccoli and carrots,
-        // eggs optional. It took the old chicken + sabzi slot (index 0) and the
-        // no-egg version went last, so logged choices keep their meaning.
-        : [['chicken', 'steamedVeg', 'eggsOpt'], ['chickenEgg', 'millet2', 'sabzi', 'steamedVeg'], ['fish', 'sabzi', 'quinoa', 'steamedVeg'], ['salmon', 'broccoli', 'asparagus'], ['chicken', 'steamedVeg']]);
-    if (!isVegDay) dinner.options[dinner.options.length - 1] = { ...dinner.options[dinner.options.length - 1], short: 'Chicken, no eggs' };
+        // eggs optional. Migration 16 shifted logged choices by one, so the old
+        // chicken + sabzi plate (now second) keeps its meaning.
+        : [['chicken', 'steamedVeg', 'eggsOpt'], ['chicken', 'sabzi', 'steamedVeg'], ['chickenEgg', 'millet2', 'sabzi', 'steamedVeg'], ['fish', 'sabzi', 'quinoa', 'steamedVeg'], ['salmon', 'broccoli', 'asparagus'], ['chicken', 'steamedVeg']]);
+    if (!isVegDay) {
+      dinner.options[1] = { ...dinner.options[1], short: 'Chicken + sabzi' };
+      dinner.options[dinner.options.length - 1] = { ...dinner.options[dinner.options.length - 1], short: 'Chicken, no eggs' };
+    }
     const bed = { ...slot('Optional bedtime (if protein low)', '9:30 PM', [['whey1'], ['gyog']]), optional: true,
       note: 'Only when protein is still short at night. It adds to today\'s calories.' };
     // Flex meal: a genuine extra meal, not a top-up, for a day that ran hungrier
