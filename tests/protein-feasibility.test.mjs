@@ -325,3 +325,23 @@ test('the default meals of each regular day land on its calorie target, oil incl
     assert.ok(core.p >= target.protein * 0.9, `${dayType}: default meals ${core.p} g protein vs target ${target.protein}`);
   }
 });
+
+test('default non-veg dinner is chicken with steamed broccoli and carrots, eggs optional', () => {
+  const state = baseState();
+  for (const dayType of ['training', 'rest']) {
+    const dinner = mealPlanFor(dayType, state).find((s) => s.name === 'Dinner');
+    const [primary] = dinner.options;
+    assert.deepEqual(primary.keys, ['chicken', 'steamedVeg', 'eggsOpt']);
+    assert.equal(primary.short, 'Chicken + eggs');
+    assert.ok(primary.items.some((i) => /optional/i.test(i)));
+    const noEggs = dinner.options[dinner.options.length - 1];
+    assert.deepEqual(noEggs.keys, ['chicken', 'steamedVeg']);
+    assert.equal(noEggs.short, 'Chicken, no eggs');
+    // logged choices 1-3 keep pointing at the same plates
+    assert.deepEqual(dinner.options.slice(1, 4).map((o) => o.headline), ['chickenEgg', 'fish', 'salmon']);
+  }
+  for (const dayType of ['trainingVeg', 'restVeg', 'vegSat']) {
+    const dinner = mealPlanFor(dayType, state).find((s) => s.name.includes('inner'));
+    assert.ok(dinner.options.every((o) => o.veg));
+  }
+});

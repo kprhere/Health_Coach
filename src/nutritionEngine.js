@@ -158,6 +158,8 @@ export const FOODS = {
   fish:      F('Grilled fish (rohu / tilapia)', '150 g', 34, 0, 9, 220, false, ['lean', 'omega', 'ldl', 'gi']),
   salmon:    F('Grilled or baked salmon', '180 g', 42, 0, 15, 305, false, ['lean', 'omega', 'gi']),
   eggmix:    F('4 egg whites + 1 whole egg', '', 20, 1, 5, 120, false, ['lean', 'gi']),
+  // Same eggs, listed as an add-on: the default dinner can be eaten without them.
+  eggsOpt:   F('Eggs, optional: 4 whites + 1 whole', '', 20, 1, 5, 120, false, ['lean', 'gi']),
   whey15:    F('Whey', '1.5 scoops', 36, 5, 2, 180, true, ['lean', 'gi']),
   whey05:    F('Whey', '0.5 scoop', 12, 1.5, 0.5, 60, true, ['lean', 'gi']),
   whey1:     F('Whey', '1 scoop', 24, 3, 1, 120, true, ['lean', 'gi']),
@@ -221,7 +223,7 @@ function sumFoods(keys) {
 
 // short chip name for the option switcher, taken from the headline food
 const SHORT = {
-  chicken: 'Chicken', chickenEgg: 'Chicken', fish: 'Fish', paneer: 'Paneer', tofu: 'Tofu', eggmix: 'Eggs',
+  chicken: 'Chicken', chickenEgg: 'Chicken', fish: 'Fish', paneer: 'Paneer', tofu: 'Tofu', eggmix: 'Eggs', eggsOpt: 'Eggs',
   whey15: 'Whey', whey1: 'Whey', gyog: 'Yogurt', rajma: 'Rajma', dal: 'Dal',
   oats: 'Oats', oats80: 'Oats', banana: 'Fruit', soya: 'Soya', soya90: 'Soya', salmon: 'Salmon',
   paneer150: 'Paneer', gyog250: 'Yogurt', whey2: 'Whey', fastDrinks: 'Coffee / tea', oil1: 'Oil', buttermilk: 'Chaas', berries: 'Berries', chiaflax: 'Seeds',
@@ -378,8 +380,12 @@ export function mealPlanFor(dayType, state) {
           ? [['soya90', 'paneer', 'sabzi', 'steamedVeg'], ['paneer150', 'dal', 'roti2', 'steamedVeg'], ['soya', 'sabzi', 'steamedVeg']]
           : [['soya', 'paneer', 'sabzi', 'steamedVeg'], ['paneer150', 'dal', 'roti2', 'steamedVeg'], ['soya', 'sabzi', 'steamedVeg']])
         // Default dinner has no starch: the carbs sit around training (oats,
-        // lunch rice) and the evening plate is protein and vegetables.
-        : [['chicken', 'sabzi', 'steamedVeg'], ['chickenEgg', 'millet2', 'sabzi', 'steamedVeg'], ['fish', 'sabzi', 'quinoa', 'steamedVeg'], ['salmon', 'broccoli', 'asparagus']]);
+        // lunch rice) and the evening plate is protein and vegetables. The
+        // primary plate is grilled chicken with steamed broccoli and carrots,
+        // eggs optional. It took the old chicken + sabzi slot (index 0) and the
+        // no-egg version went last, so logged choices keep their meaning.
+        : [['chicken', 'steamedVeg', 'eggsOpt'], ['chickenEgg', 'millet2', 'sabzi', 'steamedVeg'], ['fish', 'sabzi', 'quinoa', 'steamedVeg'], ['salmon', 'broccoli', 'asparagus'], ['chicken', 'steamedVeg']]);
+    if (!isVegDay) dinner.options[dinner.options.length - 1] = { ...dinner.options[dinner.options.length - 1], short: 'Chicken, no eggs' };
     const bed = { ...slot('Optional bedtime (if protein low)', '9:30 PM', [['whey1'], ['gyog']]), optional: true,
       note: 'Only when protein is still short at night. It adds to today\'s calories.' };
     // Flex meal: a genuine extra meal, not a top-up, for a day that ran hungrier
