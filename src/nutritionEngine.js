@@ -364,7 +364,15 @@ export function mealPlanFor(dayType, state) {
     const lunch = slot('Lunch', dayType === 'vegSat' ? '1:00 PM' : '12:30 PM',
       isVegDay
         ? [['soya90', 'brownrice', 'steamedVeg'], ['soya', 'sweetpotato', 'dal', 'steamedVeg'], ['soya', 'paneer', 'millet2', 'steamedVeg'], ['soya', 'paneer', 'steamedVeg']]
-        : [['chickenEgg', 'brownrice', 'dal', 'steamedVeg'], ['chickenEgg', 'sweetpotato', 'dal', 'steamedVeg'], ['fish', 'quinoa', 'steamedVeg'], ['chicken', 'sabzi', 'steamedVeg']]);
+        // The last two swap dal for Greek yogurt (more protein, fewer carbs)
+        // or eggs. Appended so logged choices 0-3 keep their plates.
+        : [['chickenEgg', 'brownrice', 'dal', 'steamedVeg'], ['chickenEgg', 'sweetpotato', 'dal', 'steamedVeg'], ['fish', 'quinoa', 'steamedVeg'], ['chicken', 'sabzi', 'steamedVeg'],
+          ['chickenEgg', 'brownrice', 'gyog', 'steamedVeg'], ['chicken', 'brownrice', 'eggmix', 'steamedVeg']]);
+    if (!isVegDay) {
+      const n = lunch.options.length;
+      lunch.options[n - 2] = { ...lunch.options[n - 2], short: 'Chicken + yogurt' };
+      lunch.options[n - 1] = { ...lunch.options[n - 1], short: 'Chicken + eggs' };
+    }
     // Training days already have whey twice (pre-workout and the oats), so
     // their snack leads with yogurt. Rest days lead with the leaner whey.
     const snack = slot('Snack', '4:00 PM',

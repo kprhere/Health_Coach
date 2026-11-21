@@ -128,7 +128,7 @@ test('no two options in a meal slot share a label', () => {
     }
   }
   const lunch = mealPlanFor('training', state).find((slot) => slot.name === 'Lunch');
-  assert.deepEqual(lunch.options.map((o) => o.short), ['Chicken + rice', 'Chicken + sweet potato', 'Fish', 'Chicken (low-carb)']);
+  assert.deepEqual(lunch.options.map((o) => o.short), ['Chicken + rice', 'Chicken + sweet potato', 'Fish', 'Chicken (low-carb)', 'Chicken + yogurt', 'Chicken + eggs']);
 });
 
 test('lunch portions use cooked gram weights and keep whey as a snack option', () => {
@@ -344,4 +344,20 @@ test('default non-veg dinner is chicken with steamed broccoli and carrots, eggs 
     const dinner = mealPlanFor(dayType, state).find((s) => s.name.includes('inner'));
     assert.ok(dinner.options.every((o) => o.veg));
   }
+});
+
+test('non-veg lunch offers yogurt and eggs in place of dal, appended last', () => {
+  const state = baseState();
+  for (const dayType of ['training', 'rest']) {
+    const lunch = mealPlanFor(dayType, state).find((s) => s.name === 'Lunch');
+    assert.deepEqual(lunch.options[0].keys, ['chickenEgg', 'brownrice', 'dal', 'steamedVeg']); // default unchanged
+    const [yogurt, eggs] = lunch.options.slice(-2);
+    assert.deepEqual([yogurt.short, eggs.short], ['Chicken + yogurt', 'Chicken + eggs']);
+    assert.ok(!yogurt.keys.includes('dal') && yogurt.keys.includes('gyog'));
+    assert.ok(!eggs.keys.includes('dal') && eggs.keys.includes('eggmix'));
+    assert.ok(yogurt.p > lunch.options[0].p && eggs.p > lunch.options[0].p);
+    assert.equal(new Set(lunch.options.map((o) => o.short)).size, lunch.options.length);
+  }
+  const vegLunch = mealPlanFor('trainingVeg', state).find((s) => s.name === 'Lunch');
+  assert.ok(vegLunch.options.every((o) => o.veg));
 });
