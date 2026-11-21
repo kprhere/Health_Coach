@@ -93,6 +93,8 @@ export function MuscleMap({ sets = {}, groups = [], compact = false, days = 7, s
   const weekly = Object.fromEntries(groups.map((g) => [g, weeklyRate(sets[g], span)]));
   const avg = days > 7;
   const partial = avg && span < days;
+  const anyLogged = groups.some((g) => sets[g] > 0);
+  const unitNote = !avg || !anyLogged ? '' : !partial ? ', averaged' : span <= 7 ? ', under a week logged so far' : `, averaged over ${span} days logged`;
   const when = avg ? `in the last ${days} days` : 'this week';
   const summary = groups.map((g) => `${g} ${weekly[g]} sets${avg ? ' per week' : ''}`).join(', ');
   const untrained = groups.filter((g) => !(sets[g] > 0));
@@ -105,7 +107,7 @@ export function MuscleMap({ sets = {}, groups = [], compact = false, days = 7, s
       </div>
       <div className="mm-legend">
         {LEVEL_LABEL.map((text, i) => <span key={text}><i className={`mm-swatch mm-l${i}`} />{text}</span>)}
-        <span className="mm-unit">sets / week{avg ? (partial ? `, averaged over ${span} days logged` : ', averaged') : ''}</span>
+        <span className="mm-unit">sets / week{unitNote}</span>
       </div>
       {compact ? (
         <div className="mm-note">

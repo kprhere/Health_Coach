@@ -1503,24 +1503,31 @@ export function muscleGroupsOf(name, state) {
   return real.length ? real : ['Other'];
 }
 
+// One group for tonnage: the first muscle the exercise lists.
 export function muscleGroupOf(name, state) {
-  return groupOfLabel(exerciseMeta(name, state).p || '');
+  return muscleGroupsOf(name, state)[0];
 }
 
+// Map a free-text muscle label (library or a custom machine) to a group.
+// Whole-word matches only: "Ab" must not catch "Abductor", "Lat" must not
+// catch "Lateral delts". Shoulders are checked before Back so "rear delts"
+// stays a shoulder muscle.
+const GROUP_PATTERNS = [
+  ['Chest', /\b(chest|pecs?|pectorals?|pectoralis)\b/i],
+  ['Shoulders', /\b(delts?|deltoids?|shoulders?)\b/i],
+  ['Back', /\b(back|lats?|latissimus|traps?|trapezius|rhomboids?|erectors?|teres)\b/i],
+  ['Biceps', /\b(biceps?|brachialis|brachioradialis)\b/i],
+  ['Triceps', /\btriceps?\b/i],
+  ['Hamstrings', /\bhamstrings?\b/i],
+  ['Glutes', /\b(glutes?|gluteus|gluteals?|abductors?|outer thighs?)\b/i],
+  ['Quads', /\b(quads?|quadriceps|adductors?|inner thighs?)\b/i], // inner thigh counts toward thigh volume
+  ['Calves', /\b(calf|calves|soleus|gastrocnemius)\b/i],
+  ['Core', /\b(abs?|abdominals?|abdominis|obliques?|core|transverse)\b/i],
+  ['Conditioning', /\b(cardio|conditioning)\b/i],
+];
 function groupOfLabel(p) {
-  if (/Chest/i.test(p)) return 'Chest';
-  if (/Lat|Back|Trap/i.test(p)) return 'Back';
-  if (/Delt|Shoulder/i.test(p)) return 'Shoulders';
-  if (/Bicep|Brachialis/i.test(p)) return 'Biceps';
-  if (/Tricep/i.test(p)) return 'Triceps';
-  if (/Quad/i.test(p)) return 'Quads';
-  if (/Hamstring/i.test(p)) return 'Hamstrings';
-  if (/Glute/i.test(p)) return 'Glutes';
-  if (/Calf|Calves/i.test(p)) return 'Calves';
-  if (/Adductor/i.test(p)) return 'Quads'; // inner thigh counts toward thigh volume
-  if (/Ab|Oblique/i.test(p)) return 'Core';
-  if (/Cardio/i.test(p)) return 'Conditioning';
-  return 'Other';
+  const hit = GROUP_PATTERNS.find(([, re]) => re.test(String(p || '')));
+  return hit ? hit[0] : 'Other';
 }
 
 export function volumeByExercise(state) {
@@ -1768,7 +1775,7 @@ export function volumeByMuscleWindow(state, days = 21, endKey = todayKey()) {
 // Every completed working set, weight optional. Bodyweight and timed work
 // (crunches, dead bugs, planks) has no load, so allSetRecords drops it for
 // tonnage. Set COUNTS must still include it, or core never shows as trained.
-const hasWork = (c) => parseInt(c.reps, 10) > 0 || Number(c.seconds) > 0;
+const hasWork = (c) => parseInt(c.reps, 10) > 0 || parseFloat(c.seconds) > 0;
 export function allWorkingSets(state) {
   const recs = [];
   Object.entries(state.workoutSessions || {}).forEach(([date, s]) => {
@@ -1776,7 +1783,8 @@ export function allWorkingSets(state) {
     Object.values(s.entries).forEach((entry) => {
       if (!entry || entry.skipped) return;
       (entry.sets || []).forEach((set) => {
-        if (!set.isWarmup && hasWork(set)) recs.push({ date, name: entry.replacedWith || entry.exName });
+        // Drop rows extend the top set; they are one hard set, not several.
+        if (!set.isWarmup && !set.isDrop && hasWork(set)) recs.push({ date, name: entry.replacedWith || entry.exName });
       });
       (entry.rounds || []).forEach((rd) => {
         Object.entries(rd.byExercise || {}).forEach(([exName, c]) => {
@@ -1801,13 +1809,12 @@ export function setsByMuscleWindow(state, days = 21, endKey = todayKey()) {
 
 // Days of training history inside a window, used to turn set totals into a
 // weekly rate. Averaging 6 days of logs over 30 would make every muscle look
-// under-trained, so the window starts at the first logged set and is never
-// shorter than one week.
+// under-trained, so the span starts at the first set ever logged (history
+// before the window means the full window) and is never shorter than a week.
 export function loggedSpanDays(state, days = 30, endKey = todayKey()) {
-  const start = addDays(endKey, -days);
   let first = null;
   allWorkingSets(state).forEach((r) => {
-    if (r.date > start && r.date <= endKey && (!first || r.date < first)) first = r.date;
+    if (r.date <= endKey && (!first || r.date < first)) first = r.date;
   });
   if (!first) return Math.min(days, 7);
   return Math.min(days, Math.max(7, daysBetween(first, endKey) + 1));
@@ -1822,11 +1829,17 @@ export function loggedSpanDays(state, days = 30, endKey = todayKey()) {
 const BALANCE_MUSCLES = ['Chest', 'Back', 'Shoulders', 'Biceps', 'Triceps', 'Quads', 'Hamstrings', 'Glutes', 'Calves', 'Core'];
 const LOW_SETS = 6;
 export function muscleBalance(state) {
-  const days = 21, weeks = days / 7;
+  const days = 21;
+  const priorEnd = addDays(todayKey(), -days);
+  // Average over the days actually logged, so a new plan is not judged as if
+  // it had three weeks of history.
+  const span = loggedSpanDays(state, days);
+  const weeks = span / 7, priorWeeks = loggedSpanDays(state, days, priorEnd) / 7;
   const recent = setsByMuscleWindow(state, days);
-  const prior = setsByMuscleWindow(state, days, addDays(todayKey(), -days));
+  const prior = setsByMuscleWindow(state, days, priorEnd);
+  const since = span >= days ? 'in 3 weeks' : `in ${span} days`;
   const ranked = BALANCE_MUSCLES
-    .map((m) => ({ muscle: m, sets: Math.round(((recent[m] || 0) / weeks) * 10) / 10, prevSets: Math.round(((prior[m] || 0) / weeks) * 10) / 10 }))
+    .map((m) => ({ muscle: m, sets: Math.round(((recent[m] || 0) / weeks) * 10) / 10, prevSets: Math.round(((prior[m] || 0) / priorWeeks) * 10) / 10 }))
     .sort((a, b) => b.sets - a.sets);
   const totalSets = ranked.reduce((sum, x) => sum + x.sets, 0);
   const hints = [];
@@ -1834,7 +1847,7 @@ export function muscleBalance(state) {
     ranked.forEach(({ muscle, sets, prevSets }) => {
       const low = muscle.toLowerCase();
       if (sets === 0) {
-        hints.push({ muscle, kind: 'missing', tone: 'warn', text: `No direct ${low} sets in 3 weeks. Add a ${low} exercise to your next session.` });
+        hints.push({ muscle, kind: 'missing', tone: 'warn', text: `No direct ${low} sets ${since}. Add a ${low} exercise to your next session.` });
       } else if (sets < LOW_SETS) {
         hints.push({ muscle, kind: 'low', tone: 'warn', text: `${muscle} is light at ~${sets} sets/week — aim 8-12. Add 1-2 ${low} exercises or a few sets.` });
       } else if (prevSets >= LOW_SETS && sets < prevSets * 0.6) {
