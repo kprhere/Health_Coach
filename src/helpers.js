@@ -14,7 +14,7 @@ export { nutritionProfile };
 
 export const PROGRAM_START = '2026-07-08'; // start of the current fat-loss phase (latest scan)
 export const PHASE_NAME = 'Fat Loss Phase 1';
-export const STATE_VERSION = 14;
+export const STATE_VERSION = 15;
 
 // ---------- date utils ----------
 export const pad = (n) => String(n).padStart(2, '0');
@@ -395,6 +395,27 @@ const MIGRATIONS = {
         .reduce((o, k) => ({ ...o, [k]: PROFILE_DEFAULT[k] }), {}) };
     }
     return { ...migrated, version: 14 };
+  },
+  15: (state) => {
+    // 2026-11-21: the bench is a free barbell, not the plate-loaded Hammer
+    // Strength press, so the plate loader must add the 45 lb bar. Planned
+    // slots move to Barbell Bench Press (Monday main press and the Saturday
+    // fallback); slots already swapped to something else keep the swap. The
+    // persistent note and restart weight follow the move. Logs are untouched.
+    const FROM = 'Hammer Strength Bench Press', TO = 'Barbell Bench Press';
+    const migrated = mergeState(defaultState(), state);
+    const days = (migrated.program && migrated.program.days) || {};
+    const fix = (day) => (day && Array.isArray(day.blocks) ? day.blocks : []).forEach((b) => {
+      if (!b) return;
+      if (b.name === FROM) b.name = TO;
+      (Array.isArray(b.exercises) ? b.exercises : []).forEach((e) => { if (e && e.name === FROM) e.name = TO; });
+    });
+    Object.values(days).forEach((day) => { fix(day); if (day) fix(day.fallback); });
+    ['exerciseNotes', 'restartWeights'].forEach((key) => {
+      const bag = migrated[key];
+      if (bag && bag[FROM] != null && bag[TO] == null) bag[TO] = clone(bag[FROM]);
+    });
+    return { ...migrated, version: 15 };
   },
 };
 
