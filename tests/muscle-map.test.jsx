@@ -2,16 +2,16 @@
 import React from 'react';
 import { expect, test } from 'vitest';
 import { render } from '@testing-library/react';
-import { MuscleMap, muscleLevel } from '../src/MuscleMap.jsx';
+import { MuscleMap, muscleLevel, weeklyRate, RangeToggle } from '../src/MuscleMap.jsx';
 
 test('levels follow the weekly set ranges', () => {
-  expect([0, 3, 6, 12, 16, 17].map(muscleLevel)).toEqual([0, 1, 2, 2, 2, 3]);
+  expect([0, 3, 6, 11, 12, 16, 17].map(muscleLevel)).toEqual([0, 1, 2, 2, 3, 3, 4]);
 });
 
 test('the map shades trained muscles and outlines untrained ones', () => {
   const groups = ['Chest', 'Back', 'Biceps', 'Quads'];
   const { container } = render(<MuscleMap sets={{ Chest: 10, Biceps: 20, Quads: 0, Back: 3 }} groups={groups} />);
-  expect(container.querySelectorAll('.mm-muscle.mm-l3').length).toBe(2); // both biceps
+  expect(container.querySelectorAll('.mm-muscle.mm-l4').length).toBe(2); // both biceps
   expect(container.querySelectorAll('.mm-muscle.mm-l2').length).toBe(2); // both chest
   expect(container.querySelectorAll('.mm-muscle.mm-l1').length).toBe(1); // back
   expect(container.querySelectorAll('.mm-muscle.mm-l0').length).toBeGreaterThan(0); // quads etc.
@@ -26,5 +26,30 @@ test('compact map for Home lists untrained and low muscles instead of the full g
   expect(container.querySelector('.mm-sets')).toBeNull();
   const note = container.querySelector('.mm-note').textContent;
   expect(note).toContain('Not trained this week: Quads');
-  expect(note).toContain('Under 6 sets: Back');
+  expect(note).toContain('Under 6 sets a week: Back');
+});
+
+test('12-16 sets get their own brighter shade', () => {
+  const { container } = render(<MuscleMap sets={{ Quads: 14, Triceps: 7 }} groups={['Quads', 'Triceps']} />);
+  expect(container.querySelectorAll('.mm-muscle.mm-l3').length).toBe(2); // both quads
+  expect(container.querySelectorAll('.mm-muscle.mm-l2').length).toBe(2); // both triceps
+});
+
+test('30-day view colors by weekly average and shows the total', () => {
+  expect(weeklyRate(30, 30)).toBe(7);
+  expect(weeklyRate(9, 7)).toBe(9);
+  const { container } = render(<MuscleMap days={30} sets={{ Core: 30, Chest: 8 }} groups={['Core', 'Chest']} />);
+  expect(container.querySelectorAll('.mm-muscle.mm-l2').length).toBe(1); // core at 7/wk
+  expect(container.querySelectorAll('.mm-muscle.mm-l1').length).toBe(2); // chest at ~1.9/wk
+  const core = [...container.querySelectorAll('.mm-set')].find((el) => el.textContent.startsWith('Core'));
+  expect(core.textContent).toContain('30 total');
+  expect(container.querySelector('.mm-figures').getAttribute('aria-label')).toContain('in the last 30 days');
+});
+
+test('range toggle switches between 7 and 30 days', () => {
+  let picked = 7;
+  const { getByText } = render(<RangeToggle days={7} onDays={(d) => { picked = d; }} />);
+  expect(getByText('7 days').getAttribute('aria-pressed')).toBe('true');
+  getByText('30 days').click();
+  expect(picked).toBe(30);
 });

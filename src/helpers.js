@@ -1494,8 +1494,20 @@ export function dailyScore(key, state) {
 // ============================================================
 // ANALYTICS  (volume + superset / finisher completion)
 // ============================================================
+// Every group named in an exercise's primary label. Compound lifts list two
+// ("Quads, Glutes"), and each one gets a set, so squats and RDLs count for glutes.
+export function muscleGroupsOf(name, state) {
+  const parts = String(exerciseMeta(name, state).p || '').split(',').map((x) => x.trim()).filter(Boolean);
+  const groups = [...new Set(parts.map(groupOfLabel))];
+  const real = groups.filter((g) => g !== 'Other');
+  return real.length ? real : ['Other'];
+}
+
 export function muscleGroupOf(name, state) {
-  const p = exerciseMeta(name, state).p || '';
+  return groupOfLabel(exerciseMeta(name, state).p || '');
+}
+
+function groupOfLabel(p) {
   if (/Chest/i.test(p)) return 'Chest';
   if (/Lat|Back|Trap/i.test(p)) return 'Back';
   if (/Delt|Shoulder/i.test(p)) return 'Shoulders';
@@ -1753,13 +1765,35 @@ export function volumeByMuscleWindow(state, days = 21, endKey = todayKey()) {
 }
 
 // count of working SETS per muscle group in a recent window
+// Every completed working set, weight optional. Bodyweight and timed work
+// (crunches, dead bugs, planks) has no load, so allSetRecords drops it for
+// tonnage. Set COUNTS must still include it, or core never shows as trained.
+const hasWork = (c) => parseInt(c.reps, 10) > 0 || Number(c.seconds) > 0;
+export function allWorkingSets(state) {
+  const recs = [];
+  Object.entries(state.workoutSessions || {}).forEach(([date, s]) => {
+    if (!s || !s.entries) return;
+    Object.values(s.entries).forEach((entry) => {
+      if (!entry || entry.skipped) return;
+      (entry.sets || []).forEach((set) => {
+        if (!set.isWarmup && hasWork(set)) recs.push({ date, name: entry.replacedWith || entry.exName });
+      });
+      (entry.rounds || []).forEach((rd) => {
+        Object.entries(rd.byExercise || {}).forEach(([exName, c]) => {
+          if (c && !c.skipped && hasWork(c)) recs.push({ date, name: c.replacedWith || exName });
+        });
+      });
+    });
+  });
+  return recs;
+}
+
 export function setsByMuscleWindow(state, days = 21, endKey = todayKey()) {
   const start = addDays(endKey, -days);
   const out = {};
-  allSetRecords(state).forEach((r) => {
+  allWorkingSets(state).forEach((r) => {
     if (r.date > start && r.date <= endKey) {
-      const g = muscleGroupOf(r.name, state);
-      out[g] = (out[g] || 0) + 1;
+      muscleGroupsOf(r.name, state).forEach((g) => { out[g] = (out[g] || 0) + 1; });
     }
   });
   return out;
