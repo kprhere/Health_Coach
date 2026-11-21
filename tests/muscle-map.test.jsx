@@ -58,10 +58,18 @@ test('30-day view with under a week of logs does not dilute the average', () => 
   const { container } = render(<MuscleMap days={30} spanDays={6} sets={{ Core: 12 }} groups={['Core']} />);
   expect(container.querySelector('.mm-set').textContent).toContain('12');
   expect(container.querySelectorAll('.mm-muscle.mm-l3').length).toBe(1); // 12/wk, not 2.8
-  expect(container.querySelector('.mm-unit').textContent).toContain('averaged over 7 days logged');
+  expect(container.querySelector('.mm-unit').textContent).toContain('under a week logged so far');
 });
 
 test('30-day view with two weeks of logs averages over 14 days', () => {
   const { container } = render(<MuscleMap days={30} spanDays={14} sets={{ Core: 20 }} groups={['Core']} />);
   expect(container.querySelector('.mm-set b').textContent).toContain('10');
+});
+
+test('legend wording: no logs, partial span, full window', () => {
+  const unit = (props) => render(<MuscleMap groups={['Core']} {...props} />).container.querySelector('.mm-unit').textContent;
+  expect(unit({ days: 30, spanDays: 7, sets: {} })).toBe('sets / week');
+  expect(unit({ days: 30, spanDays: 20, sets: { Core: 9 } })).toBe('sets / week, averaged over 20 days logged');
+  expect(unit({ days: 30, spanDays: 30, sets: { Core: 9 } })).toBe('sets / week, averaged');
+  expect(unit({ days: 7, sets: { Core: 9 } })).toBe('sets / week');
 });
