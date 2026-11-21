@@ -411,3 +411,35 @@ test('finish exercise marks blank sets missed, and logging a missed set clears i
   await user.click(screen.getByText('Mark set missed'));
   expect(screen.getAllByText('MISS').length).toBe(1);
 });
+
+test('Add exercise defaults to right after the last finished block and lands there', async () => {
+  const user = userEvent.setup();
+  const date = '2026-08-17';
+  const state = defaultState();
+  const plan = resolveWorkout(date, state);
+  let session = { ...initSession(plan), date };
+  const [first, second] = plan.blocks;
+  session.entries[first.id].skipped = true; // first block finished (skipped counts)
+  const ctx = {
+    state, selDate: date, getSession: () => session, mutateEntry: () => {},
+    patchSession: (_d, fn) => { const next = structuredClone(session); fn(next); session = next; },
+    setRestart: () => {}, setSatMode: () => {}, toggleActivity: () => {}, swapWorkoutDates: () => {},
+    clearWorkoutSwap: () => {}, setSetting: () => {}, setExerciseNote: () => {},
+  };
+  const view = render(<TrainTab ctx={ctx} />);
+  await user.click(screen.getByRole('button', { name: /^Add exercise$/ }));
+  const select = screen.getByRole('combobox');
+  expect(select.value).toBe(first.id);
+  expect(select.selectedOptions[0].textContent).toContain('(after last finished)');
+  await user.type(screen.getByLabelText('Find an exercise'), 'Side Plank');
+  await user.click(document.querySelector('.lib-item'));
+  const added = Object.entries(session.entries).find(([id]) => !plan.blocks.some((b) => b.id === id));
+  expect(added[1].afterBlockId).toBe(first.id);
+  view.rerender(<TrainTab ctx={{ ...ctx }} />);
+  const heads = [...document.querySelectorAll('.block-card')].map((el) => el.textContent);
+  const iFirst = heads.findIndex((t) => t.includes(first.name));
+  const iAdded = heads.findIndex((t) => t.includes('Side Plank'));
+  const iSecond = heads.findIndex((t) => t.includes(second.name));
+  expect(iFirst).toBeLessThan(iAdded);
+  expect(iAdded).toBeLessThan(iSecond);
+});
