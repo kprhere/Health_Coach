@@ -100,7 +100,7 @@ test('custom machine labels map by whole words', () => {
     'Lateral Delts': ['Shoulders'], 'Rear delts, Upper back': ['Shoulders', 'Back'],
     Core: ['Core'], Abs: ['Core'], 'Pecs': ['Chest'], 'Lats, Biceps': ['Back', 'Biceps'],
     Traps: ['Back'], 'Rhomboids': ['Back'], 'Soleus': ['Calves'], 'Glute medius': ['Glutes'],
-    'Forearms': ['Other'], 'Hip flexors': ['Other'],
+    'Forearms': ['Forearms'], 'Wrist flexors': ['Forearms'], Brachioradialis: ['Forearms'], 'Hip flexors': ['Other'],
   };
   for (const [label, want] of Object.entries(cases)) assert.deepEqual(muscleGroupsOf('X', custom(label)), want, label);
 });

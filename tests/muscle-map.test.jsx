@@ -73,3 +73,9 @@ test('legend wording: no logs, partial span, full window', () => {
   expect(unit({ days: 30, spanDays: 30, sets: { Core: 9 } })).toBe('sets / week, averaged');
   expect(unit({ days: 7, sets: { Core: 9 } })).toBe('sets / week');
 });
+
+test('forearms have their own shapes on both views', () => {
+  const { container } = render(<MuscleMap sets={{ Forearms: 8 }} groups={['Biceps', 'Forearms']} />);
+  expect(container.querySelectorAll('.mm-muscle.mm-l2').length).toBe(4); // two arms, front and back
+  expect([...container.querySelectorAll('.mm-set')].some((el) => el.textContent.startsWith('Forearms'))).toBe(true);
+});

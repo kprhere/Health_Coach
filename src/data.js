@@ -160,8 +160,10 @@ export const EXERCISES = {
   'Barbell Curl': X('Biceps', 'Forearms', 'Barbell', 'Beginner', 'Overloaded biceps', 'Dumbbell Curl', 'EZ-Bar Curl', 'Elbows pinned, no swing', 'Rocking the torso to lift'),
   'Dumbbell Curl': X('Biceps', 'Forearms', 'Dumbbells', 'Beginner', 'Balanced biceps', 'Cable Curl', 'Life Fitness Bicep Curl', 'Supinate hard at the top', 'Swinging and half reps'),
   'Incline DB Curl': X('Biceps (long head)', 'Forearms', 'Dumbbells', 'Beginner', 'Biceps stretch and peak', 'Dumbbell Curl', 'Dual Pulley Bayesian Curl', 'Arms behind body, full stretch', 'Coming forward and shortening range'),
-  'Hammer Curl': X('Brachialis, Biceps', 'Forearms', 'Dumbbells', 'Beginner', 'Arm thickness and grip', 'Cable Curl', 'Life Fitness Bicep Curl', 'Neutral grip, elbows still', 'Swinging the weight up'),
+  'Hammer Curl': X('Brachialis, Brachioradialis, Biceps', 'Forearms', 'Dumbbells', 'Beginner', 'Arm thickness and grip', 'Cable Curl', 'Life Fitness Bicep Curl', 'Neutral grip, elbows still', 'Swinging the weight up'),
   'Reverse Curl': X('Brachialis, Brachioradialis', 'Forearms, Biceps', 'EZ Bar', 'Beginner', 'Forearm and brachialis size that pushes arm veins outward', 'Hammer Curl', 'Cable Reverse Curl', 'Overhand grip, wrists straight, elbows pinned', 'Curling the wrists or swinging'),
+  'Dumbbell Wrist Curl': X('Forearms', 'Grip', 'Dumbbells', 'Beginner', 'Forearm flexors and grip', 'Reverse Wrist Curl', 'Barbell or cable wrist curl', 'Forearms on thighs or a bench, wrists past the edge, curl only at the wrist, full stretch at the bottom', 'Lifting with the elbows or cutting the range short'),
+  'Reverse Wrist Curl': X('Forearms', 'Brachioradialis, Grip', 'Dumbbells', 'Beginner', 'Forearm extensors, balances wrist curls', 'Dumbbell Wrist Curl', 'EZ-bar reverse wrist curl', 'Palms down, forearms supported, lift the knuckles up, lower slowly', 'Using too much weight and bouncing the wrist'),
   'Cable Curl': X('Biceps', 'Forearms', 'Cable', 'Beginner', 'Constant-tension biceps', 'Dumbbell Curl', 'Dual Low Pulley Curl', 'Keep tension at the bottom', 'Letting the stack rest each rep'),
   // EOS dual low pulley station (two low cable stacks side by side).
   'Dual Low Pulley Curl': X('Biceps', 'Forearms', 'Cable', 'Beginner', 'Constant-tension biceps, both arms at once or one at a time', 'Cable Curl', 'Dual low pulley station', 'Stand between the low pulleys, elbows pinned at your sides, curl both handles and squeeze 1s at the top', 'Elbows drifting forward or leaning back to finish the rep'),
@@ -268,7 +270,7 @@ export const EXERCISES = {
 };
 
 export const EXERCISE_NAMES = Object.keys(EXERCISES).sort();
-export const MUSCLE_GROUPS = ['Chest', 'Back', 'Shoulders', 'Biceps', 'Triceps', 'Quads', 'Hamstrings', 'Glutes', 'Calves', 'Core', 'Cardio', 'Mobility'];
+export const MUSCLE_GROUPS = ['Chest', 'Back', 'Shoulders', 'Biceps', 'Triceps', 'Forearms', 'Quads', 'Hamstrings', 'Glutes', 'Calves', 'Core', 'Cardio', 'Mobility'];
 
 // ============================================================
 // BLOCK BUILDERS  (first-class block types)
