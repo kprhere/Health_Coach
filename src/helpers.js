@@ -14,7 +14,7 @@ export { nutritionProfile };
 
 export const PROGRAM_START = '2026-07-08'; // start of the current fat-loss phase (latest scan)
 export const PHASE_NAME = 'Fat Loss Phase 1';
-export const STATE_VERSION = 15;
+export const STATE_VERSION = 16;
 
 // ---------- date utils ----------
 export const pad = (n) => String(n).padStart(2, '0');
@@ -416,6 +416,27 @@ const MIGRATIONS = {
       if (bag && bag[FROM] != null && bag[TO] == null) bag[TO] = clone(bag[FROM]);
     });
     return { ...migrated, version: 15 };
+  },
+  16: (state) => {
+    // 2026-11-21: on non-veg days a new primary lunch (chicken, eggs, roti,
+    // steamed veg) and dinner (chicken, steamed veg, eggs optional) went in
+    // front of the older plates. Every logged lunch and dinner on those days
+    // moves its choice up by one, so past days still show what was eaten.
+    const migrated = mergeState(defaultState(), state);
+    Object.entries(migrated.mealLogs || {}).forEach(([date, log]) => {
+      if (!log || typeof log !== 'object') return;
+      if (!['training', 'rest'].includes(nutritionDayType(date, migrated))) return;
+      const slots = mealPlanFor(nutritionDayType(date, migrated), migrated);
+      const touched = ['Lunch', 'Dinner'].map((name) => slots.findIndex((x) => x.name === name)).filter((i) => i >= 0);
+      if (!touched.length) return;
+      log.choices = { ...(log.choices || {}) };
+      touched.forEach((i) => {
+        const was = log.choices[i];
+        if (was == null && !(log.eaten && log.eaten[i])) return; // never chosen or eaten: take the new default
+        log.choices[i] = (Number(was) || 0) + 1;
+      });
+    });
+    return { ...migrated, version: 16 };
   },
 };
 
