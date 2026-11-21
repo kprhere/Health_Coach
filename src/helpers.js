@@ -1753,10 +1753,33 @@ export function volumeByMuscleWindow(state, days = 21, endKey = todayKey()) {
 }
 
 // count of working SETS per muscle group in a recent window
+// Every completed working set, weight optional. Bodyweight and timed work
+// (crunches, dead bugs, planks) has no load, so allSetRecords drops it for
+// tonnage. Set COUNTS must still include it, or core never shows as trained.
+const hasWork = (c) => parseInt(c.reps, 10) > 0 || Number(c.seconds) > 0;
+export function allWorkingSets(state) {
+  const recs = [];
+  Object.entries(state.workoutSessions || {}).forEach(([date, s]) => {
+    if (!s || !s.entries) return;
+    Object.values(s.entries).forEach((entry) => {
+      if (!entry || entry.skipped) return;
+      (entry.sets || []).forEach((set) => {
+        if (!set.isWarmup && hasWork(set)) recs.push({ date, name: entry.replacedWith || entry.exName });
+      });
+      (entry.rounds || []).forEach((rd) => {
+        Object.entries(rd.byExercise || {}).forEach(([exName, c]) => {
+          if (c && !c.skipped && hasWork(c)) recs.push({ date, name: c.replacedWith || exName });
+        });
+      });
+    });
+  });
+  return recs;
+}
+
 export function setsByMuscleWindow(state, days = 21, endKey = todayKey()) {
   const start = addDays(endKey, -days);
   const out = {};
-  allSetRecords(state).forEach((r) => {
+  allWorkingSets(state).forEach((r) => {
     if (r.date > start && r.date <= endKey) {
       const g = muscleGroupOf(r.name, state);
       out[g] = (out[g] || 0) + 1;
