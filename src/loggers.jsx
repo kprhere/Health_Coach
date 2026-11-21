@@ -574,9 +574,12 @@ export function BlockLogger(props) {
 // positions: [{ id: null|blockId, label }] - null means "at the end". Lets the
 // user drop a new exercise exactly where it belongs in the session (e.g.
 // between block 6 and 7) instead of always appending it after everything.
-export function AddExercisePicker({ onPick, state, positions }) {
+export function AddExercisePicker({ onPick, state, positions, defaultPosition }) {
   const [q, setQ] = useState('');
-  const [afterId, setAfterId] = useState(positions && positions.length ? positions[0].id : null);
+  const [afterId, setAfterId] = useState(() => {
+    if (!positions || !positions.length) return null;
+    return positions.some((p) => p.id === defaultPosition) ? defaultPosition : positions[0].id;
+  });
   const custom = state.customExercises || {};
   const matches = exerciseNames(state).filter((n) => n.toLowerCase().includes(q.toLowerCase()));
   const list = [

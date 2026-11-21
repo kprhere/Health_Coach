@@ -17,7 +17,7 @@ import {
 } from './data.js';
 import {
   todayKey, addDays, prettyDate, shortDate, dowOf, clone, fastEndTime,
-  completeSession, reopenSession,
+  completeSession, reopenSession, defaultInsertAfter,
   barlessBenchSessions, applyBenchBarFix, undoBenchBarFix, benchBarFixedCount, BENCH_BAR_FIX,
   dayFlags, resolveWorkout, resolveNutrition, initSession,
   blockDone, workoutProgress, nutritionActuals, nutritionAdherence,
@@ -725,11 +725,13 @@ export function TrainTab({ ctx }) {
     else if (afterId && planIds.has(afterId)) (extrasByAfter[afterId] = extrasByAfter[afterId] || []).push(id);
     else endExtras.push(id);
   });
+  // New exercises default to right after whatever is finished so far.
+  const insertDefault = defaultInsertAfter(plan.blocks, session.entries);
   const insertPositions = [
     { id: '__start__', label: 'At the start' },
     ...plan.blocks.map((b) => ({ id: b.id, label: `After: ${b.name}` })),
     { id: null, label: 'At the end' },
-  ];
+  ].map((p) => (p.id === insertDefault ? { ...p, label: `${p.label} (after last finished)` } : p));
 
   const blockFromEntry = (id, entry) => ({
     id, blockType: 'single', name: entry.name || entry.exName,
@@ -841,7 +843,7 @@ export function TrainTab({ ctx }) {
           <div className="workout-command">
             <div className="workout-command-copy">
               <span className="eyebrow"><Sparkles size={13} /> Build today’s session</span>
-              <b>Add your equipment before the first planned movement—or place it exactly where you want.</b>
+              <b>New exercises go right after what you have finished, or pick any spot.</b>
             </div>
             <button className="btn primary" onClick={() => setAdding(true)}><Plus size={16} /> Add exercise</button>
           </div>
@@ -904,7 +906,7 @@ export function TrainTab({ ctx }) {
 
       {adding ? (
         <Sheet title="Add an exercise" onClose={() => setAdding(false)}>
-          <AddExercisePicker state={s} positions={insertPositions} onPick={(name, afterId) => {
+          <AddExercisePicker state={s} positions={insertPositions} defaultPosition={insertDefault} onPick={(name, afterId) => {
             const { id, entry } = makeUnplannedEntry(name, s, afterId);
             ctx.patchSession(date, (x) => { x.entries[id] = entry; });
             setAdding(false);

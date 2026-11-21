@@ -1142,6 +1142,28 @@ export function reopenSession(session) {
   session.completed = false;
 }
 
+// Where a newly added exercise goes by default: right after the last block
+// that is finished, in the order the Train tab shows them (start extras,
+// each planned block followed by extras placed after it, end extras).
+// Returns an afterBlockId: '__start__', a planned block id, or null (end).
+export function defaultInsertAfter(planBlocks = [], entries = {}) {
+  const planIds = new Set(planBlocks.map((b) => b.id));
+  const extras = Object.keys(entries).filter((id) => !planIds.has(id));
+  const slotOf = (id) => {
+    const a = entries[id] && entries[id].afterBlockId;
+    if (a === '__start__') return '__start__';
+    return a && planIds.has(a) ? a : null;
+  };
+  const order = [
+    ...extras.filter((id) => slotOf(id) === '__start__').map((id) => ['__start__', id]),
+    ...planBlocks.flatMap((b) => [[b.id, b.id], ...extras.filter((id) => slotOf(id) === b.id).map((id) => [b.id, id])]),
+    ...extras.filter((id) => slotOf(id) === null).map((id) => [null, id]),
+  ];
+  let slot = '__start__';
+  order.forEach(([s, id]) => { if (entries[id] && blockDone(entries[id])) slot = s; });
+  return slot;
+}
+
 export function workoutProgress(session) {
   const ids = Object.keys(session.entries || {});
   if (ids.length === 0) return { done: 0, total: 0, pct: 0 };
