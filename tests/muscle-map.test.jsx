@@ -53,3 +53,15 @@ test('range toggle switches between 7 and 30 days', () => {
   getByText('30 days').click();
   expect(picked).toBe(30);
 });
+
+test('30-day view with under a week of logs does not dilute the average', () => {
+  const { container } = render(<MuscleMap days={30} spanDays={6} sets={{ Core: 12 }} groups={['Core']} />);
+  expect(container.querySelector('.mm-set').textContent).toContain('12');
+  expect(container.querySelectorAll('.mm-muscle.mm-l3').length).toBe(1); // 12/wk, not 2.8
+  expect(container.querySelector('.mm-unit').textContent).toContain('averaged over 7 days logged');
+});
+
+test('30-day view with two weeks of logs averages over 14 days', () => {
+  const { container } = render(<MuscleMap days={30} spanDays={14} sets={{ Core: 20 }} groups={['Core']} />);
+  expect(container.querySelector('.mm-set b').textContent).toContain('10');
+});
