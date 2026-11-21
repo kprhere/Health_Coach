@@ -1602,8 +1602,9 @@ const GROUP_PATTERNS = [
   ['Chest', /\b(chest|pecs?|pectorals?|pectoralis)\b/i],
   ['Shoulders', /\b(delts?|deltoids?|shoulders?)\b/i],
   ['Back', /\b(back|lats?|latissimus|traps?|trapezius|rhomboids?|erectors?|teres)\b/i],
-  ['Biceps', /\b(biceps?|brachialis|brachioradialis)\b/i],
+  ['Biceps', /\b(biceps?|brachialis)\b/i],
   ['Triceps', /\btriceps?\b/i],
+  ['Forearms', /\b(forearms?|brachioradialis|wrists?|grip)\b/i],
   ['Hamstrings', /\bhamstrings?\b/i],
   ['Glutes', /\b(glutes?|gluteus|gluteals?|abductors?|outer thighs?)\b/i],
   ['Quads', /\b(quads?|quadriceps|adductors?|inner thighs?)\b/i], // inner thigh counts toward thigh volume

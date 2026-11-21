@@ -41,7 +41,9 @@ test('compound lifts credit every primary muscle they list', () => {
   assert.deepEqual(muscleGroupsOf('Back Squat', {}), ['Quads', 'Glutes']);
   assert.deepEqual(muscleGroupsOf('Romanian Deadlift', {}), ['Hamstrings', 'Glutes']);
   assert.deepEqual(muscleGroupsOf('Deadlift', {}), ['Back', 'Hamstrings']);
-  assert.deepEqual(muscleGroupsOf('Hammer Curl', {}), ['Biceps']);
+  assert.deepEqual(muscleGroupsOf('Hammer Curl', {}), ['Biceps', 'Forearms']);
+  assert.deepEqual(muscleGroupsOf('Reverse Curl', {}), ['Biceps', 'Forearms']);
+  assert.equal(muscleGroupOf('Reverse Curl', {}), 'Biceps');
   assert.equal(muscleGroupOf('Back Squat', {}), 'Quads'); // tonnage keeps one group
   const sets = setsByMuscleWindow({ workoutSessions: { [day]: { entries: { sq: { exName: 'Back Squat', sets: [{ weight: '185', reps: '6' }] } } } } }, 7, day);
   assert.deepEqual(sets, { Quads: 1, Glutes: 1 });
