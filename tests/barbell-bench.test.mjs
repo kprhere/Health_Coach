@@ -48,3 +48,58 @@ test('a slot the user already swapped to another press keeps that swap', () => {
   const after = migrateState(old);
   assert.equal(after.program.days[1].blocks[0].exercises[0].name, 'Dumbbell Bench Press');
 });
+
+import { barlessBenchSessions, applyBenchBarFix, undoBenchBarFix, benchBarFixedCount, allSetRecords, getNextTarget } from '../src/helpers.js';
+
+const benchLogs = () => ({
+  workoutSessions: {
+    '2026-11-16': { entries: {
+      b: { exName: 'Hammer Strength Bench Press', sets: [{ weight: '50', reps: '10', isWarmup: true }, { weight: '90', reps: '8' }, { weight: '90', reps: '7' }, { weight: '', reps: '' }] },
+      r: { exName: 'Hammer Strength High Row', sets: [{ weight: '90', reps: '10' }] },
+    } },
+    '2026-11-18': { entries: { s: { exName: 'Dumbbell Bench Press', replacedWith: 'Hammer Strength Bench Press', sets: [{ weight: '67.5', reps: '6' }] } } },
+    '2026-11-20': { entries: { k: { exName: 'Hammer Strength Bench Press', sets: [{ weight: '', reps: '' }] } } }, // planned, nothing logged
+  },
+});
+
+test('finds only bench entries with logged weights, oldest first', () => {
+  const found = barlessBenchSessions(benchLogs());
+  assert.deepEqual(found.map((f) => `${f.date}/${f.id}`), ['2026-11-16/b', '2026-11-18/s']);
+  assert.deepEqual(found[0].sets.map((x) => [x.before, x.after]), [[50, 95], [90, 135], [90, 135]]);
+});
+
+test('apply adds the bar, renames to the barbell, leaves other lifts alone', () => {
+  const st = benchLogs();
+  assert.equal(applyBenchBarFix(st, 45), 2);
+  const b = st.workoutSessions['2026-11-16'].entries.b;
+  assert.deepEqual(b.sets.map((x) => x.weight), ['95', '135', '135', '']);
+  assert.equal(b.exName, 'Barbell Bench Press');
+  assert.equal(st.workoutSessions['2026-11-16'].entries.r.sets[0].weight, '90');
+  const s = st.workoutSessions['2026-11-18'].entries.s;
+  assert.equal(s.exName, 'Dumbbell Bench Press');
+  assert.equal(s.replacedWith, 'Barbell Bench Press');
+  assert.equal(s.sets[0].weight, '112.5');
+  assert.equal(st.workoutSessions['2026-11-20'].entries.k.exName, 'Hammer Strength Bench Press');
+  assert.equal(benchBarFixedCount(st), 2);
+  assert.deepEqual(barlessBenchSessions(st), []);
+  assert.equal(applyBenchBarFix(st, 45), 0); // never adds the bar twice
+  const recs = allSetRecords(st).filter((r) => r.name === 'Barbell Bench Press');
+  assert.deepEqual(recs.map((r) => r.weight), [135, 135, 112.5]);
+  assert.match(getNextTarget('Barbell Bench Press', st, { repLow: 6, repHigh: 8, rpe: 7 }).text, /^135 lb|^112\.5 lb/);
+});
+
+test('undo restores the original entries exactly', () => {
+  const st = benchLogs();
+  const before = JSON.stringify(st);
+  applyBenchBarFix(st, 45);
+  assert.equal(undoBenchBarFix(st), 2);
+  assert.equal(JSON.stringify(st), before);
+});
+
+test('a custom bar weight is used, and a bad one changes nothing', () => {
+  const st = benchLogs();
+  assert.equal(applyBenchBarFix(st, 0), 0);
+  assert.equal(applyBenchBarFix(st, 'x'), 0);
+  applyBenchBarFix(st, 35);
+  assert.equal(st.workoutSessions['2026-11-16'].entries.b.sets[1].weight, '125');
+});

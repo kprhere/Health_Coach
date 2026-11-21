@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import React, { useState } from 'react';
-import { cleanup, render, screen, within } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, describe, expect, test } from 'vitest';
 
@@ -377,3 +377,37 @@ test('tapping one side of plates fills the next empty set with the full total', 
   expect(screen.getByLabelText('Set 3 weight').value).toBe('225');
 });
 
+
+test('bench history card lists barless sessions, applies the bar, then offers undo in More', async () => {
+  const { BenchHistoryFix } = await import('../src/BodyRecompOS.jsx');
+  const { applyBenchBarFix: apply } = await import('../src/helpers.js');
+  const base = defaultState();
+  base.workoutSessions = { '2026-11-16': { entries: { b: { exName: 'Hammer Strength Bench Press', sets: [{ weight: '90', reps: '8' }] } } } };
+  let state = base;
+  const ctx = { get state() { return state; }, mutate: (fn) => { const d = JSON.parse(JSON.stringify(state)); fn(d); state = d; }, setSetting: () => {} };
+  const view = render(<BenchHistoryFix ctx={ctx} />);
+  expect(screen.getByText(/90→135×8/)).toBeTruthy();
+  fireEvent.click(screen.getByText('Add bar to 1 session'));
+  expect(state.workoutSessions['2026-11-16'].entries.b.sets[0].weight).toBe('135');
+  view.unmount();
+  render(<BenchHistoryFix ctx={ctx} always />);
+  expect(screen.getByText('Undo bench fix')).toBeTruthy();
+  expect(apply(JSON.parse(JSON.stringify(state)))).toBe(0);
+});
+
+test('finish exercise marks blank sets missed, and logging a missed set clears it', async () => {
+  const user = userEvent.setup();
+  render(<BarbellHarness />);
+  await user.type(screen.getByLabelText('Set 1 weight'), '225');
+  await user.type(screen.getByLabelText('Set 1 reps'), '5');
+  await user.click(screen.getByText('Finish exercise'));
+  expect(screen.getAllByText('MISS').length).toBe(2);
+  expect(screen.getByText(/2 missed sets/)).toBeTruthy();
+  await user.type(screen.getByLabelText('Set 3 reps'), '4');
+  expect(screen.getAllByText('MISS').length).toBe(1);
+  await user.click(screen.getByText('Finished · reopen'));
+  expect(screen.queryAllByText('MISS').length).toBe(0);
+  await user.click(screen.getByLabelText('Set 2 details'));
+  await user.click(screen.getByText('Mark set missed'));
+  expect(screen.getAllByText('MISS').length).toBe(1);
+});

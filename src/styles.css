@@ -1377,3 +1377,8 @@ html.kb-open .bottom-nav { display: none; }
 .progress-rules summary::-webkit-details-marker { display: none; }
 .progress-rules-list { display: grid; gap: 8px; margin-top: 10px; font-size: 14px; line-height: 1.45; }
 .progress-rule b { color: var(--text, inherit); }
+
+.bench-fix-list { display: grid; gap: 4px; max-height: 180px; overflow: auto; }
+.bench-fix-row { display: grid; grid-template-columns: 56px minmax(0, 1fr); gap: 8px; font-size: 12px; align-items: baseline; }
+.bench-fix-row .mono { overflow-wrap: anywhere; }
+.tag-missed { font-size: 9.5px; font-weight: 700; letter-spacing: 0.04em; padding: 2px 4px; border-radius: 5px; color: var(--amber); background: rgba(240, 180, 60, 0.14); }
