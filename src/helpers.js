@@ -1799,6 +1799,20 @@ export function setsByMuscleWindow(state, days = 21, endKey = todayKey()) {
   return out;
 }
 
+// Days of training history inside a window, used to turn set totals into a
+// weekly rate. Averaging 6 days of logs over 30 would make every muscle look
+// under-trained, so the window starts at the first logged set and is never
+// shorter than one week.
+export function loggedSpanDays(state, days = 30, endKey = todayKey()) {
+  const start = addDays(endKey, -days);
+  let first = null;
+  allWorkingSets(state).forEach((r) => {
+    if (r.date > start && r.date <= endKey && (!first || r.date < first)) first = r.date;
+  });
+  if (!first) return Math.min(days, 7);
+  return Math.min(days, Math.max(7, daysBetween(first, endKey) + 1));
+}
+
 // ---------- smart lagging-muscle detector ----------
 // Uses weekly SET COUNT (the standard training-volume metric), NOT tonnage -
 // otherwise arms and delts, which always move less weight than legs, would

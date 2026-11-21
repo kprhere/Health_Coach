@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { setsByMuscleWindow, allSetRecords, muscleGroupsOf, muscleGroupOf } from '../src/helpers.js';
+import { loggedSpanDays, setsByMuscleWindow, allSetRecords, muscleGroupsOf, muscleGroupOf } from '../src/helpers.js';
 import { EXERCISES } from '../src/data.js';
 
 const day = '2026-11-21';
@@ -50,4 +50,11 @@ test('compound lifts credit every primary muscle they list', () => {
 test('every library exercise outside mobility maps to a real muscle group', () => {
   const untagged = Object.keys(EXERCISES).filter((n) => EXERCISES[n].p !== 'Mobility' && muscleGroupsOf(n, {}).includes('Other'));
   assert.deepEqual(untagged, []);
+});
+
+test('logged span starts at the first set in the window, at least a week', () => {
+  assert.equal(loggedSpanDays(state, 30, day), 7); // one day of logs
+  const two = { workoutSessions: { ...state.workoutSessions, '2026-11-02': { entries: { p: { exName: 'Plank', sets: [{ seconds: '30' }] } } } } };
+  assert.equal(loggedSpanDays(two, 30, day), 20);
+  assert.equal(loggedSpanDays({}, 30, day), 7);
 });

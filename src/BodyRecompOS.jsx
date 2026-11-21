@@ -27,7 +27,7 @@ import {
   supplementAdherence, hairHealthChecks, daysToLab,
   nutritionProfile, volumeTrend, muscleBalance, fmtVol, parseHealthParams, muscleWeekTrend,
   recompSignal, consistencyStreak, energyBalance, proteinPerLbLean, trainingLoadSummary,
-  customExercisePlanFits, workoutSwapPartner, workoutSessionHasData, missedSessions, setsByMuscleWindow,
+  customExercisePlanFits, workoutSwapPartner, workoutSessionHasData, missedSessions, setsByMuscleWindow, loggedSpanDays,
   observedActivityFactor, plannedWalkingMinutes, progressWindowSummary, postScanCoaching, nextNoMoonReminder,
   exerciseProgressSeries, recentPersonalRecords, trainingActivity, trainingConsistency, volumeByMuscleWindow,
   definitionGoal, segmentSummary,
@@ -337,7 +337,7 @@ function HomeTab({ ctx }) {
         <div className="split-main">
           <SectionTitle right={<RangeToggle days={mapDays} onDays={setMapDays} />}>Muscle map</SectionTitle>
           <Card className="pad-sm">
-            <MuscleMap compact days={mapDays} sets={setsByMuscleWindow(s, mapDays)} groups={MUSCLE_GROUPS.filter((g) => !['Cardio', 'Mobility'].includes(g))} />
+            <MuscleMap compact days={mapDays} spanDays={loggedSpanDays(s, mapDays)} sets={setsByMuscleWindow(s, mapDays)} groups={MUSCLE_GROUPS.filter((g) => !['Cardio', 'Mobility'].includes(g))} />
             <div className="btn-row" style={{ marginTop: 10 }}><button className="btn ghost sm" onClick={() => ctx.goto('stats')}>Sets per muscle</button></div>
           </Card>
 
@@ -1474,7 +1474,7 @@ function StatsTab({ ctx }) {
       <SectionTitle right={<Chip tone={missedMuscles.length <= 2 ? 'green' : 'amber'}>{trainedMuscles.length}/{strengthGroups.length} covered</Chip>}>Muscle coverage · last {mapDays} days</SectionTitle>
       <Card>
         <div style={{ display: 'flex', justifyContent: 'center', marginBottom: 10 }}><RangeToggle days={mapDays} onDays={setMapDays} /></div>
-        <MuscleMap days={mapDays} sets={recentSets} groups={strengthGroups} />
+        <MuscleMap days={mapDays} spanDays={loggedSpanDays(s, mapDays)} sets={recentSets} groups={strengthGroups} />
         <div className="muscle-coverage" style={{ marginTop: 12 }}>
           {strengthGroups.map((group) => <span key={group} className={`muscle-chip ${(recentSets[group] || 0) > 0 ? 'trained' : ''}`}>{group}<small>{(recentMuscles[group] || 0) > 0 ? fmtVol(recentMuscles[group]) : (recentSets[group] || 0) > 0 ? 'bodyweight' : 'not logged'}</small></span>)}
         </div>
