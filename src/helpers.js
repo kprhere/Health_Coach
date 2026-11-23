@@ -440,8 +440,8 @@ const MIGRATIONS = {
   },
   17: (state) => {
     // 2026-11-23: the Wednesday Core Circuit takes the floor ab moves from the
-    // ab circuit video (Toe Touches, Russian Twist, Scissor Kicks) in place of
-    // Dead Bug. Only a circuit still matching the old plan is rewritten; one
+    // ab circuit video (Toe Touches, Russian Twist, Scissor Kicks) alongside
+    // the existing Dead Bug. Only a circuit still matching the old plan is rewritten; one
     // the user already edited is left alone. Logs are untouched.
     const OLD = ['Reverse Crunch', 'Pallof Press', 'Dead Bug', 'Plank'];
     const NEW = [
@@ -450,6 +450,7 @@ const MIGRATIONS = {
       { name: 'Russian Twist', targetReps: '20 total', targetRpe: 7 },
       { name: 'Scissor Kicks', targetReps: '30s', targetRpe: 7 },
       { name: 'Pallof Press', targetReps: '10 / side', targetRpe: 7 },
+      { name: 'Dead Bug', targetReps: '8-10', targetRpe: 6 },
       { name: 'Plank', targetReps: '30-45s', targetRpe: 6 },
     ];
     const migrated = mergeState(defaultState(), state);

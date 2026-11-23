@@ -7,7 +7,7 @@ const circuitOf = (s) => s.program.days[3].blocks.find((b) => b.name === 'Core C
 const names = (b) => b.exercises.map((e) => e.name);
 
 test('default Core Circuit has the video ab moves', () => {
-  assert.deepEqual(names(circuitOf(defaultState())), ['Reverse Crunch', 'Toe Touches', 'Russian Twist', 'Scissor Kicks', 'Pallof Press', 'Plank']);
+  assert.deepEqual(names(circuitOf(defaultState())), ['Reverse Crunch', 'Toe Touches', 'Russian Twist', 'Scissor Kicks', 'Pallof Press', 'Dead Bug', 'Plank']);
 });
 
 test('every new ab move has a library entry that counts toward core', () => {
@@ -28,7 +28,7 @@ test('migration 17 rewrites an untouched old circuit and keeps edited ones', () 
     { name: 'Plank', targetReps: '30-45s', targetRpe: 6 },
   ];
   old.version = 16;
-  assert.deepEqual(names(circuitOf(migrateState(old))), ['Reverse Crunch', 'Toe Touches', 'Russian Twist', 'Scissor Kicks', 'Pallof Press', 'Plank']);
+  assert.deepEqual(names(circuitOf(migrateState(old))), ['Reverse Crunch', 'Toe Touches', 'Russian Twist', 'Scissor Kicks', 'Pallof Press', 'Dead Bug', 'Plank']);
 
   const edited = defaultState();
   circuitOf(edited).exercises = [{ name: 'Plank', targetReps: '60s', targetRpe: 6 }];

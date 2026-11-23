@@ -386,6 +386,7 @@ export const PROGRAM = {
           { name: 'Russian Twist', targetReps: '20 total', targetRpe: 7 },
           { name: 'Scissor Kicks', targetReps: '30s', targetRpe: 7 },
           { name: 'Pallof Press', targetReps: '10 / side', targetRpe: 7 },
+          { name: 'Dead Bug', targetReps: '8-10', targetRpe: 6 },
           { name: 'Plank', targetReps: '30-45s', targetRpe: 6 },
         ], 'Move station to station, rest 60s after the full round. Lower back stays pressed into the floor on every floor move'),
       ],
