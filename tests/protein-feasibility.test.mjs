@@ -375,7 +375,7 @@ test('migration 16 keeps logged non-veg lunches and dinners on the plate that wa
     [sat]: { eaten: { 2: true }, choices: { 2: 1 }, extras: [], water: 0, flags: {} },
   };
   const after = migrateState(old);
-  assert.equal(after.version, 16);
+  assert.ok(after.version >= 16);
   assert.deepEqual(after.mealLogs[mon].choices, { 2: 1, 4: 3 });
   assert.deepEqual(after.mealLogs['2026-11-17'].choices, {});
   assert.deepEqual(after.mealLogs[sat].choices, { 2: 1 });

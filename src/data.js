@@ -223,6 +223,12 @@ export const EXERCISES = {
   'Side Plank': { ...X('Obliques', 'Abs, Glutes', 'Bodyweight', 'Beginner', 'Lateral core', 'Pallof Press', 'Side Plank', 'Stack hips, drive them up', 'Hips dropping toward floor'), timed: true },
   'Pallof Press': X('Obliques', 'Abs, Deep Core', 'Cable', 'Beginner', 'Anti-rotation core', 'Side Plank', 'Cable Pallof Press', 'Resist the twist, press straight out', 'Letting the torso rotate'),
   'Cable Woodchop': X('Obliques', 'Abs, Shoulders', 'Cable', 'Beginner', 'Rotational core power', 'Pallof Press', 'Cable Woodchop', 'Rotate from the trunk, arms follow', 'Only moving the arms'),
+  // Floor ab moves from the partner ab circuit video, added 2026-11-23.
+  'Toe Touches': X('Abs', 'Hip Flexors', 'Bodyweight', 'Intermediate', 'Upper ab crunch with the legs straight up, the hardest move of the circuit', 'Reverse Crunch', 'Floor, optional light dumbbell', 'Legs straight up, reach the hands or a light dumbbell toward the toes by lifting the shoulder blades, lower slowly', 'Swinging the arms and throwing the head forward'),
+  'Russian Twist': X('Obliques', 'Abs', 'Bodyweight', 'Beginner', 'Rotation work for the side abs', 'Cable Woodchop', 'Floor, optional light dumbbell', 'Lean back, chest tall, feet up if you can, turn the ribs and not just the arms, count each side', 'Swinging the arms while the torso stays still'),
+  'Scissor Kicks': { ...X('Abs', 'Hip Flexors', 'Bodyweight', 'Beginner', 'Lower ab endurance', 'Lying Leg Raise', 'Floor, hands under hips', 'Press the lower back into the floor, small fast cross-overs, keep the legs low but the back flat', 'Lower back arching off the floor'), timed: true },
+  'Rainbows': X('Obliques', 'Abs, Hip Flexors', 'Bodyweight', 'Beginner', 'Side abs with the legs swinging side to side', 'Russian Twist', 'Floor', 'Lean back on the hands, swing both knees in a wide arc from side to side, ribs stay still', 'Letting the shoulders collapse and the back arch'),
+  'Knee Tucks': X('Abs', 'Hip Flexors', 'Bodyweight', 'Beginner', 'Lower abs, easier than leg raises', 'Reverse Crunch', 'Floor or bench', 'Lean back on the hands, pull the knees to the chest and tilt the pelvis up, then extend slowly', 'Only moving the legs and not the pelvis'),
   'Dead Bug': X('Abs', 'Hip Flexors', 'Bodyweight', 'Beginner', 'Core control and back safety', 'Plank', 'Dead Bug', 'Low back glued down, slow limbs', 'Back arching off the floor'),
 
   // ---- Cardio / conditioning ----
@@ -376,10 +382,12 @@ export const PROGRAM = {
       blocks: [
         circuit('Core Circuit', 3, 60, [
           { name: 'Reverse Crunch', targetReps: '12-15', targetRpe: 8 },
+          { name: 'Toe Touches', targetReps: '12-15', targetRpe: 8 },
+          { name: 'Russian Twist', targetReps: '20 total', targetRpe: 7 },
+          { name: 'Scissor Kicks', targetReps: '30s', targetRpe: 7 },
           { name: 'Pallof Press', targetReps: '10 / side', targetRpe: 7 },
-          { name: 'Dead Bug', targetReps: '8-10', targetRpe: 6 },
           { name: 'Plank', targetReps: '30-45s', targetRpe: 6 },
-        ], 'Move station to station, rest 60s after the full round'),
+        ], 'Move station to station, rest 60s after the full round. Lower back stays pressed into the floor on every floor move'),
       ],
       conditioning: [
         { name: 'Incline Walk', detail: '20 min zone 2, incline 8-12%. Do this first as the warm-up for the intervals.' },

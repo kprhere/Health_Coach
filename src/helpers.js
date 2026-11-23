@@ -14,7 +14,7 @@ export { nutritionProfile };
 
 export const PROGRAM_START = '2026-07-08'; // start of the current fat-loss phase (latest scan)
 export const PHASE_NAME = 'Fat Loss Phase 1';
-export const STATE_VERSION = 16;
+export const STATE_VERSION = 17;
 
 // ---------- date utils ----------
 export const pad = (n) => String(n).padStart(2, '0');
@@ -437,6 +437,34 @@ const MIGRATIONS = {
       });
     });
     return { ...migrated, version: 16 };
+  },
+  17: (state) => {
+    // 2026-11-23: the Wednesday Core Circuit takes the floor ab moves from the
+    // ab circuit video (Toe Touches, Russian Twist, Scissor Kicks) in place of
+    // Dead Bug. Only a circuit still matching the old plan is rewritten; one
+    // the user already edited is left alone. Logs are untouched.
+    const OLD = ['Reverse Crunch', 'Pallof Press', 'Dead Bug', 'Plank'];
+    const NEW = [
+      { name: 'Reverse Crunch', targetReps: '12-15', targetRpe: 8 },
+      { name: 'Toe Touches', targetReps: '12-15', targetRpe: 8 },
+      { name: 'Russian Twist', targetReps: '20 total', targetRpe: 7 },
+      { name: 'Scissor Kicks', targetReps: '30s', targetRpe: 7 },
+      { name: 'Pallof Press', targetReps: '10 / side', targetRpe: 7 },
+      { name: 'Plank', targetReps: '30-45s', targetRpe: 6 },
+    ];
+    const migrated = mergeState(defaultState(), state);
+    const days = (migrated.program && migrated.program.days) || {};
+    Object.values(days).forEach((day) => {
+      (day && Array.isArray(day.blocks) ? day.blocks : []).forEach((b) => {
+        if (!b || b.name !== 'Core Circuit' || !Array.isArray(b.exercises)) return;
+        const names = b.exercises.map((e) => e && e.name);
+        if (names.length !== OLD.length || names.some((n, i) => n !== OLD[i])) return;
+        const byName = Object.fromEntries(b.exercises.map((e) => [e.name, e]));
+        b.exercises = NEW.map((n) => ({ ...(byName[n.name] || {}), ...(byName[n.name] ? {} : n) }));
+        b.note = 'Move station to station, rest 60s after the full round. Lower back stays pressed into the floor on every floor move';
+      });
+    });
+    return { ...migrated, version: 17 };
   },
 };
 
