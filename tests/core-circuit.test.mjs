@@ -11,7 +11,7 @@ test('default Core Circuit has the video ab moves', () => {
 });
 
 test('every new ab move has a library entry that counts toward core', () => {
-  ['Toe Touches', 'Russian Twist', 'Scissor Kicks', 'Rainbows', 'Knee Tucks'].forEach((n) => {
+  ['Toe Touches', 'Russian Twist', 'Scissor Kicks', 'Rainbows', 'Knee Tucks', 'Cocoon Pass'].forEach((n) => {
     assert.ok(EXERCISES[n], n);
     assert.deepEqual(muscleGroupsOf(n, defaultState()), ['Core'], n);
     assert.ok(EXERCISES[EXERCISES[n].sub], `${n} substitute exists`);
